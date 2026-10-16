@@ -1,0 +1,254 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// --------------------------------------------------------
+// ENUMS
+// --------------------------------------------------------
+
+enum Role {
+  SUPER_ADMIN
+  COMMUNITY_ADMIN
+  MODERATOR
+  MEMBER
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum GroupPrivacy {
+  PUBLIC
+  PRIVATE
+}
+
+enum GroupMemberRole {
+  ADMIN
+  MODERATOR
+  MEMBER
+}
+
+enum PostType {
+  GENERAL
+  ANNOUNCEMENT
+  EVENT
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+// --------------------------------------------------------
+// AUTHENTICATION & USER CREDENTIALS
+// --------------------------------------------------------
+
+model User {
+  id              String     @id @default(uuid())
+  phone           String     @unique // Normalized E.164: +91XXXXXXXXXX
+  passwordHash    String     // Strictly non-nullable in Phase 1
+  isPhoneVerified Boolean    @default(false) // Defaults to false in Phase 1
+  role            Role       @default(MEMBER)
+  status          UserStatus @default(PENDING)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  profile             Profile?
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  createdGroups       Group[]              @relation("GroupCreator")
+  groupMemberships    GroupMember[]
+  posts               Post[]               @relation("PostAuthor")
+  comments            Comment[]            @relation("CommentAuthor")
+  postLikes           PostLike[]
+  authoredAuditLogs   AuditLog[]           @relation("AuditActor")
+
+  @@index([role])
+  @@index([status])
+}
+
+model Profile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName    String    // Single source of truth for member name
+  gender      Gender?
+  dateOfBirth DateTime?
+  bio         String?
+  avatarUrl   String?
+  city        String?
+  state       String?
+  subCaste    String?
+  gotra       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([city, state])
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique // SHA-256 hash of the random refresh token
+  familyId   String    @default(uuid()) // Token family for rotation & replay detection
+  userAgent  String?
+  ipAddress  String?
+  isRevoked  Boolean   @default(false)
+  revokedAt  DateTime? // Timestamp when revoked or rotated
+  replacedBy String?   // SHA-256 hash of the replacement token
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // SHA-256 hash of the one-time reset token
+  expiresAt DateTime  // Fixed 1-hour expiration
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// --------------------------------------------------------
+// COMMUNITY GROUPS
+// --------------------------------------------------------
+
+model Group {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  description String?
+  coverUrl    String?
+  privacy     GroupPrivacy @default(PUBLIC)
+  createdById String
+  creator     User         @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  members GroupMember[]
+  posts   Post[]
+
+  @@index([privacy])
+  @@index([createdById])
+}
+
+model GroupMember {
+  id        String          @id @default(uuid())
+  groupId   String
+  group     Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      GroupMemberRole @default(MEMBER)
+  joinedAt  DateTime        @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+// --------------------------------------------------------
+// SOCIAL FEED (POSTS, MEDIA, COMMENTS, LIKES)
+// --------------------------------------------------------
+
+model Post {
+  id        String    @id @default(uuid())
+  authorId  String
+  author    User      @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  groupId   String?
+  group     Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  type      PostType  @default(GENERAL)
+  content   String
+  isPinned  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  media    PostMedia[]
+  comments Comment[]
+  likes    PostLike[]
+
+  @@index([authorId])
+  @@index([groupId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model PostMedia {
+  id        String    @id @default(uuid())
+  postId    String
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  mediaType MediaType @default(IMAGE)
+  url       String
+  thumbnail String?
+  order     Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@index([postId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId])
+  @@index([authorId])
+}
+
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId]) // Prevents duplicate likes from the same user
+  @@index([userId])
+}
+
+// --------------------------------------------------------
+// ADMINISTRATIVE AUDIT LOGGING
+// --------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actor      User     @relation("AuditActor", fields: [actorId], references: [id], onDelete: Cascade)
+  action     String   // e.g. "USER_STATUS_UPDATE", "USER_ROLE_UPDATE"
+  targetType String   // e.g. "USER"
+  targetId   String   // The ID of the affected user or entity
+  details    Json?    // Context, e.g. { previousStatus: "ACTIVE", newStatus: "SUSPENDED", reason: "..." }
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
+}
