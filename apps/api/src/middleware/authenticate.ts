@@ -64,11 +64,6 @@ export async function authenticateToken(
         role: true,
         status: true,
         isPhoneVerified: true,
-        profile: {
-          select: {
-            fullName: true,
-          },
-        },
       },
     });
 
@@ -95,7 +90,7 @@ export async function authenticateToken(
     req.user = {
       id: dbUser.id,
       phone: dbUser.phone,
-      fullName: dbUser.profile?.fullName || '',
+      fullName: '',
       role: dbUser.role as unknown as UserRole,
       status: dbUser.status as unknown as UserStatus,
       isPhoneVerified: dbUser.isPhoneVerified,

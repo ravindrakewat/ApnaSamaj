@@ -7,6 +7,7 @@ import { config } from '../config/env';
 
 const ADMIN_PHONE = '+919999900010';
 const MEMBER_PHONE = '+919999900020';
+const COMMUNITY_ADMIN_PHONE = '+919999900030';
 const TEST_PASSWORD = 'TestPassword123!';
 
 async function runAdminMemberTests() {
@@ -24,7 +25,7 @@ async function runAdminMemberTests() {
   // Clean previous test data
   await prisma.user.deleteMany({
     where: {
-      phone: { in: [ADMIN_PHONE, MEMBER_PHONE] },
+      phone: { in: [ADMIN_PHONE, MEMBER_PHONE, COMMUNITY_ADMIN_PHONE] },
     },
   });
 
@@ -58,6 +59,24 @@ async function runAdminMemberTests() {
         create: {
           fullName: 'Test Ordinary Member',
           city: 'Bhopal',
+          state: 'Madhya Pradesh',
+        },
+      },
+    },
+  });
+
+  // 3. Create Community Admin test user
+  const communityAdminUser = await prisma.user.create({
+    data: {
+      phone: COMMUNITY_ADMIN_PHONE,
+      passwordHash,
+      role: Role.COMMUNITY_ADMIN,
+      status: UserStatus.ACTIVE,
+      isPhoneVerified: true,
+      profile: {
+        create: {
+          fullName: 'Test Community Admin',
+          city: 'Indore',
           state: 'Madhya Pradesh',
         },
       },
@@ -112,6 +131,13 @@ async function runAdminMemberTests() {
     status: memberUser.status,
   });
 
+  const communityAdminToken = makeToken({
+    id: communityAdminUser.id,
+    phone: communityAdminUser.phone,
+    role: communityAdminUser.role,
+    status: communityAdminUser.status,
+  });
+
   try {
     // -------------------------------------------------------------
     // 1. Authorization Tests
@@ -132,9 +158,15 @@ async function runAdminMemberTests() {
     assert(adminAllowedBody.success === true, 'Test 1.4: Response has success=true');
     assert(Array.isArray(adminAllowedBody.data?.users), 'Test 1.5: Returns array of users');
 
+    const communityAdminAllowedRes = await fetch(`${baseUrl}/api/v1/admin/users`, {
+      headers: { Authorization: `Bearer ${communityAdminToken}` },
+    });
+    assert(communityAdminAllowedRes.status === 200, 'Test 1.6: Community Admin request succeeds with 200 OK');
+
     // -------------------------------------------------------------
-    // 2. Pagination and Filtering Tests
+    // 2. Pagination, Filtering & Batch 4C Optimization Tests
     // -------------------------------------------------------------
+    // 2.1: Full first page (limit=1 with total >= 3)
     const paginatedRes = await fetch(`${baseUrl}/api/v1/admin/users?page=1&limit=1`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
@@ -142,25 +174,87 @@ async function runAdminMemberTests() {
     assert(paginatedBody.data?.users.length === 1, 'Test 2.1: Pagination limits returned records to 1');
     assert(paginatedBody.data?.pagination?.page === 1, 'Test 2.2: Pagination metadata includes page 1');
     assert(paginatedBody.data?.pagination?.limit === 1, 'Test 2.3: Pagination metadata includes limit 1');
-    assert(paginatedBody.data?.pagination?.totalUsers >= 2, 'Test 2.4: Pagination includes total count >= 2');
+    assert(paginatedBody.data?.pagination?.totalUsers >= 3, 'Test 2.4: Pagination includes total count >= 3');
+    assert(paginatedBody.data?.pagination?.totalPages >= 3, 'Test 2.5: Total pages calculated accurately');
 
-    // Filter by role=MEMBER
+    // 2.2: Multiple pages (page=2, limit=1)
+    const page2Res = await fetch(`${baseUrl}/api/v1/admin/users?page=2&limit=1`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const page2Body: any = await page2Res.json();
+    assert(page2Body.data?.users.length === 1, 'Test 2.6: Page 2 returns 1 user');
+    assert(page2Body.data?.pagination?.page === 2, 'Test 2.7: Page 2 metadata matches');
+    assert(page2Body.data?.users[0]?.id !== paginatedBody.data?.users[0]?.id, 'Test 2.8: Page 2 record is distinct from page 1');
+
+    // 2.3: First page with fewer than limit records (Optimization path: skips count query)
+    const fewRecordsRes = await fetch(`${baseUrl}/api/v1/admin/users?page=1&limit=50`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const fewRecordsBody: any = await fewRecordsRes.json();
+    assert(fewRecordsBody.data?.users.length < 50, 'Test 2.9: Total users in DB is fewer than limit=50');
+    assert(
+      fewRecordsBody.data?.pagination?.totalUsers === fewRecordsBody.data?.users.length,
+      'Test 2.10: TotalUsers mathematically equals users.length without redundant count query'
+    );
+    assert(fewRecordsBody.data?.pagination?.totalPages === 1, 'Test 2.11: TotalPages is 1 for single page result');
+
+    // 2.4: Filter by role=MEMBER
     const roleFilteredRes = await fetch(`${baseUrl}/api/v1/admin/users?role=MEMBER`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     const roleFilteredBody: any = await roleFilteredRes.json();
     const allMembers = roleFilteredBody.data?.users.every((u: any) => u.role === 'MEMBER');
-    assert(allMembers, 'Test 2.5: Role filter returns only MEMBER records');
+    assert(allMembers, 'Test 2.12: Role filter returns only MEMBER records');
 
-    // Search by name
+    // 2.5: Search by full name
     const searchRes = await fetch(`${baseUrl}/api/v1/admin/users?search=Ordinary`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     const searchBody: any = await searchRes.json();
     assert(
       searchBody.data?.users.some((u: any) => u.phone === MEMBER_PHONE),
-      'Test 2.6: Search by full name returns matching user'
+      'Test 2.13: Search by full name returns matching user'
     );
+
+    // 2.6: Search by phone number
+    const searchPhoneRes = await fetch(`${baseUrl}/api/v1/admin/users?search=0020`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const searchPhoneBody: any = await searchPhoneRes.json();
+    assert(
+      searchPhoneBody.data?.users.some((u: any) => u.phone === MEMBER_PHONE),
+      'Test 2.14: Search by phone returns matching user'
+    );
+
+    // 2.7: Combined role and status filter
+    const roleStatusRes = await fetch(`${baseUrl}/api/v1/admin/users?role=MEMBER&status=ACTIVE`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const roleStatusBody: any = await roleStatusRes.json();
+    const allActiveMembers = roleStatusBody.data?.users.every((u: any) => u.role === 'MEMBER' && u.status === 'ACTIVE');
+    assert(allActiveMembers, 'Test 2.15: Combined role and status filter matches accurately');
+
+    // 2.8: Empty result set
+    const emptyRes = await fetch(`${baseUrl}/api/v1/admin/users?search=NonExistentMatchXYZ999`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const emptyBody: any = await emptyRes.json();
+    assert(emptyBody.data?.users.length === 0, 'Test 2.16: Non-matching search returns 0 records');
+    assert(emptyBody.data?.pagination?.totalUsers === 0, 'Test 2.17: Empty result set totalUsers is 0');
+    assert(emptyBody.data?.pagination?.totalPages === 1, 'Test 2.18: Empty result set totalPages is 1');
+
+    // 2.9: Concurrent requests test
+    const [c1, c2, c3] = await Promise.all([
+      fetch(`${baseUrl}/api/v1/admin/users?page=1&limit=1`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+      fetch(`${baseUrl}/api/v1/admin/users?page=2&limit=1`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+      fetch(`${baseUrl}/api/v1/admin/users?role=COMMUNITY_ADMIN`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+    ]);
+    const b1: any = await c1.json();
+    const b2: any = await c2.json();
+    const b3: any = await c3.json();
+    assert(c1.status === 200 && c2.status === 200 && c3.status === 200, 'Test 2.19: Concurrent requests all return 200 OK');
+    assert(b1.data?.pagination?.page === 1 && b2.data?.pagination?.page === 2, 'Test 2.20: Concurrent requests preserve independent pagination');
+    assert(b3.data?.users.every((u: any) => u.role === 'COMMUNITY_ADMIN'), 'Test 2.21: Concurrent filtered request returns correct independent results');
 
     // -------------------------------------------------------------
     // 3. User Details Endpoint Tests
@@ -243,7 +337,7 @@ async function runAdminMemberTests() {
     // Teardown
     await prisma.user.deleteMany({
       where: {
-        phone: { in: [ADMIN_PHONE, MEMBER_PHONE] },
+        phone: { in: [ADMIN_PHONE, MEMBER_PHONE, COMMUNITY_ADMIN_PHONE] },
       },
     });
     await new Promise<void>((resolve) => server.close(() => resolve()));

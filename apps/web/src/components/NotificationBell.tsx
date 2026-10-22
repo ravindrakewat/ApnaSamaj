@@ -1,0 +1,519 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  IconButton,
+  Badge,
+  Tooltip,
+  Popover,
+  Box,
+  Typography,
+  Button,
+  Divider,
+  List,
+  ListItem,
+  ListItemAvatar,
+  Avatar,
+  ListItemText,
+  CircularProgress,
+  Alert,
+} from '@mui/material';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import { NotificationItem } from '@apnasamaj/shared-types';
+import { useAuth } from '../context/AuthContext';
+import {
+  fetchUnreadCount,
+  fetchNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteNotification,
+} from '../services/notifications.service';
+
+function formatRelativeTime(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (isNaN(diffMs) || diffMs < 0) return 'Just now';
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}h ago`;
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return date.toLocaleDateString();
+  } catch {
+    return '';
+  }
+}
+
+function resolveNotificationTarget(item: NotificationItem): string | null {
+  switch (item.type) {
+    case 'POST_LIKE':
+    case 'POST_COMMENT':
+      return '/feed';
+    case 'GROUP_ROLE_UPDATE':
+    case 'GROUP_MEMBER_REMOVED':
+      return '/groups';
+    case 'ACCOUNT_STATUS_UPDATE':
+      return '/profile';
+    case 'POST_MODERATED':
+      return '/feed';
+    default:
+      return null;
+  }
+}
+
+export const NotificationBell: React.FC = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [isLoadingList, setIsLoadingList] = useState<boolean>(false);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const [isMarkingAll, setIsMarkingAll] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(false);
+
+  const isMountedRef = useRef<boolean>(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadUnreadCount = useCallback(async () => {
+    if (!user) return;
+    try {
+      const data = await fetchUnreadCount();
+      if (isMountedRef.current) {
+        setUnreadCount(data.unreadCount);
+      }
+    } catch {
+      // Gracefully silence badge fetch errors (e.g. if DB migration unapplied or network offline)
+    }
+  }, [user]);
+
+  // Initial fetch and lifecycle listeners (window focus, periodic polling)
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      setNotifications([]);
+      setAnchorEl(null);
+      return;
+    }
+
+    loadUnreadCount();
+
+    const onFocus = () => {
+      loadUnreadCount();
+    };
+    window.addEventListener('focus', onFocus);
+
+    // Modest polling interval of 60 seconds
+    const interval = setInterval(() => {
+      loadUnreadCount();
+    }, 60000);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(interval);
+    };
+  }, [user, loadUnreadCount]);
+
+  const loadNotifications = async (pageNum: number = 1, append: boolean = false) => {
+    if (append) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoadingList(true);
+      setError(null);
+    }
+
+    try {
+      const data = await fetchNotifications({ page: pageNum, limit: 15 });
+      if (!isMountedRef.current) return;
+
+      if (append) {
+        setNotifications((prev) => [...prev, ...data.notifications]);
+      } else {
+        setNotifications(data.notifications);
+      }
+
+      setUnreadCount(data.unreadCount);
+      setPage(data.pagination.page);
+      setHasMore(data.pagination.hasMore);
+    } catch (err: unknown) {
+      if (isMountedRef.current) {
+        const msg = err instanceof Error ? err.message : 'Unable to load notifications.';
+        setError(msg);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsLoadingList(false);
+        setIsLoadingMore(false);
+      }
+    }
+  };
+
+  const handleOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+    loadNotifications(1, false);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleMarkAsRead = async (item: NotificationItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (item.isRead) return;
+
+    // Optimistic UI update
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === item.id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n))
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+
+    try {
+      await markNotificationAsRead(item.id);
+    } catch (err) {
+      console.warn('[NotificationBell] Failed to mark notification as read:', err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    if (unreadCount === 0 || isMarkingAll) return;
+    setIsMarkingAll(true);
+
+    // Optimistic UI update
+    const previous = [...notifications];
+    setNotifications((prev) =>
+      prev.map((n) => ({ ...n, isRead: true, readAt: new Date().toISOString() }))
+    );
+    setUnreadCount(0);
+
+    try {
+      await markAllNotificationsAsRead();
+    } catch (err) {
+      console.warn('[NotificationBell] Failed to mark all as read:', err);
+      // Revert if call completely failed
+      if (isMountedRef.current) {
+        setNotifications(previous);
+        loadUnreadCount();
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsMarkingAll(false);
+      }
+    }
+  };
+
+  const handleDelete = async (id: string, wasUnread: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    // Optimistic UI update
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (wasUnread) {
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    }
+
+    try {
+      await deleteNotification(id);
+    } catch (err) {
+      console.warn('[NotificationBell] Failed to delete notification:', err);
+    }
+  };
+
+  const handleNotificationClick = async (item: NotificationItem) => {
+    if (!item.isRead) {
+      await handleMarkAsRead(item);
+    }
+
+    const target = resolveNotificationTarget(item);
+    handleClose();
+
+    if (target) {
+      navigate(target);
+    }
+  };
+
+  const handleActorClick = (actorId?: string | null, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (actorId) {
+      handleClose();
+      navigate(`/members/${actorId}`);
+    }
+  };
+
+  if (!user) {
+    return null;
+  }
+
+  const isOpen = Boolean(anchorEl);
+
+  return (
+    <>
+      <Tooltip title="Notifications">
+        <IconButton
+          id="notification-bell-button"
+          color="inherit"
+          onClick={handleOpen}
+          aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
+          aria-haspopup="true"
+          aria-expanded={isOpen}
+          size="medium"
+          sx={{ ml: 0.5 }}
+        >
+          <Badge
+            badgeContent={unreadCount}
+            color="error"
+            max={99}
+            invisible={unreadCount === 0}
+            overlap="circular"
+          >
+            {unreadCount > 0 ? (
+              <NotificationsIcon color="primary" />
+            ) : (
+              <NotificationsNoneIcon color="action" />
+            )}
+          </Badge>
+        </IconButton>
+      </Tooltip>
+
+      <Popover
+        open={isOpen}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{
+          sx: {
+            width: { xs: 320, sm: 380 },
+            maxHeight: 520,
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: 4,
+            borderRadius: 2,
+            mt: 1,
+          },
+        }}
+      >
+        {/* Header */}
+        <Box
+          sx={{
+            p: 1.5,
+            px: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="subtitle1" fontWeight={700}>
+              Notifications
+            </Typography>
+            {unreadCount > 0 && (
+              <Badge
+                badgeContent={unreadCount}
+                color="primary"
+                max={99}
+                sx={{ ml: 1, '& .MuiBadge-badge': { position: 'static', transform: 'none' } }}
+              />
+            )}
+          </Box>
+
+          <Button
+            size="small"
+            variant="text"
+            onClick={handleMarkAllAsRead}
+            disabled={unreadCount === 0 || isMarkingAll}
+            startIcon={isMarkingAll ? <CircularProgress size={14} /> : <DoneAllIcon fontSize="small" />}
+            sx={{ fontSize: '0.75rem', textTransform: 'none' }}
+          >
+            Mark all read
+          </Button>
+        </Box>
+
+        {/* Content Body */}
+        <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+          {isLoadingList ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 6 }}>
+              <CircularProgress size={28} />
+            </Box>
+          ) : error ? (
+            <Box sx={{ p: 2 }}>
+              <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>
+                {error}
+              </Alert>
+            </Box>
+          ) : notifications.length === 0 ? (
+            <Box sx={{ py: 6, px: 2, textAlign: 'center' }}>
+              <NotificationsNoneIcon sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
+              <Typography variant="body2" color="text.secondary">
+                No notifications yet.
+              </Typography>
+              <Typography variant="caption" color="text.disabled">
+                When you get likes, comments, or group updates, they will appear here.
+              </Typography>
+            </Box>
+          ) : (
+            <List disablePadding>
+              {notifications.map((item, index) => {
+                const hasTarget = Boolean(resolveNotificationTarget(item));
+                return (
+                  <React.Fragment key={item.id}>
+                    {index > 0 && <Divider component="li" />}
+                    <ListItem
+                      alignItems="flex-start"
+                      onClick={() => handleNotificationClick(item)}
+                      sx={{
+                        px: 2,
+                        py: 1.25,
+                        cursor: hasTarget ? 'pointer' : 'default',
+                        bgcolor: item.isRead ? 'transparent' : 'action.hover',
+                        transition: 'background-color 0.2s ease',
+                        '&:hover': {
+                          bgcolor: 'action.selected',
+                        },
+                      }}
+                      secondaryAction={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                          {!item.isRead && (
+                            <Tooltip title="Mark as read">
+                              <IconButton
+                                size="small"
+                                edge="end"
+                                onClick={(e) => handleMarkAsRead(item, e)}
+                                aria-label="Mark as read"
+                                sx={{ color: 'text.secondary' }}
+                              >
+                                <CheckCircleOutlineIcon fontSize="inherit" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          <Tooltip title="Delete">
+                            <IconButton
+                              size="small"
+                              edge="end"
+                              onClick={(e) => handleDelete(item.id, !item.isRead, e)}
+                              aria-label="Delete notification"
+                              sx={{ color: 'text.secondary' }}
+                            >
+                              <DeleteOutlineIcon fontSize="inherit" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      }
+                    >
+                      <ListItemAvatar sx={{ minWidth: 44, mt: 0.25 }}>
+                        <Avatar
+                          src={item.actor?.avatarUrl || undefined}
+                          alt={item.actor?.fullName || 'User'}
+                          onClick={(e) => handleActorClick(item.actorId, e)}
+                          sx={{
+                            width: 36,
+                            height: 36,
+                            cursor: item.actorId ? 'pointer' : 'default',
+                            bgcolor: 'primary.light',
+                            fontSize: '0.875rem',
+                          }}
+                        >
+                          {(item.actor?.fullName || item.title || 'U').charAt(0).toUpperCase()}
+                        </Avatar>
+                      </ListItemAvatar>
+
+                      <ListItemText
+                        sx={{ my: 0, pr: 5 }}
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+                            {!item.isRead && (
+                              <FiberManualRecordIcon
+                                color="primary"
+                                sx={{ fontSize: 8, flexShrink: 0 }}
+                              />
+                            )}
+                            <Typography
+                              variant="body2"
+                              fontWeight={item.isRead ? 500 : 700}
+                              color="text.primary"
+                              noWrap
+                              sx={{ fontSize: '0.85rem' }}
+                            >
+                              {item.title}
+                            </Typography>
+                          </Box>
+                        }
+                        secondary={
+                          <Box component="span" sx={{ display: 'block' }}>
+                            <Typography
+                              component="span"
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                fontSize: '0.8rem',
+                                lineHeight: 1.35,
+                                mb: 0.5,
+                              }}
+                            >
+                              {item.message}
+                            </Typography>
+                            <Typography
+                              component="span"
+                              variant="caption"
+                              color="text.disabled"
+                              sx={{ fontSize: '0.7rem' }}
+                            >
+                              {formatRelativeTime(item.createdAt)}
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                    </ListItem>
+                  </React.Fragment>
+                );
+              })}
+            </List>
+          )}
+
+          {/* Load More Button */}
+          {hasMore && !isLoadingList && (
+            <Box sx={{ p: 1, textAlign: 'center', borderTop: 1, borderColor: 'divider' }}>
+              <Button
+                size="small"
+                onClick={() => loadNotifications(page + 1, true)}
+                disabled={isLoadingMore}
+                startIcon={isLoadingMore ? <CircularProgress size={14} /> : undefined}
+                sx={{ fontSize: '0.75rem', textTransform: 'none' }}
+              >
+                {isLoadingMore ? 'Loading...' : 'Load older notifications'}
+              </Button>
+            </Box>
+          )}
+        </Box>
+      </Popover>
+    </>
+  );
+};

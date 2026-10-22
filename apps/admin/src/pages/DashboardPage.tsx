@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Typography,
@@ -8,6 +8,10 @@ import {
   Chip,
   Grid,
   Divider,
+  CircularProgress,
+  Alert,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   AdminPanelSettings,
@@ -16,12 +20,40 @@ import {
   BadgeOutlined,
   PeopleAltOutlined,
   ArrowForward,
+  CheckCircleOutline,
+  HourglassEmptyOutlined,
+  DynamicFeedOutlined,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
+import { AdminMetrics } from '@apnasamaj/shared-types';
 import { useAuth } from '../context/AuthContext';
+import { fetchAdminMetrics } from '../services/admin.metrics.service';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadMetrics = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchAdminMetrics();
+      setMetrics(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load administrative metrics.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMetrics();
+  }, [loadMetrics]);
 
   return (
     <Box>
@@ -40,7 +72,7 @@ export const DashboardPage: React.FC = () => {
               Welcome, {user?.fullName || 'Administrator'}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Apna Samaj Administrative Control Center. Manage members, groups, and platform settings.
+              Apna Samaj Administrative Control Center. Monitor live metrics, manage members, and configure platform settings.
             </Typography>
           </Box>
           <Chip
@@ -51,6 +83,199 @@ export const DashboardPage: React.FC = () => {
             sx={{ fontWeight: 'bold' }}
           />
         </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        {/* Section: Platform Live KPI Metrics */}
+        <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+          <Box>
+            <Typography variant="subtitle1" fontWeight="bold" color="secondary">
+              Community Health & Platform Metrics
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Aggregated real-time platform statistics
+            </Typography>
+          </Box>
+          <Tooltip title="Refresh metrics">
+            <span>
+              <IconButton onClick={loadMetrics} disabled={loading} size="small" color="secondary">
+                <RefreshIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+
+        {error && (
+          <Alert
+            severity="error"
+            action={
+              <Button color="inherit" size="small" onClick={loadMetrics}>
+                Retry
+              </Button>
+            }
+            sx={{ mb: 3, borderRadius: 2 }}
+          >
+            {error}
+          </Alert>
+        )}
+
+        <Grid container spacing={2.5} sx={{ mb: 4 }}>
+          {/* KPI 1: Total Registered Members */}
+          <Grid item xs={12} sm={6} md={3}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2.5,
+                borderRadius: 2.5,
+                borderColor: 'primary.light',
+                bgcolor: 'rgba(25, 118, 210, 0.04)',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                <Typography variant="caption" fontWeight="bold" color="primary">
+                  TOTAL MEMBERS
+                </Typography>
+                <PeopleAltOutlined color="primary" fontSize="small" />
+              </Box>
+              <Box my={1}>
+                {loading ? (
+                  <CircularProgress size={24} color="primary" />
+                ) : (
+                  <Typography variant="h4" fontWeight="bold" color="text.primary">
+                    {metrics?.totalUsers ?? 0}
+                  </Typography>
+                )}
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                Registered user accounts in system
+              </Typography>
+            </Paper>
+          </Grid>
+
+          {/* KPI 2: Active Verified Members */}
+          <Grid item xs={12} sm={6} md={3}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2.5,
+                borderRadius: 2.5,
+                borderColor: 'success.light',
+                bgcolor: 'rgba(46, 125, 50, 0.04)',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                <Typography variant="caption" fontWeight="bold" color="success.main">
+                  ACTIVE MEMBERS
+                </Typography>
+                <CheckCircleOutline color="success" fontSize="small" />
+              </Box>
+              <Box my={1}>
+                {loading ? (
+                  <CircularProgress size={24} color="success" />
+                ) : (
+                  <Typography variant="h4" fontWeight="bold" color="text.primary">
+                    {metrics?.activeUsers ?? 0}
+                  </Typography>
+                )}
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                Verified accounts with community access
+              </Typography>
+            </Paper>
+          </Grid>
+
+          {/* KPI 3: Pending Approvals */}
+          <Grid item xs={12} sm={6} md={3}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2.5,
+                borderRadius: 2.5,
+                borderColor: 'warning.light',
+                bgcolor: 'rgba(237, 108, 2, 0.04)',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                <Typography variant="caption" fontWeight="bold" color="warning.main">
+                  PENDING APPROVAL
+                </Typography>
+                <HourglassEmptyOutlined color="warning" fontSize="small" />
+              </Box>
+              <Box my={1}>
+                {loading ? (
+                  <CircularProgress size={24} color="warning" />
+                ) : (
+                  <Typography variant="h4" fontWeight="bold" color="text.primary">
+                    {metrics?.pendingUsers ?? 0}
+                  </Typography>
+                )}
+              </Box>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Typography variant="caption" color="text.secondary">
+                  Awaiting administrator review
+                </Typography>
+                {metrics && metrics.pendingUsers > 0 && (
+                  <Button
+                    size="small"
+                    color="warning"
+                    onClick={() => navigate('/members')}
+                    sx={{ p: 0, minWidth: 'auto', fontSize: '0.75rem', textTransform: 'none' }}
+                  >
+                    Review &rarr;
+                  </Button>
+                )}
+              </Box>
+            </Paper>
+          </Grid>
+
+          {/* KPI 4: Total Feed Posts */}
+          <Grid item xs={12} sm={6} md={3}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2.5,
+                borderRadius: 2.5,
+                borderColor: 'secondary.light',
+                bgcolor: 'rgba(156, 39, 176, 0.04)',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                <Typography variant="caption" fontWeight="bold" color="secondary.main">
+                  COMMUNITY POSTS
+                </Typography>
+                <DynamicFeedOutlined color="secondary" fontSize="small" />
+              </Box>
+              <Box my={1}>
+                {loading ? (
+                  <CircularProgress size={24} color="secondary" />
+                ) : (
+                  <Typography variant="h4" fontWeight="bold" color="text.primary">
+                    {metrics?.totalPosts ?? 0}
+                  </Typography>
+                )}
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                Total discussions & announcements published
+              </Typography>
+            </Paper>
+          </Grid>
+        </Grid>
 
         <Divider sx={{ my: 3 }} />
 

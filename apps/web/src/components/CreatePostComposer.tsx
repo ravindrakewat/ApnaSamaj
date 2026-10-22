@@ -32,6 +32,7 @@ interface UploadedMediaItem {
 }
 
 interface CreatePostComposerProps {
+  groupId?: string;
   onPostCreated: (post: PostItem) => void;
 }
 
@@ -39,7 +40,7 @@ const MAX_IMAGES = 4;
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ onPostCreated }) => {
+export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId, onPostCreated }) => {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -150,6 +151,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ onPostCr
     const validation = createPostSchema.safeParse({
       content: content.trim(),
       type: postType,
+      groupId: groupId || undefined,
       media: validMedia,
     });
 

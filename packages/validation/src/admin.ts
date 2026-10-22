@@ -18,3 +18,36 @@ export const updateUserStatusSchema = z.object({
 });
 
 export type UpdateUserStatusInput = z.infer<typeof updateUserStatusSchema>;
+
+const dateStringSchema = z
+  .string()
+  .trim()
+  .refine((val) => !isNaN(Date.parse(val)), {
+    message: 'Invalid date format',
+  });
+
+export const listAuditLogsQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+    action: z.string().trim().optional(),
+    targetType: z.string().trim().optional(),
+    actorId: z.string().uuid('Invalid actor ID format').optional(),
+    fromDate: dateStringSchema.optional(),
+    toDate: dateStringSchema.optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.fromDate && data.toDate) {
+        return new Date(data.fromDate) <= new Date(data.toDate);
+      }
+      return true;
+    },
+    {
+      message: 'fromDate must be earlier than or equal to toDate',
+      path: ['toDate'],
+    }
+  );
+
+export type ListAuditLogsQuery = z.infer<typeof listAuditLogsQuerySchema>;
+

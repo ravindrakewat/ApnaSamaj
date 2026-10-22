@@ -1,10 +1,13 @@
 import { Response } from 'express';
-import { ApiResponse } from '@apnasamaj/shared-types';
-import { updateProfileSchema } from '@apnasamaj/validation';
+import { ApiResponse, DirectoryResponseData, PublicMemberProfile } from '@apnasamaj/shared-types';
+import { updateProfileSchema, directoryQuerySchema } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
   getMyProfile,
   updateMyProfile,
+  getDirectoryMembers,
+  uploadMyAvatar,
+  getPublicMemberProfile,
   UserServiceError,
   CurrentMemberProfile,
 } from './users.service';
@@ -102,6 +105,140 @@ export async function updateMyProfileHandler(req: AuthenticatedRequest, res: Res
     const response: ApiResponse = {
       success: false,
       error: 'Failed to update profile.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
+export async function getDirectoryHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const parsedQuery = directoryQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      const issue = parsedQuery.error.issues[0]?.message || 'Invalid directory query parameters.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const data = await getDirectoryMembers(parsedQuery.data);
+
+    const response: ApiResponse<DirectoryResponseData> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    console.error('[Users Controller] Get directory error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to retrieve community directory.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
+export async function uploadMyAvatarHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    if (!req.file) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'No avatar image file uploaded.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const result = await uploadMyAvatar(
+      userId,
+      req.file.buffer,
+      req.file.mimetype,
+      req.file.originalname
+    );
+
+    const response: ApiResponse<{ avatarUrl: string }> = {
+      success: true,
+      message: 'Avatar updated successfully.',
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof UserServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Users Controller] Upload avatar error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to upload profile avatar.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
+export async function getPublicProfileHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Member ID is required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const data = await getPublicMemberProfile(id);
+
+    const response: ApiResponse<PublicMemberProfile> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof UserServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Users Controller] Get public profile error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to retrieve member profile.',
       timestamp: new Date().toISOString(),
     };
     res.status(500).json(response);

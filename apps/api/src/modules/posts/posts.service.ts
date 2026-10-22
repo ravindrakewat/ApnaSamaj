@@ -14,6 +14,7 @@ import {
   deleteStorageObjects,
   extractStoragePathFromUrl,
 } from '../../services/storage.service';
+import { sendNotificationSafely } from '../notifications/notifications.service';
 
 export class PostServiceError extends Error {
   public statusCode: number;
@@ -153,7 +154,16 @@ function mapToCommentItem(comment: {
 
 const postIncludeAuthorAndMedia = {
   media: {
-    orderBy: { order: 'asc' },
+    select: {
+      id: true,
+      postId: true,
+      mediaType: true,
+      url: true,
+      thumbnail: true,
+      order: true,
+      createdAt: true,
+    },
+    orderBy: { order: 'asc' as const },
   },
   author: {
     select: {
@@ -174,16 +184,28 @@ const postIncludeAuthorAndMedia = {
 
 /**
  * Ensures that a target post exists and that its author is in ACTIVE status.
- * Posts whose authors are suspended or inactive are deemed unavailable.
+ * If the post belongs to a PRIVATE group, caller must be an active group member.
+ * Posts whose authors are suspended, or from private groups where caller is not a member,
+ * return a generic 404 to avoid leaking post existence.
  */
-export async function verifyActivePost(postId: string): Promise<{ id: string; authorId: string }> {
+export async function verifyActivePost(
+  postId: string,
+  currentUserId?: string
+): Promise<{ id: string; authorId: string; groupId: string | null }> {
   const post = await prisma.post.findUnique({
     where: { id: postId },
     select: {
       id: true,
       authorId: true,
+      groupId: true,
       author: {
         select: { status: true },
+      },
+      group: {
+        select: {
+          id: true,
+          privacy: true,
+        },
       },
     },
   });
@@ -192,7 +214,27 @@ export async function verifyActivePost(postId: string): Promise<{ id: string; au
     throw new PostNotFoundError('Post not found or is unavailable.');
   }
 
-  return { id: post.id, authorId: post.authorId };
+  // If post belongs to a PRIVATE group, verify that currentUserId is a member
+  if (post.group && post.group.privacy === 'PRIVATE') {
+    if (!currentUserId) {
+      throw new PostNotFoundError('Post not found or is unavailable.');
+    }
+
+    const membership = await prisma.groupMember.findUnique({
+      where: {
+        groupId_userId: {
+          groupId: post.group.id,
+          userId: currentUserId,
+        },
+      },
+    });
+
+    if (!membership) {
+      throw new PostNotFoundError('Post not found or is unavailable.');
+    }
+  }
+
+  return { id: post.id, authorId: post.authorId, groupId: post.groupId };
 }
 
 /**
@@ -278,6 +320,14 @@ export async function getCommunityFeed(
     author: {
       status: DbUserStatus.ACTIVE,
     },
+    // Exclude posts from PRIVATE groups unless caller is an active member
+    OR: [
+      { groupId: null },
+      { group: { privacy: 'PUBLIC' } },
+      ...(currentUserId
+        ? [{ group: { privacy: 'PRIVATE', members: { some: { userId: currentUserId } } } }]
+        : []),
+    ],
   };
 
   if (type) {
@@ -288,30 +338,57 @@ export async function getCommunityFeed(
     where.authorId = authorId;
   }
 
-  const [totalPosts, posts] = await Promise.all([
-    prisma.post.count({ where }),
-    prisma.post.findMany({
+  const postInclude = {
+    ...postIncludeAuthorAndMedia,
+    _count: {
+      select: {
+        likes: true,
+        comments: true,
+      },
+    },
+    likes: currentUserId
+      ? {
+          where: { userId: currentUserId },
+          select: { id: true },
+        }
+      : false,
+  };
+
+  let totalPosts: number;
+  let posts: any[];
+
+  if (page === 1) {
+    // For page 1, fetch posts first using PostgreSQL relation join strategy
+    posts = await (prisma.post.findMany as any)({
+      relationLoadStrategy: 'join',
       where,
-      skip,
+      skip: 0,
       take: limit,
       orderBy: { createdAt: 'desc' },
-      include: {
-        ...postIncludeAuthorAndMedia,
-        _count: {
-          select: {
-            likes: true,
-            comments: true,
-          },
-        },
-        likes: currentUserId
-          ? {
-              where: { userId: currentUserId },
-              select: { id: true },
-            }
-          : false,
-      },
-    }),
-  ]);
+      include: postInclude,
+    });
+
+    // If fewer posts than limit are returned, the entire matching set fits on page 1.
+    // totalPosts is mathematically guaranteed to equal posts.length, safely skipping count().
+    if (posts.length < limit) {
+      totalPosts = posts.length;
+    } else {
+      totalPosts = await prisma.post.count({ where });
+    }
+  } else {
+    // For subsequent pages, run count and findMany concurrently to preserve exact pagination
+    [totalPosts, posts] = await Promise.all([
+      prisma.post.count({ where }),
+      (prisma.post.findMany as any)({
+        relationLoadStrategy: 'join',
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: postInclude,
+      }),
+    ]);
+  }
 
   const totalPages = Math.ceil(totalPosts / limit) || 1;
   const hasMore = page < totalPages;
@@ -332,6 +409,8 @@ export async function getCommunityFeed(
  * Retrieves a single post by ID including attached media and interaction counts.
  */
 export async function getPostById(postId: string, currentUserId?: string): Promise<PostItem> {
+  await verifyActivePost(postId, currentUserId);
+
   const post = await prisma.post.findUnique({
     where: { id: postId },
     include: {
@@ -368,18 +447,20 @@ export async function updatePost(
   _userRole: UserRole,
   input: UpdatePostInput
 ): Promise<PostItem> {
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    include: { media: true, author: { select: { status: true } } },
-  });
-
-  if (!post || post.author.status !== DbUserStatus.ACTIVE) {
-    throw new PostNotFoundError();
-  }
+  const activePost = await verifyActivePost(postId, userId);
 
   // Only author can edit post
-  if (post.authorId !== userId) {
+  if (activePost.authorId !== userId) {
     throw new ForbiddenPostActionError('You can only edit your own posts.');
+  }
+
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    include: { media: true },
+  });
+
+  if (!post) {
+    throw new PostNotFoundError();
   }
 
   if (input.media && input.media.length > 4) {
@@ -467,6 +548,16 @@ export async function deletePost(
   ipAddress?: string,
   userAgent?: string
 ): Promise<void> {
+  const isModerator = [
+    UserRole.SUPER_ADMIN,
+    UserRole.COMMUNITY_ADMIN,
+    UserRole.MODERATOR,
+  ].includes(userRole);
+
+  if (!isModerator) {
+    await verifyActivePost(postId, userId);
+  }
+
   const post = await prisma.post.findUnique({
     where: { id: postId },
     include: { media: true },
@@ -477,11 +568,6 @@ export async function deletePost(
   }
 
   const isOwner = post.authorId === userId;
-  const isModerator = [
-    UserRole.SUPER_ADMIN,
-    UserRole.COMMUNITY_ADMIN,
-    UserRole.MODERATOR,
-  ].includes(userRole);
 
   if (!isOwner && !isModerator) {
     throw new ForbiddenPostActionError('You do not have permission to delete this post.');
@@ -520,6 +606,19 @@ export async function deletePost(
         userAgent: userAgent || null,
       },
     });
+
+    // Notify author of moderation action
+    sendNotificationSafely({
+      recipientId: post.authorId,
+      actorId: userId,
+      type: 'POST_MODERATED',
+      title: 'Post Removed by Moderation',
+      message: 'Your post was removed by a community moderator for violating community guidelines.',
+      entityType: 'Post',
+      entityId: postId,
+    }).catch((err) =>
+      console.warn('[Posts Service] Failed to send moderation notification:', err)
+    );
   }
 }
 
@@ -532,7 +631,14 @@ export async function deletePost(
  * Repeated likes safely return the current state without duplicating.
  */
 export async function likePost(postId: string, userId: string): Promise<PostLikesResponseData> {
-  await verifyActivePost(postId);
+  const post = await verifyActivePost(postId, userId);
+
+  // Check if like already existed before upserting (to avoid duplicate notifications for repeated likes)
+  const existingLike = await prisma.postLike.findUnique({
+    where: {
+      postId_userId: { postId, userId },
+    },
+  });
 
   await prisma.postLike.upsert({
     where: {
@@ -547,6 +653,30 @@ export async function likePost(postId: string, userId: string): Promise<PostLike
 
   const likesCount = await prisma.postLike.count({ where: { postId } });
 
+  // If this was a new like and not a self-like, notify the post author
+  if (!existingLike && post.authorId !== userId) {
+    prisma.profile
+      .findUnique({
+        where: { userId },
+        select: { fullName: true },
+      })
+      .then((actorProfile) => {
+        const actorName = actorProfile?.fullName || 'Someone';
+        sendNotificationSafely({
+          recipientId: post.authorId,
+          actorId: userId,
+          type: 'POST_LIKE',
+          title: 'New Like',
+          message: `${actorName} liked your post.`,
+          entityType: 'Post',
+          entityId: postId,
+        });
+      })
+      .catch((err) =>
+        console.warn('[Posts Service] Failed to send like notification:', err)
+      );
+  }
+
   return {
     postId,
     likesCount,
@@ -558,7 +688,7 @@ export async function likePost(postId: string, userId: string): Promise<PostLike
  * Unlikes a post. Idempotent deletion.
  */
 export async function unlikePost(postId: string, userId: string): Promise<PostLikesResponseData> {
-  await verifyActivePost(postId);
+  await verifyActivePost(postId, userId);
 
   await prisma.postLike.deleteMany({
     where: {
@@ -583,7 +713,7 @@ export async function getPostLikes(
   postId: string,
   currentUserId?: string
 ): Promise<PostLikesResponseData> {
-  await verifyActivePost(postId);
+  await verifyActivePost(postId, currentUserId);
 
   const [likesCount, userLike] = await Promise.all([
     prisma.postLike.count({ where: { postId } }),
@@ -611,9 +741,10 @@ export async function getPostLikes(
 export async function getPostComments(
   postId: string,
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
+  currentUserId?: string
 ): Promise<CommentsResponseData> {
-  await verifyActivePost(postId);
+  await verifyActivePost(postId, currentUserId);
 
   const skip = (page - 1) * limit;
 
@@ -666,7 +797,7 @@ export async function createComment(
   authorId: string,
   content: string
 ): Promise<CommentItem> {
-  await verifyActivePost(postId);
+  const post = await verifyActivePost(postId, authorId);
 
   const trimmed = content.trim();
   if (!trimmed) {
@@ -697,6 +828,23 @@ export async function createComment(
     },
   });
 
+  // Notify post author if not a self-comment
+  if (post.authorId !== authorId) {
+    const actorName = comment.author.profile?.fullName || 'Someone';
+    const preview = trimmed.length > 50 ? `${trimmed.substring(0, 47)}...` : trimmed;
+    sendNotificationSafely({
+      recipientId: post.authorId,
+      actorId: authorId,
+      type: 'POST_COMMENT',
+      title: 'New Comment',
+      message: `${actorName} commented: "${preview}"`,
+      entityType: 'Post',
+      entityId: postId,
+    }).catch((err) =>
+      console.warn('[Posts Service] Failed to send comment notification:', err)
+    );
+  }
+
   return mapToCommentItem(comment);
 }
 
@@ -709,7 +857,7 @@ export async function updateComment(
   userId: string,
   content: string
 ): Promise<CommentItem> {
-  await verifyActivePost(postId);
+  await verifyActivePost(postId, userId);
 
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
@@ -764,7 +912,15 @@ export async function deleteComment(
   ipAddress?: string,
   userAgent?: string
 ): Promise<void> {
-  await verifyActivePost(postId);
+  const isModerator = [
+    UserRole.SUPER_ADMIN,
+    UserRole.COMMUNITY_ADMIN,
+    UserRole.MODERATOR,
+  ].includes(userRole);
+
+  if (!isModerator) {
+    await verifyActivePost(postId, userId);
+  }
 
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
@@ -775,11 +931,6 @@ export async function deleteComment(
   }
 
   const isOwner = comment.authorId === userId;
-  const isModerator = [
-    UserRole.SUPER_ADMIN,
-    UserRole.COMMUNITY_ADMIN,
-    UserRole.MODERATOR,
-  ].includes(userRole);
 
   if (!isOwner && !isModerator) {
     throw new ForbiddenPostActionError('You do not have permission to delete this comment.');

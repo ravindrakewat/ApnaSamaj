@@ -9,6 +9,7 @@ import {
   AuthUser,
 } from '@apnasamaj/shared-types';
 import { ListUsersQuery } from '@apnasamaj/validation';
+import { sendNotificationSafely } from '../../notifications/notifications.service';
 
 export class AdminServiceError extends Error {
   public statusCode: number;
@@ -86,16 +87,40 @@ export async function listAdminUsers(query: ListUsersQuery): Promise<ListUsersRe
     ];
   }
 
-  const [totalUsers, rawUsers] = await prisma.$transaction([
-    prisma.user.count({ where }),
-    prisma.user.findMany({
+  type RawUser = Prisma.UserGetPayload<{ select: typeof safeUserSelect }>;
+  let totalUsers: number;
+  let rawUsers: RawUser[];
+
+  if (page === 1) {
+    // For page 1, fetch up to limit records.
+    rawUsers = await prisma.user.findMany({
       where,
-      skip,
+      skip: 0,
       take: limit,
       orderBy: { createdAt: 'desc' },
       select: safeUserSelect,
-    }),
-  ]);
+    });
+
+    // If fewer than limit records are returned, the entire matching set fits on page 1,
+    // so totalUsers is mathematically guaranteed to equal rawUsers.length.
+    if (rawUsers.length < limit) {
+      totalUsers = rawUsers.length;
+    } else {
+      totalUsers = await prisma.user.count({ where });
+    }
+  } else {
+    // For subsequent pages, run count and findMany concurrently without transaction overhead
+    [totalUsers, rawUsers] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: safeUserSelect,
+      }),
+    ]);
+  }
 
   const totalPages = Math.ceil(totalUsers / limit) || 1;
 
@@ -268,6 +293,19 @@ export async function updateAdminUserStatus(
       },
     });
   });
+
+  // Safe notification side-effect after successful transaction
+  sendNotificationSafely({
+    recipientId: targetUserId,
+    actorId: actor.id,
+    type: 'ACCOUNT_STATUS_UPDATE',
+    title: 'Account Status Updated',
+    message: `Your account status has been updated to ${newStatus}.${reason ? ` Reason: ${reason}` : ''}`,
+    entityType: 'User',
+    entityId: targetUserId,
+  }).catch((err) =>
+    console.warn('[Admin Users Service] Failed to send account status notification:', err)
+  );
 
   return getAdminUserDetails(targetUserId);
 }

@@ -314,6 +314,96 @@ async function runCommunityPostsTests() {
       'Test 3.7: Feed filtered by type=EVENT returns only event posts'
     );
 
+    // 3a. Batch 5B: First page with fewer posts than limit (skip count optimization)
+    const authorFeedRes = await fetch(
+      `${baseUrl}/api/v1/posts?page=1&limit=10&authorId=${activeMember1.id}`,
+      { headers: { Authorization: `Bearer ${tokenMember1}` } }
+    );
+    const authorFeedBody: any = await authorFeedRes.json();
+    assert(authorFeedRes.status === 200, 'Test 3.8: Feed filtered by authorId succeeds with 200 OK');
+    assert(authorFeedBody.data.posts.length === 1, 'Test 3.9: First page returns 1 post (< limit of 10)');
+    assert(authorFeedBody.data.pagination.page === 1, 'Test 3.10: Page is 1');
+    assert(authorFeedBody.data.pagination.limit === 10, 'Test 3.11: Limit is 10');
+    assert(authorFeedBody.data.pagination.totalPosts === 1, 'Test 3.12: totalPosts matches returned posts count exactly without full count');
+    assert(authorFeedBody.data.pagination.totalPages === 1, 'Test 3.13: totalPages is 1');
+    assert(authorFeedBody.data.pagination.hasMore === false, 'Test 3.14: hasMore is false');
+    assert(authorFeedBody.data.posts[0].authorId === activeMember1.id, 'Test 3.15: Returned post matches requested author filter');
+
+    // 3b. Batch 5B: First page with exactly limit posts (executes count query for exact totals)
+    const exactLimitFeedRes = await fetch(`${baseUrl}/api/v1/posts?page=1&limit=1`, {
+      headers: { Authorization: `Bearer ${tokenMember1}` },
+    });
+    const exactLimitFeedBody: any = await exactLimitFeedRes.json();
+    assert(exactLimitFeedRes.status === 200, 'Test 3.16: First page with limit=1 succeeds');
+    assert(exactLimitFeedBody.data.posts.length === 1, 'Test 3.17: Returns exactly 1 post (= limit)');
+    assert(exactLimitFeedBody.data.pagination.page === 1, 'Test 3.18: Page is 1');
+    assert(exactLimitFeedBody.data.pagination.totalPosts >= 2, 'Test 3.19: Exact totalPosts executed via count query');
+    assert(exactLimitFeedBody.data.pagination.totalPages >= 2, 'Test 3.20: totalPages reflects exact count');
+    assert(exactLimitFeedBody.data.pagination.hasMore === true, 'Test 3.21: hasMore is true when more posts exist');
+
+    // 3c. Batch 5B: Subsequent page (page > 1) preserves exact totals and pagination
+    const page2FeedRes = await fetch(`${baseUrl}/api/v1/posts?page=2&limit=1`, {
+      headers: { Authorization: `Bearer ${tokenMember1}` },
+    });
+    const page2FeedBody: any = await page2FeedRes.json();
+    assert(page2FeedRes.status === 200, 'Test 3.22: GET page 2 succeeds');
+    assert(page2FeedBody.data.posts.length === 1, 'Test 3.23: Page 2 returns 1 post');
+    assert(page2FeedBody.data.pagination.page === 2, 'Test 3.24: Pagination page is 2');
+    assert(page2FeedBody.data.pagination.totalPosts === exactLimitFeedBody.data.pagination.totalPosts, 'Test 3.25: Exact totalPosts preserved on page 2');
+    assert(page2FeedBody.data.posts[0].id !== exactLimitFeedBody.data.posts[0].id, 'Test 3.26: Page 2 returns different post than page 1');
+
+    // 3d. Batch 5B: Empty feed query
+    const emptyFeedRes = await fetch(
+      `${baseUrl}/api/v1/posts?page=1&limit=10&authorId=${adminUser.id}`,
+      { headers: { Authorization: `Bearer ${tokenMember1}` } }
+    );
+    const emptyFeedBody: any = await emptyFeedRes.json();
+    assert(emptyFeedRes.status === 200, 'Test 3.27: Empty feed returns 200 OK');
+    assert(emptyFeedBody.data.posts.length === 0, 'Test 3.28: Empty feed returns 0 posts');
+    assert(emptyFeedBody.data.pagination.totalPosts === 0, 'Test 3.29: Empty feed totalPosts is 0');
+    assert(emptyFeedBody.data.pagination.totalPages === 1, 'Test 3.30: Empty feed totalPages is 1');
+    assert(emptyFeedBody.data.pagination.hasMore === false, 'Test 3.31: Empty feed hasMore is false');
+
+    // 3e. Batch 5B: Likes, comments counts, and isLikedByMe resolution
+    const likePost2Res = await fetch(`${baseUrl}/api/v1/posts/${createdPost2Id}/like`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tokenMember1}` },
+    });
+    assert(likePost2Res.status === 200, 'Test 3.32: Member 1 likes Post 2');
+
+    const commentPost2Res = await fetch(`${baseUrl}/api/v1/posts/${createdPost2Id}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenMember1}`,
+      },
+      body: JSON.stringify({ content: 'Looking forward to the event!' }),
+    });
+    assert(commentPost2Res.status === 201, 'Test 3.33: Member 1 comments on Post 2');
+
+    // Fetch feed as Member 1 (should see isLikedByMe = true, likesCount = 1, commentsCount = 1)
+    const feedMember1Res = await fetch(`${baseUrl}/api/v1/posts?page=1&limit=10`, {
+      headers: { Authorization: `Bearer ${tokenMember1}` },
+    });
+    const feedMember1Body: any = await feedMember1Res.json();
+    const post2ForM1 = feedMember1Body.data.posts.find((p: any) => p.id === createdPost2Id);
+    assert(post2ForM1 !== undefined, 'Test 3.34: Post 2 found in feed for Member 1');
+    assert(post2ForM1.likesCount === 1, 'Test 3.35: Post 2 likesCount is 1 for Member 1');
+    assert(post2ForM1.commentsCount === 1, 'Test 3.36: Post 2 commentsCount is 1 for Member 1');
+    assert(post2ForM1.isLikedByMe === true, 'Test 3.37: Post 2 isLikedByMe is true for Member 1');
+
+    // Fetch feed as Member 2 (should see isLikedByMe = false, likesCount = 1, commentsCount = 1)
+    const feedMember2Res = await fetch(`${baseUrl}/api/v1/posts?page=1&limit=10`, {
+      headers: { Authorization: `Bearer ${tokenMember2}` },
+    });
+    const feedMember2Body: any = await feedMember2Res.json();
+    const post2ForM2 = feedMember2Body.data.posts.find((p: any) => p.id === createdPost2Id);
+    assert(post2ForM2 !== undefined, 'Test 3.38: Post 2 found in feed for Member 2');
+    assert(post2ForM2.likesCount === 1, 'Test 3.39: Post 2 likesCount is 1 for Member 2');
+    assert(post2ForM2.commentsCount === 1, 'Test 3.40: Post 2 commentsCount is 1 for Member 2');
+    assert(post2ForM2.isLikedByMe === false, 'Test 3.41: Post 2 isLikedByMe is false for Member 2');
+
+
     // -------------------------------------------------------------
     // 4. Retrieve Single Post Tests
     // -------------------------------------------------------------

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card,
   CardHeader,
@@ -65,12 +66,14 @@ import { useAuth } from '../context/AuthContext';
 
 interface PostCardProps {
   post: PostItem;
+  priority?: boolean;
   onPostUpdated: (post: PostItem) => void;
   onPostDeleted: (postId: string) => void;
 }
 
-export const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdated, onPostDeleted }) => {
+export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPostUpdated, onPostDeleted }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   // Menu state
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -452,6 +455,9 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdated, onPostD
 
     const count = post.media.length;
 
+    const imageLoading = priority ? 'eager' : 'lazy';
+    const imageDecoding = 'async';
+
     if (count === 1) {
       const item = post.media[0];
       return (
@@ -460,6 +466,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdated, onPostD
             component="img"
             src={item.url}
             alt="Community Post attachment"
+            loading={imageLoading}
+            decoding={imageDecoding}
             onClick={() => setPreviewImage(item.url)}
             sx={{
               width: '100%',
@@ -494,6 +502,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdated, onPostD
               component="img"
               src={item.url}
               alt="Community Post attachment"
+              loading={imageLoading}
+              decoding={imageDecoding}
               onClick={() => setPreviewImage(item.url)}
               sx={{
                 width: '100%',
@@ -528,6 +538,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdated, onPostD
             component="img"
             src={post.media[0].url}
             alt="Community Post attachment"
+            loading={imageLoading}
+            decoding={imageDecoding}
             onClick={() => setPreviewImage(post.media[0].url)}
             sx={{
               gridRow: 'span 2',
@@ -546,6 +558,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdated, onPostD
               component="img"
               src={item.url}
               alt="Community Post attachment"
+              loading={imageLoading}
+              decoding={imageDecoding}
               onClick={() => setPreviewImage(item.url)}
               sx={{
                 width: '100%',
@@ -582,6 +596,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdated, onPostD
             component="img"
             src={item.url}
             alt="Community Post attachment"
+            loading={imageLoading}
+            decoding={imageDecoding}
             onClick={() => setPreviewImage(item.url)}
             sx={{
               width: '100%',
@@ -603,7 +619,18 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdated, onPostD
       <Card elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
         <CardHeader
           avatar={
-            <Avatar sx={{ bgcolor: 'primary.main', fontWeight: 'bold' }}>
+            <Avatar
+              src={post.author.avatarUrl || undefined}
+              alt={post.author.fullName}
+              onClick={() => navigate(`/members/${post.author.id}`)}
+              sx={{
+                bgcolor: 'primary.main',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'transform 0.2s ease',
+                '&:hover': { transform: 'scale(1.05)' },
+              }}
+            >
               {post.author.fullName.charAt(0).toUpperCase()}
             </Avatar>
           }
@@ -644,7 +671,15 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdated, onPostD
           }
           title={
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography variant="subtitle1" fontWeight="bold">
+              <Typography
+                variant="subtitle1"
+                fontWeight="bold"
+                onClick={() => navigate(`/members/${post.author.id}`)}
+                sx={{
+                  cursor: 'pointer',
+                  '&:hover': { color: 'primary.main', textDecoration: 'underline' },
+                }}
+              >
                 {post.author.fullName}
               </Typography>
               {post.author.role !== UserRole.MEMBER && (

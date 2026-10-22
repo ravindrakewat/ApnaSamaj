@@ -46,6 +46,7 @@ export interface PostItem {
   authorId: string;
   author: PostAuthor;
   groupId?: string | null;
+  group?: { id: string; name: string; slug: string } | null;
   type: PostType;
   content: string;
   isPinned: boolean;

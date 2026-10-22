@@ -499,7 +499,8 @@ export async function getCommentsHandler(req: AuthenticatedRequest, res: Respons
     const comments = await getPostComments(
       parsedParam.data.id,
       parsedQuery.data.page,
-      parsedQuery.data.limit
+      parsedQuery.data.limit,
+      req.user?.id
     );
 
     const response: ApiResponse<CommentsResponseData> = {

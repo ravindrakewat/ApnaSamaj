@@ -172,6 +172,116 @@ export async function uploadPostMedia(
 }
 
 /**
+ * Uploads a profile avatar image buffer to Supabase Storage with strict MIME and size validation.
+ * Namespaces files under avatars/{userId}/{uuid}.{ext} to guarantee zero path traversal
+ * and prevent unauthorized overwrites.
+ */
+export async function uploadAvatarMedia(
+  userId: string,
+  fileBuffer: Buffer,
+  _claimedMimeType?: string,
+  originalName: string = 'avatar.jpg'
+): Promise<UploadMediaResponseData> {
+  // 1. File size check
+  if (fileBuffer.length > config.maxMediaFileSizeBytes) {
+    throw new OversizedFileError(config.maxMediaFileSizeBytes);
+  }
+
+  // 2. Magic bytes validation
+  const detectedMime = detectImageMimeType(fileBuffer);
+  if (!detectedMime) {
+    throw new InvalidMimeTypeError();
+  }
+
+  const ext = MIME_TO_EXTENSION[detectedMime];
+  const fileId = crypto.randomUUID();
+  const storagePath = `avatars/${userId}/${fileId}.${ext}`;
+
+  // 3. Upload to Supabase Storage
+  const supabase = getSupabaseClient();
+  const { error: uploadError } = await supabase.storage
+    .from(config.supabaseStorageBucket)
+    .upload(storagePath, fileBuffer, {
+      contentType: detectedMime,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    console.error('[Storage Service] Supabase avatar upload failed:', uploadError.message);
+    throw new StorageError(`Failed to upload avatar: ${uploadError.message}`, 500);
+  }
+
+  // 4. Resolve public URL
+  const { data: publicUrlData } = supabase.storage
+    .from(config.supabaseStorageBucket)
+    .getPublicUrl(storagePath);
+
+  return {
+    url: publicUrlData.publicUrl,
+    storagePath,
+    mediaType: 'IMAGE',
+    fileName: originalName,
+    fileSizeBytes: fileBuffer.length,
+    mimeType: detectedMime,
+  };
+}
+
+/**
+ * Uploads a matrimonial gallery photo to Supabase Storage in the isolated matrimonial/ namespace.
+ * Enforces magic bytes MIME validation and file size limits.
+ */
+export async function uploadMatrimonialMedia(
+  userId: string,
+  fileBuffer: Buffer,
+  _claimedMimeType?: string,
+  originalName: string = 'matrimonial.jpg'
+): Promise<UploadMediaResponseData> {
+  // 1. File size check
+  if (fileBuffer.length > config.maxMediaFileSizeBytes) {
+    throw new OversizedFileError(config.maxMediaFileSizeBytes);
+  }
+
+  // 2. Magic bytes validation
+  const detectedMime = detectImageMimeType(fileBuffer);
+  if (!detectedMime) {
+    throw new InvalidMimeTypeError();
+  }
+
+  const ext = MIME_TO_EXTENSION[detectedMime];
+  const fileId = crypto.randomUUID();
+  const storagePath = `matrimonial/${userId}/${fileId}.${ext}`;
+
+  // 3. Upload to Supabase Storage
+  const supabase = getSupabaseClient();
+  const { error: uploadError } = await supabase.storage
+    .from(config.supabaseStorageBucket)
+    .upload(storagePath, fileBuffer, {
+      contentType: detectedMime,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    console.error('[Storage Service] Supabase matrimonial upload failed:', uploadError.message);
+    throw new StorageError(`Failed to upload matrimonial photo: ${uploadError.message}`, 500);
+  }
+
+  // 4. Resolve public URL
+  const { data: publicUrlData } = supabase.storage
+    .from(config.supabaseStorageBucket)
+    .getPublicUrl(storagePath);
+
+  return {
+    url: publicUrlData.publicUrl,
+    storagePath,
+    mediaType: 'IMAGE',
+    fileName: originalName,
+    fileSizeBytes: fileBuffer.length,
+    mimeType: detectedMime,
+  };
+}
+
+/**
+
  * Deletes one or more storage objects from Supabase Storage.
  * Safe and idempotent.
  */

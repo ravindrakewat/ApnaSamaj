@@ -1,6 +1,14 @@
-import { prisma, Gender } from '@apnasamaj/database';
-import { SafeUserProfile, UserRole, UserStatus } from '@apnasamaj/shared-types';
-import { UpdateProfileInput } from '@apnasamaj/validation';
+import { prisma, Gender, Prisma } from '@apnasamaj/database';
+import {
+  SafeUserProfile,
+  UserRole,
+  UserStatus,
+  PublicDirectoryMember,
+  DirectoryResponseData,
+  PublicMemberProfile,
+} from '@apnasamaj/shared-types';
+import { UpdateProfileInput, DirectoryQuery } from '@apnasamaj/validation';
+import { uploadAvatarMedia, deleteStorageObjects, extractStoragePathFromUrl } from '../../services/storage.service';
 
 export class UserServiceError extends Error {
   public statusCode: number;
@@ -152,4 +160,265 @@ export async function updateMyProfile(
   }
 
   return getMyProfile(userId);
+}
+
+const publicDirectorySelect = {
+  id: true,
+  createdAt: true,
+  profile: {
+    select: {
+      id: true,
+      fullName: true,
+      gender: true,
+      bio: true,
+      avatarUrl: true,
+      city: true,
+      state: true,
+      subCaste: true,
+      gotra: true,
+    },
+  },
+} as const;
+
+/**
+ * Lists active verified members for the community directory.
+ * Never exposes phone numbers, password hashes, auth tokens, or administrative fields.
+ * Restricted strictly to active users.
+ */
+export async function getDirectoryMembers(query: DirectoryQuery): Promise<DirectoryResponseData> {
+  const { page = 1, limit = 12, search, city, state, gotra } = query;
+  const skip = (page - 1) * limit;
+
+  const where: Prisma.UserWhereInput = {
+    status: 'ACTIVE',
+  };
+
+  const andConditions: Prisma.UserWhereInput[] = [];
+
+  if (city && city.trim().length > 0) {
+    andConditions.push({
+      profile: {
+        city: { contains: city.trim(), mode: 'insensitive' },
+      },
+    });
+  }
+
+  if (state && state.trim().length > 0) {
+    andConditions.push({
+      profile: {
+        state: { contains: state.trim(), mode: 'insensitive' },
+      },
+    });
+  }
+
+  if (gotra && gotra.trim().length > 0) {
+    andConditions.push({
+      profile: {
+        gotra: { contains: gotra.trim(), mode: 'insensitive' },
+      },
+    });
+  }
+
+  if (search && search.trim().length > 0) {
+    const term = search.trim();
+    andConditions.push({
+      profile: {
+        OR: [
+          { fullName: { contains: term, mode: 'insensitive' } },
+          { city: { contains: term, mode: 'insensitive' } },
+          { state: { contains: term, mode: 'insensitive' } },
+          { gotra: { contains: term, mode: 'insensitive' } },
+          { subCaste: { contains: term, mode: 'insensitive' } },
+        ],
+      },
+    });
+  }
+
+  if (andConditions.length > 0) {
+    where.AND = andConditions;
+  }
+
+  type RawDirectoryUser = Prisma.UserGetPayload<{ select: typeof publicDirectorySelect }>;
+  let totalMembers: number;
+  let rawUsers: RawDirectoryUser[];
+
+  if (page === 1) {
+    rawUsers = await prisma.user.findMany({
+      where,
+      skip: 0,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      select: publicDirectorySelect,
+    });
+
+    if (rawUsers.length < limit) {
+      totalMembers = rawUsers.length;
+    } else {
+      totalMembers = await prisma.user.count({ where });
+    }
+  } else {
+    const [count, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: publicDirectorySelect,
+      }),
+    ]);
+    totalMembers = count;
+    rawUsers = users;
+  }
+
+  const members: PublicDirectoryMember[] = rawUsers.map((u) => ({
+    id: u.id,
+    fullName: u.profile?.fullName || 'Community Member',
+    avatarUrl: u.profile?.avatarUrl || null,
+    gender: u.profile?.gender || null,
+    bio: u.profile?.bio || null,
+    city: u.profile?.city || null,
+    state: u.profile?.state || null,
+    subCaste: u.profile?.subCaste || null,
+    gotra: u.profile?.gotra || null,
+    joinedAt: u.createdAt.toISOString(),
+  }));
+
+  return {
+    members,
+    pagination: {
+      page,
+      limit,
+      totalMembers,
+      totalPages: Math.ceil(totalMembers / limit) || 1,
+    },
+  };
+}
+
+/**
+ * Uploads a profile avatar for the authenticated user.
+ * Reuses safe magic-byte, MIME, and size validation from storage service.
+ * Cleans up newly uploaded image if database update fails.
+ * Safely cleans up superseded application-managed avatar only after commit, with strict user namespace validation.
+ */
+export async function uploadMyAvatar(
+  userId: string,
+  fileBuffer: Buffer,
+  mimetype: string,
+  originalName: string
+): Promise<{ avatarUrl: string }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      profile: {
+        select: {
+          id: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    throw new UserNotFoundError();
+  }
+
+  const previousAvatarUrl = user.profile?.avatarUrl || null;
+
+  // 1. Upload new avatar buffer using storage service
+  const uploadResult = await uploadAvatarMedia(userId, fileBuffer, mimetype, originalName);
+
+  // 2. Persist avatarUrl to database
+  try {
+    if (user.profile) {
+      await prisma.profile.update({
+        where: { userId },
+        data: { avatarUrl: uploadResult.url },
+      });
+    } else {
+      await prisma.profile.create({
+        data: {
+          userId,
+          fullName: 'Member',
+          avatarUrl: uploadResult.url,
+        },
+      });
+    }
+  } catch (dbError: unknown) {
+    // 3. Database update failed: cleanup the newly uploaded file to avoid orphaned storage objects
+    try {
+      await deleteStorageObjects([uploadResult.storagePath]);
+    } catch (cleanupError: unknown) {
+      console.error(
+        '[Users Service] Failed to cleanup orphaned avatar storage object after DB error:',
+        cleanupError instanceof Error ? cleanupError.message : cleanupError
+      );
+    }
+    throw dbError;
+  }
+
+  // 4. Safely clean up superseded avatar only if it belongs to this user in application storage
+  if (previousAvatarUrl && previousAvatarUrl !== uploadResult.url) {
+    const oldStoragePath = extractStoragePathFromUrl(previousAvatarUrl);
+    // Strict namespace validation: ensure the path belongs strictly to this user's avatar storage.
+    // Avatar replacement must never delete post-media objects (posts/userId/).
+    if (oldStoragePath && oldStoragePath.startsWith(`avatars/${userId}/`)) {
+      deleteStorageObjects([oldStoragePath]).catch((err: unknown) => {
+        console.warn(
+          '[Users Service] Failed to clean up previous avatar:',
+          err instanceof Error ? err.message : err
+        );
+      });
+    }
+  }
+
+  return { avatarUrl: uploadResult.url };
+}
+
+/**
+ * Retrieves public profile information for a community member.
+ * Only ACTIVE members are discoverable; never exposes phone numbers, password hashes, or sensitive account fields.
+ */
+export async function getPublicMemberProfile(targetUserId: string): Promise<PublicMemberProfile> {
+  const user = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: {
+      id: true,
+      role: true,
+      status: true,
+      createdAt: true,
+      profile: {
+        select: {
+          id: true,
+          fullName: true,
+          gender: true,
+          bio: true,
+          avatarUrl: true,
+          city: true,
+          state: true,
+          subCaste: true,
+          gotra: true,
+        },
+      },
+    },
+  });
+
+  if (!user || user.status !== 'ACTIVE') {
+    throw new UserNotFoundError('Member profile not found or unavailable.');
+  }
+
+  return {
+    id: user.id,
+    fullName: user.profile?.fullName || 'Community Member',
+    avatarUrl: user.profile?.avatarUrl || null,
+    gender: user.profile?.gender || null,
+    bio: user.profile?.bio || null,
+    city: user.profile?.city || null,
+    state: user.profile?.state || null,
+    subCaste: user.profile?.subCaste || null,
+    gotra: user.profile?.gotra || null,
+    role: user.role as unknown as UserRole,
+    joinedAt: user.createdAt.toISOString(),
+  };
 }

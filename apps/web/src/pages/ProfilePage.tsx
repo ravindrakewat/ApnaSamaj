@@ -28,9 +28,10 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import PhoneIcon from '@mui/icons-material/Phone';
 import ShieldIcon from '@mui/icons-material/Shield';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import { CurrentMemberProfile, UserStatus } from '@apnasamaj/shared-types';
 import { updateProfileSchema, UpdateProfileInput } from '@apnasamaj/validation';
-import { getMyProfileApi, updateMyProfileApi } from '../services/users.service';
+import { getMyProfileApi, updateMyProfileApi, uploadAvatarApi } from '../services/users.service';
 import { useAuth } from '../context/AuthContext';
 
 export const ProfilePage: React.FC = () => {
@@ -45,6 +46,10 @@ export const ProfilePage: React.FC = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Avatar upload state
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState<boolean>(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   const [editForm, setEditForm] = useState({
     fullName: '',
@@ -168,6 +173,38 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  const handleAvatarFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('Avatar image must not exceed 5MB.');
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    setAvatarError(null);
+    try {
+      const newAvatarUrl = await uploadAvatarApi(file);
+      setProfileData((prev) =>
+        prev
+          ? {
+              ...prev,
+              profile: prev.profile
+                ? { ...prev.profile, avatarUrl: newAvatarUrl }
+                : { fullName: 'Member', avatarUrl: newAvatarUrl },
+            }
+          : null
+      );
+      setSuccessMessage('Profile avatar updated successfully.');
+    } catch (err: unknown) {
+      setAvatarError(err instanceof Error ? err.message : 'Failed to upload profile avatar.');
+    } finally {
+      setIsUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
+
   if (isLoading) {
     return (
       <Container maxWidth="md" sx={{ py: 8, textAlign: 'center' }}>
@@ -200,6 +237,12 @@ export const ProfilePage: React.FC = () => {
         </Alert>
       )}
 
+      {avatarError && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setAvatarError(null)}>
+          {avatarError}
+        </Alert>
+      )}
+
       {isPending && (
         <Alert
           severity="info"
@@ -213,10 +256,53 @@ export const ProfilePage: React.FC = () => {
       {/* Main Profile Card */}
       <Paper elevation={2} sx={{ p: { xs: 3, sm: 4 }, borderRadius: 3, mb: 4 }}>
         <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" gap={2} mb={3}>
-          <Box display="flex" alignItems="center" gap={2}>
-            <Avatar sx={{ width: 64, height: 64, bgcolor: 'primary.main', fontSize: 28 }}>
-              {p?.fullName ? p.fullName.charAt(0).toUpperCase() : <PersonIcon />}
-            </Avatar>
+          <Box display="flex" alignItems="center" gap={2.5}>
+            <Box position="relative">
+              <Avatar
+                src={p?.avatarUrl || undefined}
+                sx={{
+                  width: 80,
+                  height: 80,
+                  bgcolor: 'primary.main',
+                  fontSize: 32,
+                  fontWeight: 'bold',
+                  boxShadow: 2,
+                  border: '2px solid #ffffff',
+                }}
+              >
+                {p?.fullName ? p.fullName.charAt(0).toUpperCase() : <PersonIcon sx={{ fontSize: 40 }} />}
+              </Avatar>
+              <Button
+                component="label"
+                size="small"
+                variant="contained"
+                disabled={isUploadingAvatar}
+                title="Change Avatar"
+                sx={{
+                  position: 'absolute',
+                  bottom: -4,
+                  right: -4,
+                  minWidth: 32,
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  p: 0,
+                  boxShadow: 2,
+                }}
+              >
+                {isUploadingAvatar ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <PhotoCameraIcon sx={{ fontSize: 16 }} />
+                )}
+                <input
+                  type="file"
+                  hidden
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleAvatarFileSelect}
+                />
+              </Button>
+            </Box>
             <Box>
               <Typography variant="h5" component="h1" fontWeight="bold">
                 {p?.fullName || 'Community Member'}

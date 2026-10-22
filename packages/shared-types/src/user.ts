@@ -11,6 +11,8 @@ export enum UserStatus {
   SUSPENDED = 'SUSPENDED',
 }
 
+export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
+
 export interface UserSummary {
   id: string;
   phone: string;
@@ -72,3 +74,48 @@ export interface UpdateUserStatusRequest {
   status: 'ACTIVE' | 'SUSPENDED';
   reason?: string;
 }
+
+export interface AdminMetrics {
+  totalUsers: number;
+  pendingUsers: number;
+  activeUsers: number;
+  totalPosts: number;
+}
+
+export interface PublicDirectoryMember {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+  gender: string | null;
+  bio: string | null;
+  city: string | null;
+  state: string | null;
+  subCaste: string | null;
+  gotra: string | null;
+  joinedAt: string;
+}
+
+export interface PublicMemberProfile {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+  gender: string | null;
+  bio: string | null;
+  city: string | null;
+  state: string | null;
+  subCaste: string | null;
+  gotra: string | null;
+  role: UserRole;
+  joinedAt: string;
+}
+
+export interface DirectoryResponseData {
+  members: PublicDirectoryMember[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalMembers: number;
+    totalPages: number;
+  };
+}
+

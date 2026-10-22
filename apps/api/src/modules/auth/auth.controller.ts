@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { prisma } from '@apnasamaj/database';
 import { loginSchema, registerSchema, refreshTokenSchema } from '@apnasamaj/validation';
 import {
   ApiResponse,
@@ -306,9 +307,21 @@ export async function getMeHandler(req: AuthenticatedRequest, res: Response): Pr
     return;
   }
 
+  // If fullName was not loaded by middleware, populate it for /auth/me contract
+  let authUser = req.user;
+  if (!authUser.fullName) {
+    const profile = await prisma.profile.findUnique({
+      where: { userId: req.user.id },
+      select: { fullName: true },
+    });
+    if (profile?.fullName) {
+      authUser = { ...authUser, fullName: profile.fullName };
+    }
+  }
+
   const response: ApiResponse<AuthUser> = {
     success: true,
-    data: req.user,
+    data: authUser,
     timestamp: new Date().toISOString(),
   };
 

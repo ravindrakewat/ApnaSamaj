@@ -5,7 +5,8 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
 }
 
 // --------------------------------------------------------
@@ -54,6 +55,81 @@ enum MediaType {
   DOCUMENT
 }
 
+enum NotificationType {
+  POST_LIKE
+  POST_COMMENT
+  GROUP_ROLE_UPDATE
+  GROUP_MEMBER_REMOVED
+  ACCOUNT_STATUS_UPDATE
+  POST_MODERATED
+  MATRIMONIAL_INTEREST_RECEIVED
+  MATRIMONIAL_INTEREST_ACCEPTED
+  MATRIMONIAL_PROFILE_APPROVED
+  MATRIMONIAL_PROFILE_REJECTED
+}
+
+enum MatrimonialProfileStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  HIDDEN
+}
+
+enum MaritalStatus {
+  NEVER_MARRIED
+  DIVORCED
+  WIDOWED
+  AWAITING_DIVORCE
+}
+
+enum ManglikStatus {
+  MANGLIK
+  NON_MANGLIK
+  ANSHIK
+  DONT_KNOW
+}
+
+enum EmploymentSector {
+  PRIVATE_SECTOR
+  GOVERNMENT_PSU
+  BUSINESS_SELF_EMPLOYED
+  DEFENSE
+  NOT_WORKING
+}
+
+enum FamilyType {
+  NUCLEAR
+  JOINT
+}
+
+enum FamilyValues {
+  TRADITIONAL
+  MODERATE
+  LIBERAL
+}
+
+enum DietType {
+  VEGETARIAN
+  NON_VEGETARIAN
+  EGGETARIAN
+  JAIN
+}
+
+enum HabitFrequency {
+  NO
+  YES
+  OCCASIONALLY
+}
+
+enum MatrimonialInterestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+}
+
+
 // --------------------------------------------------------
 // AUTHENTICATION & USER CREDENTIALS
 // --------------------------------------------------------
@@ -77,6 +153,13 @@ model User {
   comments            Comment[]            @relation("CommentAuthor")
   postLikes           PostLike[]
   authoredAuditLogs   AuditLog[]           @relation("AuditActor")
+  receivedNotifications  Notification[]    @relation("NotificationRecipient")
+  triggeredNotifications Notification[]    @relation("NotificationActor")
+  sentChatMessages             ChatMessage[]         @relation("SentChatMessages")
+  matrimonialProfile           MatrimonialProfile?
+  sentMatrimonialInterests     MatrimonialInterest[] @relation("SentMatrimonialInterests")
+  receivedMatrimonialInterests MatrimonialInterest[] @relation("ReceivedMatrimonialInterests")
+  approvedMatrimonialProfiles  MatrimonialProfile[]  @relation("MatrimonialProfileApprover")
 
   @@index([role])
   @@index([status])
@@ -147,8 +230,9 @@ model Group {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  members GroupMember[]
-  posts   Post[]
+  members      GroupMember[]
+  posts        Post[]
+  chatMessages ChatMessage[]
 
   @@index([privacy])
   @@index([createdById])
@@ -251,4 +335,179 @@ model AuditLog {
   @@index([targetType, targetId])
   @@index([action])
   @@index([createdAt(sort: Desc)])
+}
+
+// --------------------------------------------------------
+// IN-APP NOTIFICATIONS
+// --------------------------------------------------------
+
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actorId     String?
+  actor       User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  type        NotificationType
+  title       String
+  message     String
+  entityType  String?
+  entityId    String?
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId, isRead])
+  @@index([recipientId, createdAt(sort: Desc)])
+}
+
+// --------------------------------------------------------
+// REAL-TIME GROUP CHAT
+// --------------------------------------------------------
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation("SentChatMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([groupId, createdAt(sort: Desc)])
+  @@index([senderId])
+}
+
+// --------------------------------------------------------
+// MATRIMONIAL MODULE
+// --------------------------------------------------------
+
+model MatrimonialProfile {
+  id                  String                    @id @default(uuid())
+  userId              String                    @unique
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status              MatrimonialProfileStatus  @default(DRAFT)
+  rejectionReason     String?
+
+  // Physical & Community (complements canonical Profile: fullName, gender, dob, city, state, subCaste, gotra)
+  maritalStatus       MaritalStatus
+  heightCm            Int                       // Height in centimeters (e.g. 175)
+  weightKg            Int?                      // Optional weight in kg
+  motherTongue        String                    @default("Hindi")
+  religion            String                    @default("Hindu")
+  caste               String?                   // Community/Samaj lineage
+  subCaste            String?                   // Can supplement Profile subCaste
+  gotra               String?                   // Gotra
+  manglik             ManglikStatus             @default(DONT_KNOW)
+
+  // Astrological / Horoscope (optional)
+  birthTime           String?                   // e.g. "14:30"
+  birthCity           String?
+  rashi               String?                   // Moon sign / Zodiac
+  nakshatra           String?                   // Birth star
+
+  // Education & Career
+  highestEducation    String                    // e.g. "B.Tech in Computer Science", "MBA", "MBBS"
+  educationDetails    String?                   // College / University / Additional degrees
+  employedIn          EmploymentSector          @default(PRIVATE_SECTOR)
+  occupation          String                    // e.g. "Software Engineer", "Bank Manager"
+  companyName         String?                   // Employer (optional)
+  annualIncome        String                    // Bracket or range: e.g. "10-15 Lakhs", "15-25 Lakhs"
+  workCity            String?
+  workState           String?
+  workCountry         String                    @default("India")
+
+  // Family Background
+  familyType          FamilyType                @default(NUCLEAR)
+  familyValues        FamilyValues              @default(TRADITIONAL)
+  fatherName          String?
+  fatherOccupation    String?
+  motherName          String?
+  motherOccupation    String?
+  brothersCount       Int                       @default(0)
+  brothersMarried     Int                       @default(0)
+  sistersCount        Int                       @default(0)
+  sistersMarried      Int                       @default(0)
+  familyNativePlace   String?                   // Hometown / Ancestral village
+  aboutFamily         String?
+
+  // Lifestyle
+  diet                DietType                  @default(VEGETARIAN)
+  smoking             HabitFrequency            @default(NO)
+  drinking            HabitFrequency            @default(NO)
+
+  // Personal Narratives
+  aboutMe             String?
+  partnerExpectations String?
+
+  // Moderation & Tracking
+  approvedAt          DateTime?
+  approvedById        String?
+  approvedBy          User?                     @relation("MatrimonialProfileApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  photos              MatrimonialPhoto[]
+  partnerPreference   MatrimonialPartnerPreference?
+
+  @@index([status])
+  @@index([maritalStatus])
+  @@index([heightCm])
+  @@index([diet])
+  @@index([manglik])
+}
+
+model MatrimonialPartnerPreference {
+  id                   String              @id @default(uuid())
+  profileId            String              @unique
+  profile              MatrimonialProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  minAge               Int                 @default(18)
+  maxAge               Int                 @default(45)
+  minHeightCm          Int                 @default(140)
+  maxHeightCm          Int                 @default(210)
+  maritalStatuses      MaritalStatus[]     @default([])
+  manglik              ManglikStatus?
+  diet                 DietType?
+
+  preferredEducations  String[]            @default([])
+  preferredOccupations String[]            @default([])
+  preferredCities      String[]            @default([])
+  preferredStates      String[]            @default([])
+  minIncome            String?
+  notes                String?
+
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+}
+
+model MatrimonialPhoto {
+  id         String              @id @default(uuid())
+  profileId  String
+  profile    MatrimonialProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  url        String
+  order      Int                 @default(0)
+  isPrimary  Boolean             @default(false)
+  isApproved Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+
+  @@index([profileId])
+  @@index([profileId, isPrimary])
+}
+
+model MatrimonialInterest {
+  id          String                     @id @default(uuid())
+  senderId    String
+  sender      User                       @relation("SentMatrimonialInterests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId  String
+  receiver    User                       @relation("ReceivedMatrimonialInterests", fields: [receiverId], references: [id], onDelete: Cascade)
+  status      MatrimonialInterestStatus  @default(PENDING)
+  message     String?                    // Optional note with interest
+  respondedAt DateTime?
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  @@unique([senderId, receiverId])
+  @@index([senderId, status])
+  @@index([receiverId, status])
 }

@@ -25,14 +25,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     async function restoreSession() {
       try {
         // 1. Attempt token refresh using browser HttpOnly cookie
-        await refreshApi();
+        const refreshResult = await refreshApi();
         if (!isMounted) return;
 
-        // 2. Query user profile using access token
-        const userProfile = await getMeApi();
-        if (!isMounted) return;
+        const userProfile = refreshResult.user;
 
-        // 3. Ensure user has administrative privileges and active status
+        // 2. Ensure user has administrative privileges and active status
         const isPrivileged =
           userProfile.role === UserRole.SUPER_ADMIN ||
           userProfile.role === UserRole.COMMUNITY_ADMIN;

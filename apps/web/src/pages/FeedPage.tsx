@@ -237,10 +237,11 @@ export const FeedPage: React.FC = () => {
         </Paper>
       ) : (
         <Box>
-          {posts.map((post) => (
+          {posts.map((post, index) => (
             <PostCard
               key={post.id}
               post={post}
+              priority={index === 0}
               onPostUpdated={handlePostUpdated}
               onPostDeleted={handlePostDeleted}
             />

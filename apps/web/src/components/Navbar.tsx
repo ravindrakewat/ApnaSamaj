@@ -15,7 +15,10 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
 import GroupsIcon from '@mui/icons-material/Groups';
 import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
+import PeopleIcon from '@mui/icons-material/People';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import { useAuth } from '../context/AuthContext';
+import { NotificationBell } from './NotificationBell';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -69,6 +72,33 @@ export const Navbar: React.FC = () => {
                 </Button>
 
                 <Button
+                  color={location.pathname.startsWith('/groups') ? 'primary' : 'inherit'}
+                  onClick={() => navigate('/groups')}
+                  startIcon={<GroupsIcon />}
+                  sx={{ fontWeight: location.pathname.startsWith('/groups') ? 600 : 400 }}
+                >
+                  Groups
+                </Button>
+
+                <Button
+                  color={location.pathname === '/directory' ? 'primary' : 'inherit'}
+                  onClick={() => navigate('/directory')}
+                  startIcon={<PeopleIcon />}
+                  sx={{ fontWeight: location.pathname === '/directory' ? 600 : 400 }}
+                >
+                  Directory
+                </Button>
+
+                <Button
+                  color={location.pathname.startsWith('/matrimonial') ? 'primary' : 'inherit'}
+                  onClick={() => navigate('/matrimonial')}
+                  startIcon={<FavoriteIcon />}
+                  sx={{ fontWeight: location.pathname.startsWith('/matrimonial') ? 600 : 400 }}
+                >
+                  Matrimonial
+                </Button>
+
+                <Button
                   color={location.pathname === '/profile' ? 'primary' : 'inherit'}
                   onClick={() => navigate('/profile')}
                   startIcon={<AccountCircleIcon />}
@@ -77,12 +107,14 @@ export const Navbar: React.FC = () => {
                   My Profile
                 </Button>
 
+                <NotificationBell />
+
                 <Chip
                   label={user.fullName || user.phone}
                   size="small"
                   color="primary"
                   variant="outlined"
-                  sx={{ ml: 1, display: { xs: 'none', sm: 'inline-flex' } }}
+                  sx={{ ml: 0.5, display: { xs: 'none', sm: 'inline-flex' } }}
                 />
 
                 <Tooltip title="Log out">

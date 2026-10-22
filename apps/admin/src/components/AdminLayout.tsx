@@ -25,6 +25,8 @@ import {
   People as PeopleIcon,
   Logout as LogoutIcon,
   AdminPanelSettings,
+  HistoryEdu as HistoryEduIcon,
+  Favorite as FavoriteIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -59,6 +61,8 @@ export const AdminLayout: React.FC = () => {
   const navItems = [
     { text: 'Dashboard', path: '/', icon: <DashboardIcon /> },
     { text: 'Member Management', path: '/members', icon: <PeopleIcon /> },
+    { text: 'Matrimonial Moderation', path: '/matrimonial', icon: <FavoriteIcon /> },
+    { text: 'Audit Logs', path: '/audit-logs', icon: <HistoryEduIcon /> },
   ];
 
   const drawerContent = (
@@ -177,7 +181,13 @@ export const AdminLayout: React.FC = () => {
           </IconButton>
 
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            {location.pathname === '/members' ? 'Member Management' : 'Admin Overview'}
+            {location.pathname === '/members'
+              ? 'Member Management'
+              : location.pathname.startsWith('/matrimonial')
+              ? 'Matrimonial Moderation'
+              : location.pathname === '/audit-logs'
+              ? 'System Audit Logs'
+              : 'Admin Overview'}
           </Typography>
 
           {user && (

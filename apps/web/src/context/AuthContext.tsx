@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { AuthUser } from '@apnasamaj/shared-types';
 import { RegisterInput } from '@apnasamaj/validation';
 import { loginApi, registerApi, refreshApi, getMeApi, logoutApi } from '../services/auth.service';
+import { disconnectChatSocket } from '../services/chat.socket';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -27,13 +28,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     async function restoreSession() {
       try {
-        await refreshApi();
+        const refreshResult = await refreshApi();
         if (!isMounted) return;
 
-        const userProfile = await getMeApi();
-        if (!isMounted) return;
-
-        setUser(userProfile);
+        setUser(refreshResult.user);
         setError(null);
       } catch {
         // Unauthenticated or expired session - normal initial state
@@ -82,6 +80,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await logoutApi();
     } finally {
+      disconnectChatSocket();
       setUser(null);
       setError(null);
     }

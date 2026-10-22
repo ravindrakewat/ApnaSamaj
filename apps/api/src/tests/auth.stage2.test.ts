@@ -1,6 +1,8 @@
 import http from 'http';
 import * as argon2 from 'argon2';
+import jwt from 'jsonwebtoken';
 import { prisma, Role, UserStatus } from '@apnasamaj/database';
+import { config } from '../config/env';
 import { createApp } from '../app';
 
 const TEST_PHONE = '+919999900001';
@@ -213,6 +215,131 @@ async function runStage2Tests() {
       'Test 6.2: Error message indicates account is suspended'
     );
 
+    // -------------------------------------------------------------
+    // Test 7: Batch 4A - authenticateToken Middleware Optimization & Safety
+    // -------------------------------------------------------------
+    // Re-activate test user for positive authentication tests
+    await prisma.user.update({
+      where: { id: testUser.id },
+      data: { status: UserStatus.ACTIVE, role: Role.MEMBER },
+    });
+
+    // Obtain a fresh valid access token for testUser
+    const activeLoginRes = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: TEST_PHONE, password: TEST_PASSWORD }),
+    });
+    const activeLoginBody: any = await activeLoginRes.json();
+    const activeAccessToken = activeLoginBody.data?.accessToken;
+    assert(typeof activeAccessToken === 'string', 'Test 7.0: Obtained valid access token');
+
+    // 7.1: Active user GET /api/v1/auth/me succeeds with 200 OK and valid contract
+    const meRes = await fetch(`${baseUrl}/api/v1/auth/me`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${activeAccessToken}` },
+    });
+    const meBody: any = await meRes.json();
+    assert(meRes.status === 200, 'Test 7.1: Active user GET /auth/me returns 200 OK');
+    assert(meBody.success === true, 'Test 7.2: GET /auth/me success is true');
+    assert(meBody.data?.id === testUser.id, 'Test 7.3: GET /auth/me returns correct user ID');
+    assert(meBody.data?.fullName === 'Stage 2 Tester', 'Test 7.4: GET /auth/me preserves full name contract');
+    assert(meBody.data?.role === 'MEMBER', 'Test 7.5: GET /auth/me returns role');
+    assert(meBody.data?.status === 'ACTIVE', 'Test 7.6: GET /auth/me returns active status');
+
+    // 7.2: Suspended user GET /api/v1/auth/me is blocked with 403 Forbidden
+    await prisma.user.update({
+      where: { id: testUser.id },
+      data: { status: UserStatus.SUSPENDED },
+    });
+
+    const suspendedMeRes = await fetch(`${baseUrl}/api/v1/auth/me`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${activeAccessToken}` },
+    });
+    const suspendedMeBody: any = await suspendedMeRes.json();
+    assert(suspendedMeRes.status === 403, 'Test 7.7: Suspended user GET /auth/me returns 403 Forbidden');
+    assert(
+      suspendedMeBody.error?.toLowerCase().includes('suspended'),
+      'Test 7.8: Error message indicates account suspension'
+    );
+
+    // 7.3: Missing Bearer token is rejected with 401
+    const noTokenRes = await fetch(`${baseUrl}/api/v1/auth/me`, { method: 'GET' });
+    assert(noTokenRes.status === 401, 'Test 7.9: Missing Bearer token returns 401 Unauthorized');
+
+    // 7.4: Malformed/Invalid token is rejected with 401
+    const invalidTokenRes = await fetch(`${baseUrl}/api/v1/auth/me`, {
+      method: 'GET',
+      headers: { Authorization: 'Bearer definitely.invalid.token' },
+    });
+    assert(invalidTokenRes.status === 401, 'Test 7.10: Invalid Bearer token returns 401 Unauthorized');
+
+    // 7.5: Expired token is rejected with 401
+    const expiredToken = jwt.sign(
+      { role: 'MEMBER', status: 'ACTIVE', phone: TEST_PHONE },
+      config.jwtAccessSecret,
+      { expiresIn: '-5s', subject: testUser.id }
+    );
+    const expiredTokenRes = await fetch(`${baseUrl}/api/v1/auth/me`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${expiredToken}` },
+    });
+    const expiredTokenBody: any = await expiredTokenRes.json();
+    assert(expiredTokenRes.status === 401, 'Test 7.11: Expired token returns 401 Unauthorized');
+    assert(
+      expiredTokenBody.error?.toLowerCase().includes('expired'),
+      'Test 7.12: Error message indicates token expired'
+    );
+
+    // 7.6: Admin role authorization regression:
+    // Restore ACTIVE status
+    await prisma.user.update({
+      where: { id: testUser.id },
+      data: { status: UserStatus.ACTIVE, role: Role.MEMBER },
+    });
+
+    // Obtain access token with MEMBER role
+    const memberLoginRes = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: TEST_PHONE, password: TEST_PASSWORD }),
+    });
+    const memberLoginBody: any = await memberLoginRes.json();
+    const memberToken = memberLoginBody.data?.accessToken;
+
+    // Member attempting to access admin users endpoint -> 403 Forbidden
+    const memberAdminRes = await fetch(`${baseUrl}/api/v1/admin/users`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${memberToken}` },
+    });
+    const memberAdminBody: any = await memberAdminRes.json();
+    assert(memberAdminRes.status === 403, 'Test 7.13: Regular MEMBER cannot access admin endpoints (403)');
+    assert(
+      memberAdminBody.error?.toLowerCase().includes('insufficient role permissions'),
+      'Test 7.14: Error indicates insufficient role permissions'
+    );
+
+    // Update user to COMMUNITY_ADMIN in database
+    await prisma.user.update({
+      where: { id: testUser.id },
+      data: { role: Role.COMMUNITY_ADMIN },
+    });
+
+    // Obtain access token with COMMUNITY_ADMIN role
+    const adminLoginRes = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: TEST_PHONE, password: TEST_PASSWORD }),
+    });
+    const adminLoginBody: any = await adminLoginRes.json();
+    const adminToken = adminLoginBody.data?.accessToken;
+
+    const adminUsersRes = await fetch(`${baseUrl}/api/v1/admin/users`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert(adminUsersRes.status === 200, 'Test 7.15: COMMUNITY_ADMIN can access admin endpoints (200 OK)');
   } finally {
     // Clean up test data and close server
     await prisma.user.deleteMany({ where: { phone: TEST_PHONE } });

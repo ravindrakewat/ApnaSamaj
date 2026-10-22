@@ -94,8 +94,11 @@ export const MemberManagementPage: React.FC = () => {
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  // Load members data
+  // Load members data with stale-response protection
+  const activeRequestRef = React.useRef(0);
+
   const loadUsers = useCallback(async () => {
+    const requestId = ++activeRequestRef.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -107,13 +110,20 @@ export const MemberManagementPage: React.FC = () => {
         status: selectedStatus || undefined,
       });
 
-      setUsers(data.users);
-      setTotalUsers(data.pagination.totalUsers);
+      // Ignore response if a newer request was dispatched
+      if (requestId === activeRequestRef.current) {
+        setUsers(data.users);
+        setTotalUsers(data.pagination.totalUsers);
+      }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load members.';
-      setError(message);
+      if (requestId === activeRequestRef.current) {
+        const message = err instanceof Error ? err.message : 'Failed to load members.';
+        setError(message);
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === activeRequestRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [page, rowsPerPage, debouncedSearch, selectedRole, selectedStatus]);
 

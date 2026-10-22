@@ -18,6 +18,7 @@ export const createPostSchema = z
       .max(5000, 'Post content must not exceed 5000 characters')
       .default(''),
     type: postTypeEnum.default('GENERAL'),
+    groupId: z.string().uuid('Invalid group ID').optional(),
     media: z
       .array(postMediaItemSchema)
       .max(4, 'A maximum of 4 images can be attached per post')

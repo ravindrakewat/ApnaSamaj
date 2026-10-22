@@ -7,6 +7,9 @@ import { authRouter } from './modules/auth';
 import { adminRouter } from './modules/admin';
 import { usersRouter } from './modules/users';
 import { postsRouter } from './modules/posts';
+import { groupsRouter } from './modules/groups';
+import { notificationsRouter } from './modules/notifications';
+import { matrimonialRouter } from './modules/matrimonial';
 
 export function createApp(): Express {
   const app = express();
@@ -42,6 +45,9 @@ export function createApp(): Express {
   app.use('/api/v1/admin', adminRouter);
   app.use('/api/v1/users', usersRouter);
   app.use('/api/v1/posts', postsRouter);
+  app.use('/api/v1/groups', groupsRouter);
+  app.use('/api/v1/notifications', notificationsRouter);
+  app.use('/api/v1/matrimonial', matrimonialRouter);
   return app;
 }
 

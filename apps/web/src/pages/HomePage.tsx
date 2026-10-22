@@ -123,7 +123,21 @@ export const HomePage: React.FC = () => {
 
       <Grid container spacing={3}>
         <Grid item xs={12} sm={4}>
-          <Card elevation={1} sx={{ borderRadius: 3, height: '100%', p: 1 }}>
+          <Card
+            elevation={1}
+            onClick={() => navigate('/directory')}
+            sx={{
+              borderRadius: 3,
+              height: '100%',
+              p: 1,
+              cursor: 'pointer',
+              transition: 'transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out',
+              '&:hover': {
+                transform: 'translateY(-3px)',
+                boxShadow: 3,
+              },
+            }}
+          >
             <CardContent>
               <Box display="inline-flex" p={1.5} borderRadius={2} bgcolor="primary.light" color="primary.main" mb={2}>
                 <BadgeIcon sx={{ fontSize: 28 }} />
@@ -135,7 +149,7 @@ export const HomePage: React.FC = () => {
                 Connect with verified members of the samaj with lineage, sub-caste, and gotra identity safeguards.
               </Typography>
               <Box mt={2}>
-                <Chip label="Phase 3B Active" size="small" color="success" variant="outlined" />
+                <Chip label="Explore Directory →" size="small" color="primary" variant="filled" clickable />
               </Box>
             </CardContent>
           </Card>
