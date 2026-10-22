@@ -23,6 +23,9 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present"
   },
+  "dependencies": {
+    "tsx": "^4.19.1"
+  },
   "devDependencies": {
     "typescript": "^5.5.4"
   }

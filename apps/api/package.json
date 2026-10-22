@@ -9,8 +9,8 @@
     "build": "npx prisma generate --schema=../../packages/database/prisma/schema.prisma",
     "build:api": "npx prisma generate --schema=../../packages/database/prisma/schema.prisma",
     "db:migrate": "npx prisma migrate deploy --schema=../../packages/database/prisma/schema.prisma",
-    "start": "tsx src/server.ts",
-    "start:api": "tsx src/server.ts"
+    "start": "npx tsx src/server.ts",
+    "start:api": "npx tsx src/server.ts"
   },
   "dependencies": {
     "@apnasamaj/database": "*",
