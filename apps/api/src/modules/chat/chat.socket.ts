@@ -43,21 +43,36 @@ export function getIO(): Server {
 }
 
 export function initChatSocketServer(httpServer: http.Server): Server {
-  const allowedOrigins = [
+  const rawOrigins = [
     config.clientUrl,
     config.adminUrl,
+    process.env.CLIENT_URL,
+    process.env.ADMIN_URL,
+    'https://apna-samaj.vercel.app',
+    'https://apna-samaj-admin.vercel.app',
     'http://localhost:5173',
     'http://localhost:5174',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:5174',
-  ].filter(Boolean);
+  ];
+
+  const allowedOrigins = rawOrigins
+    .flatMap((o) => (o ? o.split(',') : []))
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
 
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, callback) => {
         // Allow requests with no origin (e.g. mobile apps, curl)
         if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        const cleanOrigin = origin.trim().replace(/\/+$/, '');
+        if (
+          allowedOrigins.includes(cleanOrigin) ||
+          cleanOrigin.endsWith('.vercel.app') ||
+          cleanOrigin.includes('localhost') ||
+          cleanOrigin.includes('127.0.0.1')
+        ) {
           return callback(null, true);
         }
         return callback(new Error('Not allowed by CORS'));

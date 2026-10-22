@@ -85,7 +85,7 @@ export function getRefreshCookieOptions(expiresAt: Date): CookieOptions {
   return {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'strict',
+    sameSite: isProduction ? 'none' : 'lax',
     path: '/api/v1/auth',
     expires: expiresAt,
   };
@@ -99,7 +99,7 @@ export function getClearRefreshCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'strict',
+    sameSite: isProduction ? 'none' : 'lax',
     path: '/api/v1/auth',
   };
 }
