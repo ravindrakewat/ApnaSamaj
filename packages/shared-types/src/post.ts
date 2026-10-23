@@ -53,6 +53,8 @@ export interface PostItem {
   media: PostMediaItem[];
   likesCount: number;
   commentsCount: number;
+  viewsCount?: number;
+  uniqueMembersCount?: number;
   isLikedByMe?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -100,6 +102,13 @@ export interface PostLikesResponseData {
   postId: string;
   likesCount: number;
   isLikedByMe: boolean;
+}
+
+export interface PostViewsResponseData {
+  postId: string;
+  totalViews: number;
+  uniqueMembers: number;
+  hasViewed: boolean;
 }
 
 export interface CommentAuthor {

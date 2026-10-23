@@ -282,7 +282,13 @@ export const GroupDetailPage: React.FC = () => {
   };
 
   const handlePostUpdated = (updated: PostItem) => {
-    setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    setPosts((prev) => {
+      const updatedList = prev.map((p) => (p.id === updated.id ? updated : p));
+      return [...updatedList].sort((a, b) => {
+        if (Boolean(a.isPinned) === Boolean(b.isPinned)) return 0;
+        return a.isPinned ? -1 : 1;
+      });
+    });
   };
 
   const handlePostDeleted = (postId: string) => {

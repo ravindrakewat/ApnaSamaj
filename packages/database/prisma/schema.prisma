@@ -152,6 +152,7 @@ model User {
   posts               Post[]               @relation("PostAuthor")
   comments            Comment[]            @relation("CommentAuthor")
   postLikes           PostLike[]
+  postViews           PostView[]
   authoredAuditLogs   AuditLog[]           @relation("AuditActor")
   receivedNotifications  Notification[]    @relation("NotificationRecipient")
   triggeredNotifications Notification[]    @relation("NotificationActor")
@@ -270,6 +271,7 @@ model Post {
   media    PostMedia[]
   comments Comment[]
   likes    PostLike[]
+  views    PostView[]
 
   @@index([authorId])
   @@index([groupId])
@@ -313,6 +315,19 @@ model PostLike {
 
   @@unique([postId, userId]) // Prevents duplicate likes from the same user
   @@index([userId])
+}
+
+model PostView {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId]) // Enforces deduplication: each member views a post at most once
+  @@index([userId])
+  @@index([postId])
 }
 
 // --------------------------------------------------------

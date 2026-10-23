@@ -478,7 +478,7 @@ export async function getGroupPosts(
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
       select: {
         id: true,
         authorId: true,

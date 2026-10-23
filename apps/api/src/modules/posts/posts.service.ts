@@ -6,6 +6,7 @@ import {
   PostType,
   PostMediaItem,
   PostLikesResponseData,
+  PostViewsResponseData,
   CommentItem,
   CommentsResponseData,
 } from '@apnasamaj/shared-types';
@@ -41,6 +42,11 @@ interface PostWithAuthorAndMedia {
   id: string;
   authorId: string;
   groupId: string | null;
+  group?: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
   type: DbPostType;
   content: string;
   isPinned: boolean;
@@ -88,6 +94,13 @@ function mapToPostItem(
     id: post.id,
     authorId: post.authorId,
     groupId: post.groupId,
+    group: post.group
+      ? {
+          id: post.group.id,
+          name: post.group.name,
+          slug: post.group.slug,
+        }
+      : null,
     type: post.type as unknown as PostType,
     content: post.content,
     isPinned: post.isPinned,
@@ -102,6 +115,8 @@ function mapToPostItem(
     })),
     likesCount: post._count?.likes ?? 0,
     commentsCount: post._count?.comments ?? 0,
+    viewsCount: (post._count as any)?.views ?? 0,
+    uniqueMembersCount: (post._count as any)?.views ?? 0,
     isLikedByMe: isLiked,
     createdAt: post.createdAt.toISOString(),
     updatedAt: post.updatedAt.toISOString(),
@@ -180,6 +195,13 @@ const postIncludeAuthorAndMedia = {
       },
     },
   },
+  group: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  },
 } as const;
 
 /**
@@ -237,15 +259,83 @@ export async function verifyActivePost(
   return { id: post.id, authorId: post.authorId, groupId: post.groupId };
 }
 
+const ANNOUNCEMENT_ALLOWED_ROLES = [
+  UserRole.SUPER_ADMIN,
+  UserRole.COMMUNITY_ADMIN,
+  UserRole.MODERATOR,
+];
+
+export function canPublishAnnouncement(role?: UserRole): boolean {
+  if (!role) return false;
+  return ANNOUNCEMENT_ALLOWED_ROLES.includes(role);
+}
+
+export const PIN_ALLOWED_ROLES = [
+  UserRole.SUPER_ADMIN,
+  UserRole.COMMUNITY_ADMIN,
+  UserRole.MODERATOR,
+];
+
+export function canPinPost(role?: UserRole): boolean {
+  if (!role) return false;
+  return PIN_ALLOWED_ROLES.includes(role);
+}
+
 /**
  * Creates a new post in the community, with optional media attachments.
  * If database persistence fails, cleans up any newly uploaded Supabase Storage objects.
  */
-export async function createPost(authorId: string, input: CreatePostInput): Promise<PostItem> {
+export async function createPost(
+  authorId: string,
+  authorRoleOrInput: UserRole | CreatePostInput,
+  maybeInput?: CreatePostInput
+): Promise<PostItem> {
+  const authorRole: UserRole =
+    typeof authorRoleOrInput === 'string' ? authorRoleOrInput : UserRole.MEMBER;
+  const input: CreatePostInput =
+    typeof authorRoleOrInput === 'string' ? maybeInput! : authorRoleOrInput;
+
+  // Only SUPER_ADMIN, COMMUNITY_ADMIN, and MODERATOR can publish ANNOUNCEMENT posts
+  if (input.type === PostType.ANNOUNCEMENT && !canPublishAnnouncement(authorRole)) {
+    throw new ForbiddenPostActionError(
+      'Only community administrators and moderators can publish announcements.'
+    );
+  }
+
   const mediaInputs = input.media || [];
 
   if (mediaInputs.length > 4) {
     throw new PostServiceError('A maximum of 4 images can be attached per post.', 400);
+  }
+
+  // Validate group if groupId is provided
+  let targetGroupId: string | null = null;
+  if (input.groupId) {
+    const group = await prisma.group.findUnique({
+      where: { id: input.groupId },
+      select: {
+        id: true,
+        privacy: true,
+        members: {
+          where: { userId: authorId },
+          select: { id: true, role: true },
+        },
+      },
+    });
+
+    if (!group) {
+      throw new PostServiceError('Target group not found.', 404);
+    }
+
+    const isMember = group.members.length > 0;
+    if (!isMember) {
+      if (group.privacy === 'PRIVATE') {
+        throw new ForbiddenPostActionError('You must be a member of this private group to publish posts.');
+      }
+      throw new ForbiddenPostActionError('You must be a member of this group to publish posts.');
+    }
+
+    targetGroupId = group.id;
   }
 
   try {
@@ -253,6 +343,7 @@ export async function createPost(authorId: string, input: CreatePostInput): Prom
       const newPost = await tx.post.create({
         data: {
           authorId,
+          groupId: targetGroupId,
           content: input.content || '',
           type: (input.type as unknown as DbPostType) || DbPostType.GENERAL,
         },
@@ -364,7 +455,7 @@ export async function getCommunityFeed(
       where,
       skip: 0,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
       include: postInclude,
     });
 
@@ -384,7 +475,7 @@ export async function getCommunityFeed(
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
         include: postInclude,
       }),
     ]);
@@ -444,7 +535,7 @@ export async function getPostById(postId: string, currentUserId?: string): Promi
 export async function updatePost(
   postId: string,
   userId: string,
-  _userRole: UserRole,
+  userRole: UserRole,
   input: UpdatePostInput
 ): Promise<PostItem> {
   const activePost = await verifyActivePost(postId, userId);
@@ -454,6 +545,13 @@ export async function updatePost(
     throw new ForbiddenPostActionError('You can only edit your own posts.');
   }
 
+  // Only SUPER_ADMIN, COMMUNITY_ADMIN, and MODERATOR can set type to ANNOUNCEMENT
+  if (input.type === PostType.ANNOUNCEMENT && !canPublishAnnouncement(userRole)) {
+    throw new ForbiddenPostActionError(
+      'Only community administrators and moderators can set post type to announcement.'
+    );
+  }
+
   const post = await prisma.post.findUnique({
     where: { id: postId },
     include: { media: true },
@@ -461,6 +559,11 @@ export async function updatePost(
 
   if (!post) {
     throw new PostNotFoundError();
+  }
+
+  // Prevent moving content across group boundaries or detaching from a group
+  if ((input as any).groupId !== undefined && (input as any).groupId !== post.groupId) {
+    throw new PostServiceError('Moving posts across group boundaries is not permitted.', 400);
   }
 
   if (input.media && input.media.length > 4) {
@@ -622,6 +725,84 @@ export async function deletePost(
   }
 }
 
+/**
+ * Pins a post to the top of feeds.
+ * Only SUPER_ADMIN, COMMUNITY_ADMIN, and MODERATOR may pin posts.
+ * Idempotent: pinning an already pinned post is safe and does not corrupt state.
+ */
+export async function pinPost(
+  postId: string,
+  userId: string,
+  userRole: UserRole
+): Promise<PostItem> {
+  if (!canPinPost(userRole)) {
+    throw new ForbiddenPostActionError(
+      'Only community administrators and moderators can pin posts.'
+    );
+  }
+
+  await verifyActivePost(postId, userId);
+
+  const updated = await prisma.post.update({
+    where: { id: postId },
+    data: { isPinned: true },
+    include: {
+      ...postIncludeAuthorAndMedia,
+      _count: {
+        select: {
+          likes: true,
+          comments: true,
+        },
+      },
+      likes: {
+        where: { userId },
+        select: { id: true },
+      },
+    },
+  });
+
+  return mapToPostItem(updated as unknown as PostWithAuthorAndMedia, userId);
+}
+
+/**
+ * Unpins a post.
+ * Only SUPER_ADMIN, COMMUNITY_ADMIN, and MODERATOR may unpin posts.
+ * Idempotent: unpinning an already unpinned post is safe and does not corrupt state.
+ */
+export async function unpinPost(
+  postId: string,
+  userId: string,
+  userRole: UserRole
+): Promise<PostItem> {
+  if (!canPinPost(userRole)) {
+    throw new ForbiddenPostActionError(
+      'Only community administrators and moderators can unpin posts.'
+    );
+  }
+
+  await verifyActivePost(postId, userId);
+
+  const updated = await prisma.post.update({
+    where: { id: postId },
+    data: { isPinned: false },
+    include: {
+      ...postIncludeAuthorAndMedia,
+      _count: {
+        select: {
+          likes: true,
+          comments: true,
+        },
+      },
+      likes: {
+        where: { userId },
+        select: { id: true },
+      },
+    },
+  });
+
+  return mapToPostItem(updated as unknown as PostWithAuthorAndMedia, userId);
+}
+
 // --------------------------------------------------------
 // LIKES SERVICE LOGIC
 // --------------------------------------------------------
@@ -729,6 +910,95 @@ export async function getPostLikes(
     likesCount,
     isLikedByMe: Boolean(userLike),
   };
+}
+
+// --------------------------------------------------------
+// VIEWS SERVICE LOGIC
+// --------------------------------------------------------
+
+/**
+ * Records a post view for the authenticated member.
+ * Atomic and idempotent via database unique constraint @@unique([postId, userId]).
+ * Repeated view attempts by the same member return the current counts without duplicate records.
+ * Never stores or returns viewer identities/names.
+ */
+export async function recordPostView(
+  postId: string,
+  userId: string
+): Promise<PostViewsResponseData> {
+  await verifyActivePost(postId, userId);
+
+  try {
+    await prisma.postView.upsert({
+      where: {
+        postId_userId: { postId, userId },
+      },
+      create: {
+        postId,
+        userId,
+      },
+      update: {}, // No-op if already viewed
+    });
+
+    const count = await prisma.postView.count({
+      where: { postId },
+    });
+
+    return {
+      postId,
+      totalViews: count,
+      uniqueMembers: count,
+      hasViewed: true,
+    };
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === 'P2021') {
+      return {
+        postId,
+        totalViews: 0,
+        uniqueMembers: 0,
+        hasViewed: true,
+      };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Retrieves aggregate view analytics for a post.
+ * Returns only totalViews and uniqueMembers; never viewer identities.
+ */
+export async function getPostViews(
+  postId: string,
+  userId: string
+): Promise<PostViewsResponseData> {
+  await verifyActivePost(postId, userId);
+
+  try {
+    const [count, userView] = await Promise.all([
+      prisma.postView.count({ where: { postId } }),
+      prisma.postView.findUnique({
+        where: { postId_userId: { postId, userId } },
+        select: { id: true },
+      }),
+    ]);
+
+    return {
+      postId,
+      totalViews: count,
+      uniqueMembers: count,
+      hasViewed: Boolean(userView),
+    };
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === 'P2021') {
+      return {
+        postId,
+        totalViews: 0,
+        uniqueMembers: 0,
+        hasViewed: false,
+      };
+    }
+    throw err;
+  }
 }
 
 // --------------------------------------------------------

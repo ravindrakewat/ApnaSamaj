@@ -6,6 +6,7 @@ import {
   UploadMediaResponseData,
   PostType,
   PostLikesResponseData,
+  PostViewsResponseData,
   CommentItem,
   CreateCommentRequest,
   UpdateCommentRequest,
@@ -100,6 +101,30 @@ export async function deletePostApi(id: string): Promise<void> {
   }
 }
 
+export async function pinPostApi(id: string): Promise<PostItem> {
+  const response = await apiFetch<PostItem>(`/api/v1/posts/${id}/pin`, {
+    method: 'POST',
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to pin post.');
+  }
+
+  return response.data;
+}
+
+export async function unpinPostApi(id: string): Promise<PostItem> {
+  const response = await apiFetch<PostItem>(`/api/v1/posts/${id}/pin`, {
+    method: 'DELETE',
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to unpin post.');
+  }
+
+  return response.data;
+}
+
 // --------------------------------------------------------
 // LIKES API METHODS
 // --------------------------------------------------------
@@ -135,6 +160,34 @@ export async function getPostLikesApi(postId: string): Promise<PostLikesResponse
 
   if (!response.success || !response.data) {
     throw new Error(response.error || 'Failed to get post likes.');
+  }
+
+  return response.data;
+}
+
+// --------------------------------------------------------
+// VIEWS API METHODS
+// --------------------------------------------------------
+
+export async function recordPostViewApi(postId: string): Promise<PostViewsResponseData> {
+  const response = await apiFetch<PostViewsResponseData>(`/api/v1/posts/${postId}/view`, {
+    method: 'POST',
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to record post view.');
+  }
+
+  return response.data;
+}
+
+export async function getPostViewsApi(postId: string): Promise<PostViewsResponseData> {
+  const response = await apiFetch<PostViewsResponseData>(`/api/v1/posts/${postId}/views`, {
+    method: 'GET',
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to get post views.');
   }
 
   return response.data;

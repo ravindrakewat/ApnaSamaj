@@ -42,18 +42,27 @@ import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import SendIcon from '@mui/icons-material/Send';
-import {
+import PushPinIcon from '@mui/icons-material/PushPin';
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import type {
   PostItem,
   PostMediaType,
-  PostType,
-  UserRole,
   PostMediaItem,
   CommentItem,
+} from '@apnasamaj/shared-types';
+import {
+  PostType,
+  UserRole,
 } from '@apnasamaj/shared-types';
 import { updatePostSchema, createCommentSchema } from '@apnasamaj/validation';
 import {
   updatePostApi,
   deletePostApi,
+  pinPostApi,
+  unpinPostApi,
+  recordPostViewApi,
+  getPostViewsApi,
   uploadPostMediaApi,
   likePostApi,
   unlikePostApi,
@@ -70,6 +79,20 @@ interface PostCardProps {
   onPostUpdated: (post: PostItem) => void;
   onPostDeleted: (postId: string) => void;
 }
+
+import {
+  viewedPostsSession,
+  inFlightViewRequests,
+  isCardSubstantiallyVisible,
+  triggerPostViewRecord,
+} from '../utils/post-view-tracking';
+
+export {
+  viewedPostsSession,
+  inFlightViewRequests,
+  isCardSubstantiallyVisible,
+  triggerPostViewRecord,
+};
 
 export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPostUpdated, onPostDeleted }) => {
   const { user } = useAuth();
@@ -127,12 +150,61 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
   const [isDeletingComment, setIsDeletingComment] = useState(false);
   const [deleteCommentError, setDeleteCommentError] = useState<string | null>(null);
 
-  // Keep likes and comments count in sync if post prop updates
+  // Views analytics state
+  const [viewsCount, setViewsCount] = useState<number>(post.viewsCount || 0);
+  const [uniqueMembersCount, setUniqueMembersCount] = useState<number>(post.uniqueMembersCount || 0);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+
+  const triggerViewRecord = React.useCallback(async () => {
+    const result = await triggerPostViewRecord(post.id, user?.id, (id) => recordPostViewApi(id));
+    if (result.success && result.data) {
+      setViewsCount(result.data.totalViews);
+      setUniqueMembersCount(result.data.uniqueMembers);
+    }
+  }, [post.id, user?.id]);
+
+  // Keep likes, comments, and views count in sync if post prop updates
   useEffect(() => {
     setIsLiked(Boolean(post.isLikedByMe));
     setLikesCount(post.likesCount || 0);
     setCommentsCount(post.commentsCount || 0);
-  }, [post.isLikedByMe, post.likesCount, post.commentsCount]);
+    if (post.viewsCount !== undefined) setViewsCount(post.viewsCount);
+    if (post.uniqueMembersCount !== undefined) setUniqueMembersCount(post.uniqueMembersCount);
+  }, [post.isLikedByMe, post.likesCount, post.commentsCount, post.viewsCount, post.uniqueMembersCount]);
+
+  // View tracking: trigger view when card is genuinely in viewport for >= 1.2s
+  useEffect(() => {
+    if (!user?.id || viewedPostsSession.has(post.id)) return;
+
+    let timer: NodeJS.Timeout | null = null;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (isCardSubstantiallyVisible(entry)) {
+          if (!timer) {
+            timer = setTimeout(() => {
+              triggerViewRecord();
+            }, 1200);
+          }
+        } else {
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+        }
+      },
+      { threshold: [0, 0.2, 0.5] }
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [post.id, user?.id, triggerViewRecord]);
 
   const isOwner = user?.id === post.authorId;
   const isModerator =
@@ -142,6 +214,27 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
 
   const canEdit = isOwner;
   const canDelete = isOwner || isModerator;
+  const canPin = isModerator;
+
+  // Pin / Unpin state
+  const [isPinning, setIsPinning] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+
+  const handleTogglePin = async () => {
+    setIsPinning(true);
+    setPinError(null);
+    handleMenuClose();
+    try {
+      const updated = post.isPinned
+        ? await unpinPostApi(post.id)
+        : await pinPostApi(post.id);
+      onPostUpdated(updated);
+    } catch (err: unknown) {
+      setPinError(err instanceof Error ? err.message : 'Failed to update post pin status.');
+    } finally {
+      setIsPinning(false);
+    }
+  };
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -154,6 +247,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
   // Likes Handler
   const handleToggleLike = async () => {
     if (isLikePending) return;
+    triggerViewRecord();
 
     // Optimistic UI update
     const nextIsLiked = !isLiked;
@@ -184,6 +278,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
 
   // Comments Toggle & Fetch
   const handleToggleComments = () => {
+    triggerViewRecord();
     const nextExpanded = !isCommentsExpanded;
     setIsCommentsExpanded(nextExpanded);
 
@@ -334,7 +429,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
         newItems.push({
           id: uploaded.storagePath,
           url: uploaded.url,
-          mediaType: PostMediaType.IMAGE,
+          mediaType: 'IMAGE',
           order: editMedia.length + newItems.length,
           thumbnail: uploaded.url,
         });
@@ -616,7 +711,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
 
   return (
     <>
-      <Card elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
+      <Card ref={cardRef} elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
         <CardHeader
           avatar={
             <Avatar
@@ -635,7 +730,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
             </Avatar>
           }
           action={
-            (canEdit || canDelete) && (
+            (canEdit || canDelete || canPin) && (
               <>
                 <IconButton aria-label="settings" onClick={handleMenuOpen} size="small">
                   <MoreVertIcon />
@@ -647,6 +742,18 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
                   anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                   transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                 >
+                  {canPin && (
+                    <MenuItem onClick={handleTogglePin} disabled={isPinning}>
+                      <ListItemIcon>
+                        {post.isPinned ? (
+                          <PushPinOutlinedIcon fontSize="small" color="primary" />
+                        ) : (
+                          <PushPinIcon fontSize="small" color="primary" />
+                        )}
+                      </ListItemIcon>
+                      <ListItemText>{post.isPinned ? 'Unpin Post' : 'Pin Post'}</ListItemText>
+                    </MenuItem>
+                  )}
                   {canEdit && (
                     <MenuItem onClick={handleOpenEdit}>
                       <ListItemIcon>
@@ -711,8 +818,23 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
           }
         />
 
+        {pinError && (
+          <Alert severity="error" onClose={() => setPinError(null)} sx={{ mx: 2, mb: 1 }}>
+            {pinError}
+          </Alert>
+        )}
+
         <CardContent sx={{ pt: 0, pb: 1.5 }}>
-          <Box mb={1.5}>
+          <Box mb={1.5} display="flex" alignItems="center" gap={1} flexWrap="wrap">
+            {post.isPinned && (
+              <Chip
+                label="Pinned"
+                size="small"
+                color="secondary"
+                icon={<PushPinIcon fontSize="small" />}
+                sx={{ fontWeight: 'bold' }}
+              />
+            )}
             <Chip
               label={typeDetails.label}
               size="small"
@@ -778,9 +900,34 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
             </Button>
           </Box>
 
-          {!isOwner && isModerator && (
-            <Chip label="Admin Control Enabled" size="small" variant="outlined" color="secondary" />
-          )}
+          <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+            {/* View Analytics Indicator */}
+            <Tooltip title="Verified views and unique member reach">
+              <Box
+                display="flex"
+                alignItems="center"
+                gap={0.5}
+                sx={{
+                  color: 'text.secondary',
+                  cursor: 'default',
+                  userSelect: 'none',
+                  px: 0.75,
+                  py: 0.25,
+                  borderRadius: 1,
+                  '&:hover': { bgcolor: 'action.hover' },
+                }}
+              >
+                <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
+                <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
+                  {viewsCount} {viewsCount === 1 ? 'View' : 'Views'} · {uniqueMembersCount} {uniqueMembersCount === 1 ? 'Member' : 'Members'}
+                </Typography>
+              </Box>
+            </Tooltip>
+
+            {!isOwner && isModerator && (
+              <Chip label="Admin Control Enabled" size="small" variant="outlined" color="secondary" />
+            )}
+          </Box>
         </CardActions>
 
         {/* Expandable Comments Section */}

@@ -5,6 +5,7 @@ import {
   FeedResponseData,
   UploadMediaResponseData,
   PostLikesResponseData,
+  PostViewsResponseData,
   CommentItem,
   CommentsResponseData,
   UserRole,
@@ -26,9 +27,13 @@ import {
   getPostById,
   updatePost,
   deletePost,
+  pinPost,
+  unpinPost,
   likePost,
   unlikePost,
   getPostLikes,
+  recordPostView,
+  getPostViews,
   getPostComments,
   createComment,
   updateComment,
@@ -40,7 +45,8 @@ import { uploadPostMedia, StorageError } from '../../services/storage.service';
 export async function createPostHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const userId = req.user?.id;
-    if (!userId) {
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
       const response: ApiResponse = {
         success: false,
         error: 'Authentication required.',
@@ -62,7 +68,7 @@ export async function createPostHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const post = await createPost(userId, parsed.data);
+    const post = await createPost(userId, userRole, parsed.data);
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -310,6 +316,118 @@ export async function deletePostHandler(req: AuthenticatedRequest, res: Response
   }
 }
 
+export async function pinPostHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParam = idParamSchema.safeParse(req.params);
+    if (!parsedParam.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Invalid post ID parameter.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const updated = await pinPost(parsedParam.data.id, userId, userRole);
+
+    const response: ApiResponse<PostItem> = {
+      success: true,
+      message: 'Post pinned successfully.',
+      data: updated,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof PostServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Posts Controller] Pin post error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to pin post.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
+export async function unpinPostHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParam = idParamSchema.safeParse(req.params);
+    if (!parsedParam.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Invalid post ID parameter.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const updated = await unpinPost(parsedParam.data.id, userId, userRole);
+
+    const response: ApiResponse<PostItem> = {
+      success: true,
+      message: 'Post unpinned successfully.',
+      data: updated,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof PostServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Posts Controller] Unpin post error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to unpin post.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
 // --------------------------------------------------------
 // LIKES CONTROLLERS
 // --------------------------------------------------------
@@ -461,6 +579,119 @@ export async function getPostLikesHandler(req: AuthenticatedRequest, res: Respon
     const response: ApiResponse = {
       success: false,
       error: 'Failed to retrieve post likes.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
+// --------------------------------------------------------
+// VIEWS CONTROLLERS
+// --------------------------------------------------------
+
+export async function recordPostViewHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParam = idParamSchema.safeParse(req.params);
+    if (!parsedParam.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Invalid post ID parameter.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const result = await recordPostView(parsedParam.data.id, userId);
+
+    const response: ApiResponse<PostViewsResponseData> = {
+      success: true,
+      message: 'Post view recorded successfully.',
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof PostServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Posts Controller] Record post view error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to record post view.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
+export async function getPostViewsHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParam = idParamSchema.safeParse(req.params);
+    if (!parsedParam.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Invalid post ID parameter.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const result = await getPostViews(parsedParam.data.id, userId);
+
+    const response: ApiResponse<PostViewsResponseData> = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof PostServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Posts Controller] Get post views error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to retrieve post views.',
       timestamp: new Date().toISOString(),
     };
     res.status(500).json(response);

@@ -76,9 +76,13 @@ export const FeedPage: React.FC = () => {
   };
 
   const handlePostUpdated = (updatedPost: PostItem) => {
-    setPosts((prev) =>
-      prev.map((item) => (item.id === updatedPost.id ? updatedPost : item))
-    );
+    setPosts((prev) => {
+      const updatedList = prev.map((item) => (item.id === updatedPost.id ? updatedPost : item));
+      return [...updatedList].sort((a, b) => {
+        if (Boolean(a.isPinned) === Boolean(b.isPinned)) return 0;
+        return a.isPinned ? -1 : 1;
+      });
+    });
   };
 
   const handlePostDeleted = (deletedPostId: string) => {
