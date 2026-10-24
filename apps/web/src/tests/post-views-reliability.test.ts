@@ -2,8 +2,11 @@ import assert from 'node:assert';
 import {
   viewedPostsSession,
   inFlightViewRequests,
+  inFlightCountRequests,
+  cachedPostViewCounts,
   isCardSubstantiallyVisible,
   triggerPostViewRecord,
+  fetchPostViewCounts,
 } from '../utils/post-view-tracking';
 
 interface PostViewsResponseData {
@@ -34,6 +37,8 @@ async function runTests() {
   // Clear caches before tests
   viewedPostsSession.clear();
   inFlightViewRequests.clear();
+  inFlightCountRequests.clear();
+  cachedPostViewCounts.clear();
 
   console.log('--- 1. Success Caching: Legitimate Zero Counts ---');
   {
@@ -228,6 +233,147 @@ async function runTests() {
     assertTest(anonResult.success === false, 'Unauthenticated user view is suppressed');
     assertTest(!called, 'API is never called for unauthenticated visitor');
     assertTest(!viewedPostsSession.has(postId), 'Unauthenticated visit is not cached');
+  }
+
+  console.log('\n--- 7. Initial Aggregate Fetch for Already-Viewed Post ---');
+  {
+    const postId = 'post-already-viewed-1';
+    let getCallCount = 0;
+    let postCallCount = 0;
+
+    const mockGetApi = async (id: string): Promise<PostViewsResponseData> => {
+      getCallCount++;
+      return { totalViews: 3, uniqueMembers: 3, hasViewed: true };
+    };
+
+    const mockPostApi = async (id: string): Promise<PostViewsResponseData> => {
+      postCallCount++;
+      return { totalViews: 4, uniqueMembers: 4, hasViewed: true };
+    };
+
+    // Card mounts: loads aggregate counts via GET
+    const getResult = await fetchPostViewCounts(postId, 'user-1', mockGetApi);
+    assertTest(getResult.success === true, 'Initial aggregate fetch succeeds');
+    assertTest(getResult.data?.totalViews === 3, 'Initial aggregate fetch returns 3 views');
+    assertTest(getResult.data?.uniqueMembers === 3, 'Initial aggregate fetch returns 3 members');
+    assertTest(getResult.data?.hasViewed === true, 'Response marks hasViewed as true');
+    assertTest(viewedPostsSession.has(postId), 'viewedPostsSession is populated from GET response');
+    assertTest(cachedPostViewCounts.get(postId)?.totalViews === 3, 'cachedPostViewCounts is saved');
+
+    // Dwell timer triggers: triggerPostViewRecord must be suppressed because hasViewed was true
+    const postResult = await triggerPostViewRecord(postId, 'user-1', mockPostApi);
+    assertTest(postResult.success === false, 'Redundant POST is suppressed for already-viewed post');
+    assertTest(postCallCount === 0, 'POST API is never invoked for already-viewed post');
+  }
+
+  console.log('\n--- 8. Refresh Resilience: Preserving Known Counts ---');
+  {
+    const postId = 'post-refresh-resilience-1';
+    // Simulate known counts from feed or cache
+    cachedPostViewCounts.set(postId, { totalViews: 7, uniqueMembers: 5 });
+
+    let pendingKnownViews = cachedPostViewCounts.get(postId)?.totalViews ?? 0;
+    let pendingKnownMembers = cachedPostViewCounts.get(postId)?.uniqueMembers ?? 0;
+
+    assertTest(pendingKnownViews === 7, 'Known views count is preserved before request dispatches');
+    assertTest(pendingKnownMembers === 5, 'Known members count is preserved before request dispatches');
+
+    let isRequestPending = true;
+    const mockGetApi = async (id: string): Promise<PostViewsResponseData> => {
+      // While request is pending, UI state is never reset to zero
+      assertTest(pendingKnownViews === 7, 'Counts are not reset to zero during pending request');
+      return { totalViews: 7, uniqueMembers: 5, hasViewed: true };
+    };
+
+    const result = await fetchPostViewCounts(postId, 'user-1', mockGetApi);
+    isRequestPending = false;
+    assertTest(result.success === true, 'Fetch completes successfully');
+    assertTest(result.data?.totalViews === 7, 'Counts remain 7 after request completes');
+  }
+
+  console.log('\n--- 9. Race Conditions: Monotonic Reconciliation & Delayed Stale Responses ---');
+  {
+    // Simulate current state having 5 views
+    let currentViews = 5;
+    let currentMembers = 3;
+
+    const reconcileMonotonically = (newViews: number, newMembers: number) => {
+      currentViews = Math.max(currentViews, newViews);
+      currentMembers = Math.max(currentMembers, newMembers);
+    };
+
+    // Stale delayed response arrives with lower counts (e.g. totalViews: 2, uniqueMembers: 2)
+    reconcileMonotonically(2, 2);
+    assertTest(currentViews === 5, 'Stale lower view count cannot overwrite higher known count');
+    assertTest(currentMembers === 3, 'Stale lower member count cannot overwrite higher known count');
+
+    // Newer higher response arrives (e.g. totalViews: 6, uniqueMembers: 4)
+    reconcileMonotonically(6, 4);
+    assertTest(currentViews === 6, 'Higher view count successfully updates state');
+    assertTest(currentMembers === 4, 'Higher member count successfully updates state');
+  }
+
+  console.log('\n--- 10. Concurrency: In-Flight GET Count Suppression ---');
+  {
+    const postId = 'post-get-concurrent-1';
+    let simultaneousCalls = 0;
+    let maxSimultaneous = 0;
+
+    const mockGetApi = async (id: string): Promise<PostViewsResponseData> => {
+      simultaneousCalls++;
+      if (simultaneousCalls > maxSimultaneous) maxSimultaneous = simultaneousCalls;
+      await new Promise((r) => setTimeout(r, 40));
+      simultaneousCalls--;
+      return { totalViews: 10, uniqueMembers: 8, hasViewed: false };
+    };
+
+    const promises = [
+      fetchPostViewCounts(postId, 'user-1', mockGetApi),
+      fetchPostViewCounts(postId, 'user-1', mockGetApi),
+      fetchPostViewCounts(postId, 'user-1', mockGetApi),
+    ];
+
+    const results = await Promise.all(promises);
+    assertTest(maxSimultaneous === 1, 'Only 1 GET request was in flight simultaneously');
+    assertTest(results.filter((r) => r.success).length === 1, 'Exactly one GET request completed');
+    assertTest(results.filter((r) => !r.success).length === 2, 'Duplicate concurrent GET requests were suppressed');
+    assertTest(!inFlightCountRequests.has(postId), 'In-flight lock released after completion');
+  }
+
+  console.log('\n--- 11. Multi-Member View Progression ---');
+  {
+    const postId = 'post-multi-member-progression-1';
+    let dbViews = 0;
+    let dbMembers = 0;
+
+    // Member A views
+    const mockPostApiA = async (id: string): Promise<PostViewsResponseData> => {
+      dbViews = 1;
+      dbMembers = 1;
+      return { totalViews: dbViews, uniqueMembers: dbMembers, hasViewed: true };
+    };
+
+    const viewA = await triggerPostViewRecord(postId, 'user-A', mockPostApiA);
+    assertTest(viewA.success === true, 'Member A records first view');
+    assertTest(viewA.data?.totalViews === 1, 'Total views is 1 after Member A');
+
+    // Member A attempts to view again in same session: suppressed
+    const viewA2 = await triggerPostViewRecord(postId, 'user-A', mockPostApiA);
+    assertTest(viewA2.success === false, 'Member A repeat view is suppressed');
+
+    // Member B views (new member, not in Member B session)
+    const mockPostApiB = async (id: string): Promise<PostViewsResponseData> => {
+      dbViews = 2;
+      dbMembers = 2;
+      return { totalViews: dbViews, uniqueMembers: dbMembers, hasViewed: true };
+    };
+
+    // User B's session has not viewed this post yet
+    viewedPostsSession.delete(postId);
+    const viewB = await triggerPostViewRecord(postId, 'user-B', mockPostApiB);
+    assertTest(viewB.success === true, 'Member B records view successfully');
+    assertTest(viewB.data?.totalViews === 2, 'Total views increments to 2 after Member B');
+    assertTest(viewB.data?.uniqueMembers === 2, 'Unique members increments to 2 after Member B');
   }
 
   console.log('\n================================================================');

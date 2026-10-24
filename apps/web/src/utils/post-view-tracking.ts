@@ -10,6 +10,12 @@ export const viewedPostsSession = new Set<string>();
 // In-flight locking: tracks active API dispatches to suppress simultaneous duplicate requests
 export const inFlightViewRequests = new Set<string>();
 
+// In-flight count locking: tracks active GET dispatches to suppress simultaneous duplicate count requests
+export const inFlightCountRequests = new Set<string>();
+
+// In-memory cache for aggregate post view counts (persists across re-renders in the session)
+export const cachedPostViewCounts = new Map<string, { totalViews: number; uniqueMembers: number }>();
+
 /**
  * Evaluates whether a post card has attained genuine, meaningful visibility.
  * - Standard/compact cards: passes when intersectionRatio >= 0.5 (50% or more visible).
@@ -76,6 +82,10 @@ export async function triggerPostViewRecord<T extends { totalViews: number; uniq
       typeof res.uniqueMembers === 'number'
     ) {
       viewedPostsSession.add(postId);
+      cachedPostViewCounts.set(postId, {
+        totalViews: res.totalViews,
+        uniqueMembers: res.uniqueMembers,
+      });
       return { success: true, data: res };
     }
 
@@ -87,5 +97,54 @@ export async function triggerPostViewRecord<T extends { totalViews: number; uniq
   } finally {
     // Release in-flight lock
     inFlightViewRequests.delete(postId);
+  }
+}
+
+/**
+ * Loads aggregate view counts for a post via GET without recording a view.
+ * - Suppresses simultaneous in-flight duplicate requests for the same post.
+ * - If the server indicates the current user has already viewed the post (hasViewed: true),
+ *   caches the post in viewedPostsSession so future view recordings in this session are skipped.
+ * - Updates cachedPostViewCounts.
+ */
+export async function fetchPostViewCounts<
+  T extends { totalViews: number; uniqueMembers: number; hasViewed?: boolean }
+>(
+  postId: string,
+  userId: string | undefined,
+  getApiCall: (postId: string) => Promise<T | null | undefined>
+): Promise<{ success: boolean; data?: T }> {
+  if (!userId) {
+    return { success: false };
+  }
+
+  if (inFlightCountRequests.has(postId)) {
+    return { success: false };
+  }
+
+  inFlightCountRequests.add(postId);
+  try {
+    const res = await getApiCall(postId);
+
+    if (
+      res &&
+      typeof res.totalViews === 'number' &&
+      typeof res.uniqueMembers === 'number'
+    ) {
+      if (res.hasViewed) {
+        viewedPostsSession.add(postId);
+      }
+      cachedPostViewCounts.set(postId, {
+        totalViews: res.totalViews,
+        uniqueMembers: res.uniqueMembers,
+      });
+      return { success: true, data: res };
+    }
+
+    return { success: false };
+  } catch (err) {
+    return { success: false };
+  } finally {
+    inFlightCountRequests.delete(postId);
   }
 }

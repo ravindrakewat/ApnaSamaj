@@ -83,15 +83,21 @@ interface PostCardProps {
 import {
   viewedPostsSession,
   inFlightViewRequests,
+  inFlightCountRequests,
+  cachedPostViewCounts,
   isCardSubstantiallyVisible,
   triggerPostViewRecord,
+  fetchPostViewCounts,
 } from '../utils/post-view-tracking';
 
 export {
   viewedPostsSession,
   inFlightViewRequests,
+  inFlightCountRequests,
+  cachedPostViewCounts,
   isCardSubstantiallyVisible,
   triggerPostViewRecord,
+  fetchPostViewCounts,
 };
 
 export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPostUpdated, onPostDeleted }) => {
@@ -150,27 +156,52 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
   const [isDeletingComment, setIsDeletingComment] = useState(false);
   const [deleteCommentError, setDeleteCommentError] = useState<string | null>(null);
 
-  // Views analytics state
-  const [viewsCount, setViewsCount] = useState<number>(post.viewsCount || 0);
-  const [uniqueMembersCount, setUniqueMembersCount] = useState<number>(post.uniqueMembersCount || 0);
+  // Views analytics state - initialize with post counts or cached counts, preserving known non-zero counts
+  const initialViews = post.viewsCount ?? cachedPostViewCounts.get(post.id)?.totalViews ?? 0;
+  const initialMembers = post.uniqueMembersCount ?? cachedPostViewCounts.get(post.id)?.uniqueMembers ?? 0;
+
+  const [viewsCount, setViewsCount] = useState<number>(initialViews);
+  const [uniqueMembersCount, setUniqueMembersCount] = useState<number>(initialMembers);
   const cardRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Monotonic reconciliation: ensure counts never decrement or get overwritten with stale smaller numbers
+  const updateCountsMonotonically = React.useCallback((totalViews: number, uniqueMembers: number) => {
+    setViewsCount((prev) => Math.max(prev, totalViews));
+    setUniqueMembersCount((prev) => Math.max(prev, uniqueMembers));
+  }, []);
 
   const triggerViewRecord = React.useCallback(async () => {
     const result = await triggerPostViewRecord(post.id, user?.id, (id) => recordPostViewApi(id));
     if (result.success && result.data) {
-      setViewsCount(result.data.totalViews);
-      setUniqueMembersCount(result.data.uniqueMembers);
+      updateCountsMonotonically(result.data.totalViews, result.data.uniqueMembers);
     }
-  }, [post.id, user?.id]);
+  }, [post.id, user?.id, updateCountsMonotonically]);
 
-  // Keep likes, comments, and views count in sync if post prop updates
+  // Keep likes, comments, and views count in sync if post prop updates (without resetting to 0)
   useEffect(() => {
     setIsLiked(Boolean(post.isLikedByMe));
     setLikesCount(post.likesCount || 0);
     setCommentsCount(post.commentsCount || 0);
-    if (post.viewsCount !== undefined) setViewsCount(post.viewsCount);
-    if (post.uniqueMembersCount !== undefined) setUniqueMembersCount(post.uniqueMembersCount);
-  }, [post.isLikedByMe, post.likesCount, post.commentsCount, post.viewsCount, post.uniqueMembersCount]);
+    if (post.viewsCount !== undefined && post.viewsCount > 0) {
+      updateCountsMonotonically(post.viewsCount, post.uniqueMembersCount ?? post.viewsCount);
+    }
+  }, [post.isLikedByMe, post.likesCount, post.commentsCount, post.viewsCount, post.uniqueMembersCount, updateCountsMonotonically]);
+
+  // Retrieve aggregate counts on mount via existing GET endpoint (never records a view)
+  useEffect(() => {
+    let isMounted = true;
+    if (!user?.id) return;
+
+    fetchPostViewCounts(post.id, user.id, (id) => getPostViewsApi(id)).then((result) => {
+      if (isMounted && result.success && result.data) {
+        updateCountsMonotonically(result.data.totalViews, result.data.uniqueMembers);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [post.id, user?.id, updateCountsMonotonically]);
 
   // View tracking: trigger view when card is genuinely in viewport for >= 1.2s
   useEffect(() => {

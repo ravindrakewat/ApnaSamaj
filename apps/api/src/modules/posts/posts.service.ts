@@ -435,6 +435,7 @@ export async function getCommunityFeed(
       select: {
         likes: true,
         comments: true,
+        views: true,
       },
     },
     likes: currentUserId
@@ -510,6 +511,7 @@ export async function getPostById(postId: string, currentUserId?: string): Promi
         select: {
           likes: true,
           comments: true,
+          views: true,
         },
       },
       likes: currentUserId
@@ -616,6 +618,7 @@ export async function updatePost(
           select: {
             likes: true,
             comments: true,
+            views: true,
           },
         },
         likes: {
@@ -752,6 +755,7 @@ export async function pinPost(
         select: {
           likes: true,
           comments: true,
+          views: true,
         },
       },
       likes: {
@@ -791,6 +795,7 @@ export async function unpinPost(
         select: {
           likes: true,
           comments: true,
+          views: true,
         },
       },
       likes: {
