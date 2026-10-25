@@ -16,6 +16,8 @@ import {
   ListItemText,
   CircularProgress,
   Alert,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
@@ -33,12 +35,13 @@ import {
   deleteNotification,
 } from '../services/notifications.service';
 
-function formatRelativeTime(dateString: string): string {
+export function formatRelativeTime(dateString: string): string {
   try {
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    if (isNaN(diffMs) || diffMs < 0) return 'Just now';
+    if (diffMs < 0) return 'Just now';
     const diffSec = Math.floor(diffMs / 1000);
     if (diffSec < 60) return 'Just now';
     const diffMin = Math.floor(diffSec / 60);
@@ -53,11 +56,11 @@ function formatRelativeTime(dateString: string): string {
   }
 }
 
-function resolveNotificationTarget(item: NotificationItem): string | null {
+export function resolveNotificationTarget(item: NotificationItem): string | null {
   switch (item.type) {
     case 'POST_LIKE':
     case 'POST_COMMENT':
-      return '/feed';
+      return item.entityId ? `/posts/${item.entityId}` : '/feed';
     case 'GROUP_ROLE_UPDATE':
     case 'GROUP_MEMBER_REMOVED':
       return '/groups';
@@ -65,6 +68,11 @@ function resolveNotificationTarget(item: NotificationItem): string | null {
       return '/profile';
     case 'POST_MODERATED':
       return '/feed';
+    case 'MATRIMONIAL_INTEREST_RECEIVED':
+    case 'MATRIMONIAL_INTEREST_ACCEPTED':
+    case 'MATRIMONIAL_PROFILE_APPROVED':
+    case 'MATRIMONIAL_PROFILE_REJECTED':
+      return '/matrimonial/me';
     default:
       return null;
   }
@@ -74,6 +82,7 @@ export const NotificationBell: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -131,7 +140,14 @@ export const NotificationBell: React.FC = () => {
     };
   }, [user, loadUnreadCount]);
 
-  const loadNotifications = async (pageNum: number = 1, append: boolean = false) => {
+  const loadNotifications = async (
+    pageNum: number = 1,
+    append: boolean = false,
+    tabOverride?: 'all' | 'unread'
+  ) => {
+    const targetTab = tabOverride ?? activeTab;
+    const isUnreadOnly = targetTab === 'unread';
+
     if (append) {
       setIsLoadingMore(true);
     } else {
@@ -140,7 +156,11 @@ export const NotificationBell: React.FC = () => {
     }
 
     try {
-      const data = await fetchNotifications({ page: pageNum, limit: 15 });
+      const data = await fetchNotifications({
+        page: pageNum,
+        limit: 15,
+        unreadOnly: isUnreadOnly ? true : undefined,
+      });
       if (!isMountedRef.current) return;
 
       if (append) {
@@ -167,7 +187,13 @@ export const NotificationBell: React.FC = () => {
 
   const handleOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
-    loadNotifications(1, false);
+    loadNotifications(1, false, activeTab);
+  };
+
+  const handleTabChange = (_event: React.SyntheticEvent, newTab: 'all' | 'unread') => {
+    if (!newTab || newTab === activeTab) return;
+    setActiveTab(newTab);
+    loadNotifications(1, false, newTab);
   };
 
   const handleClose = () => {
@@ -353,6 +379,34 @@ export const NotificationBell: React.FC = () => {
           </Button>
         </Box>
 
+        {/* All vs Unread Filter Tabs */}
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            variant="fullWidth"
+            textColor="primary"
+            indicatorColor="primary"
+            sx={{
+              minHeight: 38,
+              '& .MuiTab-root': {
+                minHeight: 38,
+                py: 0.5,
+                fontSize: '0.8rem',
+                textTransform: 'none',
+                fontWeight: 600,
+              },
+            }}
+          >
+            <Tab label="All" value="all" id="notification-tab-all" />
+            <Tab
+              label={unreadCount > 0 ? `Unread (${unreadCount})` : 'Unread'}
+              value="unread"
+              id="notification-tab-unread"
+            />
+          </Tabs>
+        </Box>
+
         {/* Content Body */}
         <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
           {isLoadingList ? (
@@ -368,11 +422,13 @@ export const NotificationBell: React.FC = () => {
           ) : notifications.length === 0 ? (
             <Box sx={{ py: 6, px: 2, textAlign: 'center' }}>
               <NotificationsNoneIcon sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
-              <Typography variant="body2" color="text.secondary">
-                No notifications yet.
+              <Typography variant="body2" color="text.secondary" fontWeight={600}>
+                {activeTab === 'unread' ? 'No unread notifications' : 'No notifications yet'}
               </Typography>
               <Typography variant="caption" color="text.disabled">
-                When you get likes, comments, or group updates, they will appear here.
+                {activeTab === 'unread'
+                  ? "You're all caught up! Switch to 'All' to view past activity."
+                  : 'When you get likes, comments, or community updates, they will appear here.'}
               </Typography>
             </Box>
           ) : (
@@ -389,10 +445,22 @@ export const NotificationBell: React.FC = () => {
                         px: 2,
                         py: 1.25,
                         cursor: hasTarget ? 'pointer' : 'default',
-                        bgcolor: item.isRead ? 'transparent' : 'action.hover',
-                        transition: 'background-color 0.2s ease',
+                        borderLeft: '3px solid',
+                        borderColor: item.isRead ? 'transparent' : 'primary.main',
+                        bgcolor: item.isRead
+                          ? 'transparent'
+                          : (theme) =>
+                              theme.palette.mode === 'dark'
+                                ? 'rgba(25, 118, 210, 0.08)'
+                                : 'rgba(25, 118, 210, 0.04)',
+                        transition: 'background-color 0.2s ease, border-color 0.2s ease',
                         '&:hover': {
-                          bgcolor: 'action.selected',
+                          bgcolor: item.isRead
+                            ? 'action.hover'
+                            : (theme) =>
+                                theme.palette.mode === 'dark'
+                                  ? 'rgba(25, 118, 210, 0.14)'
+                                  : 'rgba(25, 118, 210, 0.08)',
                         },
                       }}
                       secondaryAction={
@@ -503,7 +571,7 @@ export const NotificationBell: React.FC = () => {
             <Box sx={{ p: 1, textAlign: 'center', borderTop: 1, borderColor: 'divider' }}>
               <Button
                 size="small"
-                onClick={() => loadNotifications(page + 1, true)}
+                onClick={() => loadNotifications(page + 1, true, activeTab)}
                 disabled={isLoadingMore}
                 startIcon={isLoadingMore ? <CircularProgress size={14} /> : undefined}
                 sx={{ fontSize: '0.75rem', textTransform: 'none' }}

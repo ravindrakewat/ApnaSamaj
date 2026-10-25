@@ -8,8 +8,8 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   error: string | null;
-  login: (phone: string, password: string) => Promise<void>;
-  register: (data: RegisterInput) => Promise<void>;
+  login: (phone: string, password: string, communitySlug?: string) => Promise<void>;
+  register: (data: RegisterInput, communitySlug?: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
   setUser: React.Dispatch<React.SetStateAction<AuthUser | null>>;
@@ -52,10 +52,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
 
-  const login = async (phone: string, password: string): Promise<void> => {
+  const login = async (phone: string, password: string, communitySlug?: string): Promise<void> => {
     setError(null);
     try {
-      const result = await loginApi(phone, password);
+      const result = await loginApi(phone, password, communitySlug);
       setUser(result.user);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
@@ -64,10 +64,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const register = async (data: RegisterInput): Promise<void> => {
+  const register = async (data: RegisterInput, communitySlug?: string): Promise<void> => {
     setError(null);
     try {
-      const result = await registerApi(data);
+      const result = await registerApi(data, communitySlug);
       setUser(result.user);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Registration failed. Please try again.';

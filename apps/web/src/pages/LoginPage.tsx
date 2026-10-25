@@ -11,17 +11,32 @@ import {
   InputAdornment,
   IconButton,
   CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Chip,
 } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import { loginSchema } from '@apnasamaj/validation';
+import DomainIcon from '@mui/icons-material/Domain';
+import { loginSchema, extractCommunitySubdomain } from '@apnasamaj/validation';
 import { useAuth } from '../context/AuthContext';
+import { getActiveCommunitySlug } from '../services/api.client';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
+
+  const hostSlug = typeof window !== 'undefined' ? extractCommunitySubdomain(window.location.hostname) : null;
+  const isDomainLocked = Boolean(hostSlug);
+
+  const [communitySlug, setCommunitySlug] = useState<string>(() => {
+    if (hostSlug) return hostSlug;
+    return getActiveCommunitySlug() || 'kewat';
+  });
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -48,9 +63,15 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
+    const effectiveCommunity = (isDomainLocked ? hostSlug : communitySlug)?.trim().toLowerCase();
+    if (!effectiveCommunity) {
+      setErrorMessage('Please select a community to sign in.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await login(validation.data.phone, validation.data.password);
+      await login(validation.data.phone, validation.data.password, effectiveCommunity);
       navigate(from, { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Invalid credentials or login failure.';
@@ -92,6 +113,34 @@ export const LoginPage: React.FC = () => {
         )}
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
+          {/* Community Context Selection / Lock Badge */}
+          {isDomainLocked ? (
+            <Box display="flex" justifyContent="center" mb={2}>
+              <Chip
+                icon={<DomainIcon />}
+                label={`${hostSlug?.toUpperCase()} Samaj`}
+                color="primary"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
+              />
+            </Box>
+          ) : (
+            <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+              <InputLabel id="community-select-label">Community</InputLabel>
+              <Select
+                labelId="community-select-label"
+                id="community-select"
+                value={communitySlug}
+                label="Community"
+                onChange={(e) => setCommunitySlug(e.target.value)}
+                disabled={isSubmitting}
+              >
+                <MenuItem value="kewat">Kewat Samaj (kewat)</MenuItem>
+                <MenuItem value="gupta">Gupta Samaj (gupta)</MenuItem>
+              </Select>
+            </FormControl>
+          )}
+
           {/* Phone */}
           <TextField
             required

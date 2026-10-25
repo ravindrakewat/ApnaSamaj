@@ -5,9 +5,23 @@ import {
   RefreshResponseData,
 } from '@apnasamaj/shared-types';
 import { RegisterInput } from '@apnasamaj/validation';
-import { apiFetch, setInMemoryToken } from './api.client';
+import {
+  apiFetch,
+  setInMemoryToken,
+  clearAuthSession,
+  executeTokenRefresh,
+  setActiveCommunitySlug,
+} from './api.client';
 
-export async function loginApi(phone: string, password: string): Promise<LoginResponseData> {
+export async function loginApi(
+  phone: string,
+  password: string,
+  communitySlug?: string
+): Promise<LoginResponseData> {
+  if (communitySlug) {
+    setActiveCommunitySlug(communitySlug);
+  }
+
   const response = await apiFetch<LoginResponseData>('/api/v1/auth/login', {
     method: 'POST',
     body: JSON.stringify({ phone, password }),
@@ -18,10 +32,20 @@ export async function loginApi(phone: string, password: string): Promise<LoginRe
   }
 
   setInMemoryToken(response.data.accessToken);
+  if (response.data.user.communitySlug) {
+    setActiveCommunitySlug(response.data.user.communitySlug);
+  }
   return response.data;
 }
 
-export async function registerApi(data: RegisterInput): Promise<RegisterResponseData> {
+export async function registerApi(
+  data: RegisterInput,
+  communitySlug?: string
+): Promise<RegisterResponseData> {
+  if (communitySlug) {
+    setActiveCommunitySlug(communitySlug);
+  }
+
   const response = await apiFetch<RegisterResponseData>('/api/v1/auth/register', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -32,21 +56,14 @@ export async function registerApi(data: RegisterInput): Promise<RegisterResponse
   }
 
   setInMemoryToken(response.data.accessToken);
+  if (response.data.user.communitySlug) {
+    setActiveCommunitySlug(response.data.user.communitySlug);
+  }
   return response.data;
 }
 
 export async function refreshApi(): Promise<RefreshResponseData> {
-  const response = await apiFetch<RefreshResponseData>('/api/v1/auth/refresh', {
-    method: 'POST',
-  });
-
-  if (!response.success || !response.data) {
-    setInMemoryToken(null);
-    throw new Error(response.error || 'Session expired. Please log in again.');
-  }
-
-  setInMemoryToken(response.data.accessToken);
-  return response.data;
+  return executeTokenRefresh();
 }
 
 export async function getMeApi(): Promise<AuthUser> {
@@ -67,6 +84,6 @@ export async function logoutApi(): Promise<void> {
       method: 'POST',
     });
   } finally {
-    setInMemoryToken(null);
+    clearAuthSession();
   }
 }

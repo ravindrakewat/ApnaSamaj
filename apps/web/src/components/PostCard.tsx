@@ -27,6 +27,7 @@ import {
   Collapse,
   Stack,
   Tooltip,
+  Snackbar,
 } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditIcon from '@mui/icons-material/Edit';
@@ -44,6 +45,11 @@ import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import SendIcon from '@mui/icons-material/Send';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
+import ShareIcon from '@mui/icons-material/Share';
+import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import type {
   PostItem,
@@ -72,10 +78,13 @@ import {
   deleteCommentApi,
 } from '../services/posts.service';
 import { useAuth } from '../context/AuthContext';
+import { buildSharePayload } from '../utils/post-sharing';
 
 interface PostCardProps {
   post: PostItem;
   priority?: boolean;
+  initialCommentsExpanded?: boolean;
+  targetCommentId?: string;
   onPostUpdated: (post: PostItem) => void;
   onPostDeleted: (postId: string) => void;
 }
@@ -100,7 +109,14 @@ export {
   fetchPostViewCounts,
 };
 
-export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPostUpdated, onPostDeleted }) => {
+export const PostCard: React.FC<PostCardProps> = ({
+  post,
+  priority = false,
+  initialCommentsExpanded = false,
+  targetCommentId,
+  onPostUpdated,
+  onPostDeleted,
+}) => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -131,7 +147,9 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
   const [isLikePending, setIsLikePending] = useState(false);
 
   // Comments state
-  const [isCommentsExpanded, setIsCommentsExpanded] = useState(false);
+  const [isCommentsExpanded, setIsCommentsExpanded] = useState<boolean>(
+    Boolean(initialCommentsExpanded || targetCommentId)
+  );
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [commentsCount, setCommentsCount] = useState<number>(post.commentsCount || 0);
   const [commentsPage, setCommentsPage] = useState<number>(1);
@@ -275,6 +293,103 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
     setAnchorEl(null);
   };
 
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  // Share state & handlers
+  const [shareAnchorEl, setShareAnchorEl] = useState<null | HTMLElement>(null);
+  const isShareMenuOpen = Boolean(shareAnchorEl);
+
+  const handleShareMenuClose = () => {
+    setShareAnchorEl(null);
+  };
+
+  const getCanonicalPostUrl = () => {
+    return `${window.location.origin}/posts/${post.id}`;
+  };
+
+  const getSharePayload = () => {
+    return buildSharePayload({
+      authorName: post.author.fullName,
+      content: post.content,
+      canonicalUrl: getCanonicalPostUrl(),
+    });
+  };
+
+  const handleShareClick = async (event: React.MouseEvent<HTMLElement>) => {
+    const payload = getSharePayload();
+
+    if (navigator.share && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: payload.title,
+          text: payload.nativeShareText,
+          url: payload.canonicalUrl,
+        });
+        return;
+      } catch (err: unknown) {
+        // User cancelled native share sheet: do not treat as error, do not open fallback menu
+        if (
+          err instanceof Error &&
+          (err.name === 'AbortError' ||
+            err.message.toLowerCase().includes('abort') ||
+            err.message.toLowerCase().includes('cancel'))
+        ) {
+          return;
+        }
+        // Fallback menu for other share failures
+        setShareAnchorEl(event.currentTarget);
+      }
+    } else {
+      setShareAnchorEl(event.currentTarget);
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    handleShareMenuClose();
+    const payload = getSharePayload();
+    window.open(payload.whatsappUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCopyLink = () => {
+    handleMenuClose();
+    handleShareMenuClose();
+    const canonicalUrl = getCanonicalPostUrl();
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard
+        .writeText(canonicalUrl)
+        .then(() => {
+          setCopyFeedback('Post link copied to clipboard!');
+        })
+        .catch(() => {
+          setCopyFeedback('Failed to copy link to clipboard.');
+        });
+    } else {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = canonicalUrl;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const success = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (success) {
+          setCopyFeedback('Post link copied to clipboard!');
+        } else {
+          setCopyFeedback('Failed to copy link to clipboard.');
+        }
+      } catch {
+        setCopyFeedback('Failed to copy link to clipboard.');
+      }
+    }
+  };
+
+  const handleViewPostDetail = () => {
+    handleMenuClose();
+    navigate(`/posts/${post.id}`);
+  };
+
   // Likes Handler
   const handleToggleLike = async () => {
     if (isLikePending) return;
@@ -334,6 +449,38 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
       setIsLoadingComments(false);
     }
   };
+
+  useEffect(() => {
+    if ((initialCommentsExpanded || targetCommentId) && !hasLoadedCommentsOnce) {
+      loadInitialComments();
+    }
+  }, [initialCommentsExpanded, targetCommentId, post.id]);
+
+  // Target comment deep-link highlighting & smooth scroll
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
+  const hasScrolledToCommentRef = React.useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!targetCommentId || hasScrolledToCommentRef.current) return;
+    const foundComment = comments.find((c) => c.id === targetCommentId);
+    if (foundComment) {
+      hasScrolledToCommentRef.current = true;
+      setHighlightedCommentId(foundComment.id);
+
+      setTimeout(() => {
+        const el = document.getElementById(`comment-${foundComment.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+
+      const timer = setTimeout(() => {
+        setHighlightedCommentId(null);
+      }, 2500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [comments, targetCommentId]);
 
   const handleLoadMoreComments = async () => {
     if (isLoadingMoreComments || !hasMoreComments) return;
@@ -761,51 +908,61 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
             </Avatar>
           }
           action={
-            (canEdit || canDelete || canPin) && (
-              <>
-                <IconButton aria-label="settings" onClick={handleMenuOpen} size="small">
-                  <MoreVertIcon />
-                </IconButton>
-                <Menu
-                  anchorEl={anchorEl}
-                  open={isMenuOpen}
-                  onClose={handleMenuClose}
-                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                >
-                  {canPin && (
-                    <MenuItem onClick={handleTogglePin} disabled={isPinning}>
-                      <ListItemIcon>
-                        {post.isPinned ? (
-                          <PushPinOutlinedIcon fontSize="small" color="primary" />
-                        ) : (
-                          <PushPinIcon fontSize="small" color="primary" />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText>{post.isPinned ? 'Unpin Post' : 'Pin Post'}</ListItemText>
-                    </MenuItem>
-                  )}
-                  {canEdit && (
-                    <MenuItem onClick={handleOpenEdit}>
-                      <ListItemIcon>
-                        <EditIcon fontSize="small" color="primary" />
-                      </ListItemIcon>
-                      <ListItemText>Edit Post</ListItemText>
-                    </MenuItem>
-                  )}
-                  {canDelete && (
-                    <MenuItem onClick={handleOpenDelete} sx={{ color: 'error.main' }}>
-                      <ListItemIcon>
-                        <DeleteIcon fontSize="small" color="error" />
-                      </ListItemIcon>
-                      <ListItemText>
-                        {!isOwner && isModerator ? 'Moderate Delete' : 'Delete Post'}
-                      </ListItemText>
-                    </MenuItem>
-                  )}
-                </Menu>
-              </>
-            )
+            <>
+              <IconButton aria-label="post options" onClick={handleMenuOpen} size="small">
+                <MoreVertIcon />
+              </IconButton>
+              <Menu
+                anchorEl={anchorEl}
+                open={isMenuOpen}
+                onClose={handleMenuClose}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              >
+                <MenuItem onClick={handleCopyLink}>
+                  <ListItemIcon>
+                    <ShareIcon fontSize="small" color="action" />
+                  </ListItemIcon>
+                  <ListItemText>Copy Link to Post</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={handleViewPostDetail}>
+                  <ListItemIcon>
+                    <OpenInNewIcon fontSize="small" color="action" />
+                  </ListItemIcon>
+                  <ListItemText>View Post Details</ListItemText>
+                </MenuItem>
+                {canPin && (
+                  <MenuItem onClick={handleTogglePin} disabled={isPinning}>
+                    <ListItemIcon>
+                      {post.isPinned ? (
+                        <PushPinOutlinedIcon fontSize="small" color="primary" />
+                      ) : (
+                        <PushPinIcon fontSize="small" color="primary" />
+                      )}
+                    </ListItemIcon>
+                    <ListItemText>{post.isPinned ? 'Unpin Post' : 'Pin Post'}</ListItemText>
+                  </MenuItem>
+                )}
+                {canEdit && (
+                  <MenuItem onClick={handleOpenEdit}>
+                    <ListItemIcon>
+                      <EditIcon fontSize="small" color="primary" />
+                    </ListItemIcon>
+                    <ListItemText>Edit Post</ListItemText>
+                  </MenuItem>
+                )}
+                {canDelete && (
+                  <MenuItem onClick={handleOpenDelete} sx={{ color: 'error.main' }}>
+                    <ListItemIcon>
+                      <DeleteIcon fontSize="small" color="error" />
+                    </ListItemIcon>
+                    <ListItemText>
+                      {!isOwner && isModerator ? 'Moderate Delete' : 'Delete Post'}
+                    </ListItemText>
+                  </MenuItem>
+                )}
+              </Menu>
+            </>
           }
           title={
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
@@ -834,7 +991,18 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
           }
           subheader={
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap" mt={0.25}>
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/posts/${post.id}`);
+                }}
+                sx={{
+                  cursor: 'pointer',
+                  '&:hover': { color: 'primary.main', textDecoration: 'underline' },
+                }}
+              >
                 {formattedDate} {isEdited && '(edited)'}
               </Typography>
               {locationString && (
@@ -890,9 +1058,9 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
 
         <Divider />
 
-        {/* Action Controls: Like and Comment */}
+        {/* Action Controls: Like, Comment, and Share */}
         <CardActions sx={{ px: 2, py: 1, justifyContent: 'space-between' }}>
-          <Box display="flex" alignItems="center" gap={2}>
+          <Box display="flex" alignItems="center" gap={1.5}>
             {/* Like Button */}
             <Button
               size="small"
@@ -929,6 +1097,42 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
                 ? `${commentsCount} ${commentsCount === 1 ? 'Comment' : 'Comments'}`
                 : 'Comment'}
             </Button>
+
+            {/* Share Button */}
+            <Button
+              size="small"
+              onClick={handleShareClick}
+              startIcon={<ShareOutlinedIcon color="action" />}
+              sx={{
+                color: isShareMenuOpen ? 'primary.main' : 'text.secondary',
+                fontWeight: isShareMenuOpen ? 600 : 500,
+                textTransform: 'none',
+              }}
+            >
+              Share
+            </Button>
+
+            {/* Fallback Share Menu */}
+            <Menu
+              anchorEl={shareAnchorEl}
+              open={isShareMenuOpen}
+              onClose={handleShareMenuClose}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+            >
+              <MenuItem onClick={handleShareWhatsApp}>
+                <ListItemIcon>
+                  <WhatsAppIcon fontSize="small" sx={{ color: '#25D366' }} />
+                </ListItemIcon>
+                <ListItemText>Share on WhatsApp</ListItemText>
+              </MenuItem>
+              <MenuItem onClick={handleCopyLink}>
+                <ListItemIcon>
+                  <ContentCopyIcon fontSize="small" color="action" />
+                </ListItemIcon>
+                <ListItemText>Copy Link</ListItemText>
+              </MenuItem>
+            </Menu>
           </Box>
 
           <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
@@ -1021,15 +1225,29 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
                 <CircularProgress size={24} />
               </Box>
             ) : comments.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" align="center" py={2}>
-                No comments yet. Be the first to start the conversation!
-              </Typography>
+              <Box
+                sx={{
+                  py: 3,
+                  px: 2,
+                  textAlign: 'center',
+                  borderRadius: 2,
+                  bgcolor: 'background.paper',
+                  border: '1px dashed',
+                  borderColor: 'divider',
+                  mt: 1,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  No comments yet. Be the first to start the conversation!
+                </Typography>
+              </Box>
             ) : (
               <Stack spacing={1.5}>
                 {comments.map((comment) => {
                   const isCommentOwner = user?.id === comment.authorId;
                   const canDeleteComment = isCommentOwner || isModerator;
                   const isEditingThisComment = editingCommentId === comment.id;
+                  const isHighlighted = highlightedCommentId === comment.id;
 
                   const commentDate = new Date(comment.createdAt).toLocaleDateString('en-IN', {
                     day: 'numeric',
@@ -1040,12 +1258,16 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
 
                   return (
                     <Box
+                      id={`comment-${comment.id}`}
                       key={comment.id}
                       sx={{
                         p: 1.5,
-                        bgcolor: 'background.paper',
+                        bgcolor: isHighlighted ? 'action.selected' : 'background.paper',
                         borderRadius: 2,
                         boxShadow: 1,
+                        border: '1px solid',
+                        borderColor: isHighlighted ? 'primary.main' : 'transparent',
+                        transition: 'background-color 0.8s ease, border-color 0.8s ease',
                       }}
                     >
                       <Box display="flex" justifyContent="space-between" alignItems="flex-start">
@@ -1443,6 +1665,13 @@ export const PostCard: React.FC<PostCardProps> = ({ post, priority = false, onPo
           />
         )}
       </Dialog>
+      <Snackbar
+        open={Boolean(copyFeedback)}
+        autoHideDuration={3000}
+        onClose={() => setCopyFeedback(null)}
+        message={copyFeedback}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </>
   );
 };
