@@ -14,7 +14,7 @@
     "dev:web": "npm run dev -w @apnasamaj/web",
     "dev:admin": "npm run dev -w @apnasamaj/admin",
     "dev:api": "npm run dev -w @apnasamaj/api",
-    "build:api": "npx prisma generate --schema=packages/database/prisma/schema.prisma",
+    "build:api": "npm run build -w @apnasamaj/api",
     "start:api": "npm run start -w @apnasamaj/api",
     "db:generate": "npx prisma generate --schema=packages/database/prisma/schema.prisma",
     "db:migrate": "npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma",
