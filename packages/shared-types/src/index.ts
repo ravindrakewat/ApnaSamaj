@@ -7,4 +7,5 @@ export * from './audit-log.js';
 export * from './notification.js';
 export * from './chat.js';
 export * from './matrimonial.js';
+export * from './community.js';
 

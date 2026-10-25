@@ -23,6 +23,7 @@ export interface AuthUser {
   role: UserRole;
   status: UserStatus;
   isPhoneVerified: boolean;
+  communitySlug?: string;
 }
 
 export interface LoginResponseData {
@@ -48,6 +49,7 @@ export interface AccessTokenPayload {
   phone: string;
   role: UserRole;
   status: UserStatus;
+  communitySlug?: string;
   jti?: string;
   iat?: number;
   exp?: number;

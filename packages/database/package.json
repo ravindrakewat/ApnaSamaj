@@ -6,6 +6,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "tsx src/tenant-manager.test.ts",
     "build": "tsc",
     "seed": "tsx src/seed.ts"
   },
