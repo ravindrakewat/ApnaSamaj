@@ -25,7 +25,17 @@ export async function getMyProfileHandler(req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    const data = await getMyProfile(userId);
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context and tenant database are required to access user profile.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const data = await getMyProfile(userId, req.db);
 
     const response: ApiResponse<CurrentMemberProfile> = {
       success: true,
@@ -80,7 +90,17 @@ export async function updateMyProfileHandler(req: AuthenticatedRequest, res: Res
       return;
     }
 
-    const updatedProfile = await updateMyProfile(userId, parsed.data);
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context and tenant database are required to update user profile.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const updatedProfile = await updateMyProfile(userId, parsed.data, req.db);
 
     const response: ApiResponse<CurrentMemberProfile> = {
       success: true,
@@ -113,6 +133,16 @@ export async function updateMyProfileHandler(req: AuthenticatedRequest, res: Res
 
 export async function getDirectoryHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context and tenant database are required to access the member directory.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const parsedQuery = directoryQuerySchema.safeParse(req.query);
     if (!parsedQuery.success) {
       const issue = parsedQuery.error.issues[0]?.message || 'Invalid directory query parameters.';
@@ -125,7 +155,7 @@ export async function getDirectoryHandler(req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    const data = await getDirectoryMembers(parsedQuery.data);
+    const data = await getDirectoryMembers(parsedQuery.data, req.db);
 
     const response: ApiResponse<DirectoryResponseData> = {
       success: true,
@@ -135,6 +165,16 @@ export async function getDirectoryHandler(req: AuthenticatedRequest, res: Respon
 
     res.status(200).json(response);
   } catch (err: unknown) {
+    if (err instanceof UserServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
     console.error('[Users Controller] Get directory error:', err);
     const response: ApiResponse = {
       success: false,
@@ -168,11 +208,22 @@ export async function uploadMyAvatarHandler(req: AuthenticatedRequest, res: Resp
       return;
     }
 
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context and tenant database are required to upload profile avatar.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const result = await uploadMyAvatar(
       userId,
       req.file.buffer,
       req.file.mimetype,
-      req.file.originalname
+      req.file.originalname,
+      req.db
     );
 
     const response: ApiResponse<{ avatarUrl: string }> = {
@@ -216,7 +267,17 @@ export async function getPublicProfileHandler(req: AuthenticatedRequest, res: Re
       return;
     }
 
-    const data = await getPublicMemberProfile(id);
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context and tenant database are required to view member profile.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const data = await getPublicMemberProfile(id, req.db);
 
     const response: ApiResponse<PublicMemberProfile> = {
       success: true,

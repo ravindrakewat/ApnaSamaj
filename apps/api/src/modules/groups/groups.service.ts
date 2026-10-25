@@ -1,4 +1,4 @@
-import { prisma, Prisma, UserStatus as DbUserStatus } from '@apnasamaj/database';
+import { PrismaClient, Prisma, UserStatus as DbUserStatus } from '@apnasamaj/database';
 import {
   GroupPrivacy,
   GroupMemberRole,
@@ -17,7 +17,6 @@ import {
 import { ListGroupsQuery } from '@apnasamaj/validation';
 import { uploadPostMedia, deleteStorageObjects, extractStoragePathFromUrl } from '../../services/storage.service';
 import { sendNotificationSafely } from '../notifications/notifications.service';
-
 
 export class GroupServiceError extends Error {
   public statusCode: number;
@@ -40,6 +39,13 @@ export class ForbiddenGroupActionError extends GroupServiceError {
   }
 }
 
+function assertDb(db?: PrismaClient): PrismaClient {
+  if (!db) {
+    throw new GroupServiceError('Tenant database connection is required for group operations.', 400);
+  }
+  return db;
+}
+
 function slugify(name: string): string {
   return (
     name
@@ -56,8 +62,10 @@ function slugify(name: string): string {
  */
 export async function listGroups(
   query: ListGroupsQuery,
-  currentUserId: string
+  currentUserId: string,
+  db?: PrismaClient
 ): Promise<ListGroupsResponseData> {
+  const client = assertDb(db);
   const { page = 1, limit = 12, search, privacy } = query;
   const skip = (page - 1) * limit;
 
@@ -100,7 +108,7 @@ export async function listGroups(
   let rawGroups: RawGroup[];
 
   if (page === 1) {
-    rawGroups = await prisma.group.findMany({
+    rawGroups = await client.group.findMany({
       where,
       skip: 0,
       take: limit,
@@ -111,12 +119,12 @@ export async function listGroups(
     if (rawGroups.length < limit) {
       totalGroups = rawGroups.length;
     } else {
-      totalGroups = await prisma.group.count({ where });
+      totalGroups = await client.group.count({ where });
     }
   } else {
     const [count, items] = await Promise.all([
-      prisma.group.count({ where }),
-      prisma.group.findMany({
+      client.group.count({ where }),
+      client.group.findMany({
         where,
         skip,
         take: limit,
@@ -159,9 +167,11 @@ export async function listGroups(
  */
 export async function getGroupBySlug(
   slug: string,
-  currentUserId: string
+  currentUserId: string,
+  db?: PrismaClient
 ): Promise<GroupDetails> {
-  const group = await prisma.group.findUnique({
+  const client = assertDb(db);
+  const group = await client.group.findUnique({
     where: { slug },
     select: {
       id: true,
@@ -274,17 +284,19 @@ export async function getGroupBySlug(
  */
 export async function createGroup(
   userId: string,
-  input: CreateGroupInput
+  input: CreateGroupInput,
+  db?: PrismaClient
 ): Promise<GroupDetails> {
+  const client = assertDb(db);
   const baseSlug = slugify(input.name);
   let slug = baseSlug;
   let counter = 1;
 
-  while (await prisma.group.findUnique({ where: { slug } })) {
+  while (await client.group.findUnique({ where: { slug } })) {
     slug = `${baseSlug}-${counter++}`;
   }
 
-  const group = await prisma.$transaction(async (tx) => {
+  const group = await client.$transaction(async (tx) => {
     const created = await tx.group.create({
       data: {
         name: input.name,
@@ -308,7 +320,7 @@ export async function createGroup(
     return created;
   });
 
-  return getGroupBySlug(group.slug, userId);
+  return getGroupBySlug(group.slug, userId, client);
 }
 
 /**
@@ -317,9 +329,11 @@ export async function createGroup(
  */
 export async function joinGroup(
   groupId: string,
-  userId: string
+  userId: string,
+  db?: PrismaClient
 ): Promise<{ success: boolean; message: string; role: GroupMemberRole }> {
-  const group = await prisma.group.findUnique({
+  const client = assertDb(db);
+  const group = await client.group.findUnique({
     where: { id: groupId },
     select: { id: true, privacy: true },
   });
@@ -334,7 +348,7 @@ export async function joinGroup(
     );
   }
 
-  const existingMembership = await prisma.groupMember.findUnique({
+  const existingMembership = await client.groupMember.findUnique({
     where: {
       groupId_userId: {
         groupId,
@@ -347,7 +361,7 @@ export async function joinGroup(
     throw new GroupServiceError('You are already a member of this group.', 400);
   }
 
-  const newMember = await prisma.groupMember.create({
+  const newMember = await client.groupMember.create({
     data: {
       groupId,
       userId,
@@ -370,9 +384,11 @@ export async function joinGroup(
  */
 export async function leaveGroup(
   groupId: string,
-  userId: string
+  userId: string,
+  db?: PrismaClient
 ): Promise<{ success: boolean; message: string }> {
-  return prisma.$transaction(async (tx) => {
+  const client = assertDb(db);
+  return client.$transaction(async (tx) => {
     // Acquire a row-level lock on the Group row to serialize membership changes and prevent race conditions
     const groups = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "Group" WHERE id = ${groupId} FOR UPDATE
@@ -435,12 +451,14 @@ export async function getGroupPosts(
   slug: string,
   currentUserId: string,
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
+  db?: PrismaClient
 ): Promise<{
   posts: PostItem[];
   pagination: { page: number; limit: number; totalPosts: number; totalPages: number; hasMore: boolean };
 }> {
-  const group = await prisma.group.findUnique({
+  const client = assertDb(db);
+  const group = await client.group.findUnique({
     where: { slug },
     select: {
       id: true,
@@ -473,8 +491,8 @@ export async function getGroupPosts(
   };
 
   const [totalPosts, posts] = await Promise.all([
-    prisma.post.count({ where }),
-    prisma.post.findMany({
+    client.post.count({ where }),
+    client.post.findMany({
       where,
       skip,
       take: limit,
@@ -584,9 +602,11 @@ export async function updateGroup(
   userRole: UserRole,
   input: UpdateGroupInput,
   ipAddress?: string,
-  userAgent?: string
+  userAgent?: string,
+  db?: PrismaClient
 ): Promise<GroupDetails> {
-  const group = await prisma.group.findUnique({
+  const client = assertDb(db);
+  const group = await client.group.findUnique({
     where: { id: groupId },
     select: { id: true, slug: true, privacy: true },
   });
@@ -598,7 +618,7 @@ export async function updateGroup(
   const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
 
   if (!isSuperAdmin) {
-    const membership = await prisma.groupMember.findUnique({
+    const membership = await client.groupMember.findUnique({
       where: {
         groupId_userId: {
           groupId,
@@ -633,7 +653,7 @@ export async function updateGroup(
     updateData.coverUrl = input.coverUrl ? input.coverUrl.trim() : null;
   }
 
-  await prisma.$transaction(async (tx) => {
+  await client.$transaction(async (tx) => {
     await tx.group.update({
       where: { id: groupId },
       data: updateData,
@@ -657,7 +677,7 @@ export async function updateGroup(
     });
   });
 
-  return getGroupBySlug(group.slug, userId);
+  return getGroupBySlug(group.slug, userId, client);
 }
 
 /**
@@ -671,9 +691,11 @@ export async function updateGroupMemberRole(
   actorId: string,
   actorRole: UserRole,
   ipAddress?: string,
-  userAgent?: string
+  userAgent?: string,
+  db?: PrismaClient
 ): Promise<GroupMemberActionResult> {
-  const result = await prisma.$transaction(async (tx) => {
+  const client = assertDb(db);
+  const result = await client.$transaction(async (tx) => {
     // Acquire a row-level lock on the Group row to serialize membership changes
     const groups = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "Group" WHERE id = ${groupId} FOR UPDATE
@@ -813,15 +835,18 @@ export async function updateGroupMemberRole(
 
   // Safe notification side-effect after successful transaction
   if (actorId !== targetUserId) {
-    sendNotificationSafely({
-      recipientId: targetUserId,
-      actorId,
-      type: 'GROUP_ROLE_UPDATE',
-      title: 'Group Role Updated',
-      message: `Your role in the group was updated to ${newRole}.`,
-      entityType: 'Group',
-      entityId: groupId,
-    }).catch((err) =>
+    sendNotificationSafely(
+      {
+        recipientId: targetUserId,
+        actorId,
+        type: 'GROUP_ROLE_UPDATE',
+        title: 'Group Role Updated',
+        message: `Your role in the group was updated to ${newRole}.`,
+        entityType: 'Group',
+        entityId: groupId,
+      },
+      client
+    ).catch((err) =>
       console.warn('[Groups Service] Failed to send role update notification:', err)
     );
   }
@@ -840,13 +865,15 @@ export async function removeGroupMember(
   actorId: string,
   actorRole: UserRole,
   ipAddress?: string,
-  userAgent?: string
+  userAgent?: string,
+  db?: PrismaClient
 ): Promise<{ success: boolean; message: string }> {
+  const client = assertDb(db);
   if (targetUserId === actorId) {
     throw new GroupServiceError('To leave the group, please use the leave group option.', 400);
   }
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await client.$transaction(async (tx) => {
     // Acquire a row-level lock on the Group row
     const groups = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "Group" WHERE id = ${groupId} FOR UPDATE
@@ -947,15 +974,18 @@ export async function removeGroupMember(
 
   // Safe notification side-effect after successful transaction
   if (actorId !== targetUserId) {
-    sendNotificationSafely({
-      recipientId: targetUserId,
-      actorId,
-      type: 'GROUP_MEMBER_REMOVED',
-      title: 'Removed from Group',
-      message: 'You have been removed from the group.',
-      entityType: 'Group',
-      entityId: groupId,
-    }).catch((err) =>
+    sendNotificationSafely(
+      {
+        recipientId: targetUserId,
+        actorId,
+        type: 'GROUP_MEMBER_REMOVED',
+        title: 'Removed from Group',
+        message: 'You have been removed from the group.',
+        entityType: 'Group',
+        entityId: groupId,
+      },
+      client
+    ).catch((err) =>
       console.warn('[Groups Service] Failed to send member removal notification:', err)
     );
   }
@@ -974,9 +1004,11 @@ export async function uploadGroupCover(
   mimetype: string,
   originalName: string,
   ipAddress?: string,
-  userAgent?: string
+  userAgent?: string,
+  db?: PrismaClient
 ): Promise<{ success: boolean; coverUrl: string }> {
-  const group = await prisma.group.findUnique({
+  const client = assertDb(db);
+  const group = await client.group.findUnique({
     where: { id: groupId },
     select: { id: true, slug: true, coverUrl: true },
   });
@@ -988,7 +1020,7 @@ export async function uploadGroupCover(
   const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
 
   if (!isSuperAdmin) {
-    const membership = await prisma.groupMember.findUnique({
+    const membership = await client.groupMember.findUnique({
       where: {
         groupId_userId: {
           groupId,
@@ -1011,7 +1043,7 @@ export async function uploadGroupCover(
 
   // 2. Persist group coverUrl and GROUP_SETTINGS_UPDATE audit log atomically
   try {
-    await prisma.$transaction(async (tx) => {
+    await client.$transaction(async (tx) => {
       await tx.group.update({
         where: { id: groupId },
         data: { coverUrl: uploadResult.url },

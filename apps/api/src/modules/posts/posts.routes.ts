@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticateToken } from '../../middleware/authenticate';
 import { requireActiveUser } from '../../middleware/authorize';
+import { requireTenantContext } from '../../middleware/tenant.middleware';
 import {
   createPostRateLimiter,
   createCommentRateLimiter,
@@ -28,8 +29,8 @@ import {
 
 export const postsRouter = Router();
 
-// All community post endpoints require authenticated ACTIVE user status
-postsRouter.use(authenticateToken, requireActiveUser);
+// All community post endpoints require authenticated ACTIVE user status and valid tenant context
+postsRouter.use(authenticateToken, requireActiveUser, requireTenantContext);
 
 // POST /api/v1/posts/media/upload - Upload an image to Supabase Storage
 postsRouter.post('/media/upload', singleImageUpload, uploadMediaHandler);

@@ -1,4 +1,4 @@
-import { prisma, Prisma } from '@apnasamaj/database';
+import { Prisma, PrismaClient } from '@apnasamaj/database';
 import {
   ChatMessageItem,
   ChatMessagesResponseData,
@@ -24,6 +24,13 @@ export class ForbiddenChatError extends ChatServiceError {
   constructor(message: string = 'Access denied: You do not have permission for this chat room.') {
     super(message, 403);
   }
+}
+
+function assertDb(db?: PrismaClient): PrismaClient {
+  if (!db) {
+    throw new ChatServiceError('Tenant database context is required.', 400);
+  }
+  return db;
 }
 
 const chatMessageInclude = {
@@ -70,9 +77,11 @@ function mapToChatMessageItem(item: RawChatMessage): ChatMessageItem {
 export async function verifyGroupChatAccess(
   groupIdOrSlug: string,
   userId: string,
-  requireActiveMembership: boolean = false
+  requireActiveMembership: boolean = false,
+  db?: PrismaClient
 ): Promise<{ group: { id: string; name: string; slug: string; privacy: string }; isMember: boolean }> {
-  const group = await prisma.group.findFirst({
+  const client = assertDb(db);
+  const group = await client.group.findFirst({
     where: {
       OR: [{ id: groupIdOrSlug }, { slug: groupIdOrSlug }],
     },
@@ -88,7 +97,7 @@ export async function verifyGroupChatAccess(
     throw new ChatNotFoundError();
   }
 
-  const membership = await prisma.groupMember.findUnique({
+  const membership = await client.groupMember.findUnique({
     where: {
       groupId_userId: {
         groupId: group.id,
@@ -119,9 +128,11 @@ export async function verifyGroupChatAccess(
 export async function getGroupChatHistory(
   groupIdOrSlug: string,
   userId: string,
-  query: ListGroupMessagesQueryInput
+  query: ListGroupMessagesQueryInput,
+  db?: PrismaClient
 ): Promise<ChatMessagesResponseData> {
-  const { group } = await verifyGroupChatAccess(groupIdOrSlug, userId, false);
+  const client = assertDb(db);
+  const { group } = await verifyGroupChatAccess(groupIdOrSlug, userId, false, client);
 
   const limit = Math.min(Math.max(query.limit || 20, 1), 50);
   const beforeDate = query.before ? new Date(query.before) : undefined;
@@ -132,7 +143,7 @@ export async function getGroupChatHistory(
       ...(beforeDate && !isNaN(beforeDate.getTime()) ? { createdAt: { lt: beforeDate } } : {}),
     };
 
-    const rawMessages = await prisma.chatMessage.findMany({
+    const rawMessages = await client.chatMessage.findMany({
       where,
       take: limit + 1, // take 1 extra to determine hasMore
       orderBy: { createdAt: 'desc' },
@@ -167,9 +178,11 @@ export async function sendChatMessage(
   groupIdOrSlug: string,
   senderId: string,
   content: string,
-  _tempId?: string
+  _tempId?: string,
+  db?: PrismaClient
 ): Promise<ChatMessageItem> {
-  const { group } = await verifyGroupChatAccess(groupIdOrSlug, senderId, true);
+  const client = assertDb(db);
+  const { group } = await verifyGroupChatAccess(groupIdOrSlug, senderId, true, client);
 
   const trimmed = content ? content.trim() : '';
   if (!trimmed || trimmed.length < 1) {
@@ -180,7 +193,7 @@ export async function sendChatMessage(
   }
 
   try {
-    const message = await prisma.chatMessage.create({
+    const message = await client.chatMessage.create({
       data: {
         groupId: group.id,
         senderId,

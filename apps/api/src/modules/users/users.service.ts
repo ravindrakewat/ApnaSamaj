@@ -1,4 +1,4 @@
-import { prisma, Gender, Prisma } from '@apnasamaj/database';
+import { Gender, Prisma, PrismaClient } from '@apnasamaj/database';
 import {
   SafeUserProfile,
   UserRole,
@@ -25,6 +25,17 @@ export class UserNotFoundError extends UserServiceError {
   }
 }
 
+/**
+ * Validates that an active tenant PrismaClient instance is provided.
+ * Throws a 400 UserServiceError if missing to prevent silent fallback.
+ */
+function assertDb(db?: PrismaClient): PrismaClient {
+  if (!db) {
+    throw new UserServiceError('Tenant database client is required for user operations.', 400);
+  }
+  return db;
+}
+
 export interface CurrentMemberProfile {
   id: string;
   phone: string;
@@ -38,9 +49,11 @@ export interface CurrentMemberProfile {
 
 /**
  * Retrieves the full sanitized profile of the current authenticated member.
+ * Operates strictly within the caller's tenant database.
  */
-export async function getMyProfile(userId: string): Promise<CurrentMemberProfile> {
-  const user = await prisma.user.findUnique({
+export async function getMyProfile(userId: string, db?: PrismaClient): Promise<CurrentMemberProfile> {
+  const client = assertDb(db);
+  const user = await client.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -93,8 +106,8 @@ export async function getMyProfile(userId: string): Promise<CurrentMemberProfile
           state: user.profile.state,
           subCaste: user.profile.subCaste,
           gotra: user.profile.gotra,
-          createdAt: user.profile.createdAt.toISOString(),
-          updatedAt: user.profile.updatedAt.toISOString(),
+          createdAt: user.profile.createdAt ? user.profile.createdAt.toISOString() : user.createdAt.toISOString(),
+          updatedAt: user.profile.updatedAt ? user.profile.updatedAt.toISOString() : user.updatedAt.toISOString(),
         }
       : null,
   };
@@ -106,10 +119,12 @@ export async function getMyProfile(userId: string): Promise<CurrentMemberProfile
  */
 export async function updateMyProfile(
   userId: string,
-  input: UpdateProfileInput
+  input: UpdateProfileInput,
+  db?: PrismaClient
 ): Promise<CurrentMemberProfile> {
+  const client = assertDb(db);
   // Verify user existence
-  const user = await prisma.user.findUnique({
+  const user = await client.user.findUnique({
     where: { id: userId },
     select: { id: true, profile: { select: { id: true } } },
   });
@@ -145,12 +160,12 @@ export async function updateMyProfile(
 
   // Upsert profile
   if (user.profile) {
-    await prisma.profile.update({
+    await client.profile.update({
       where: { userId },
       data: updateData,
     });
   } else {
-    await prisma.profile.create({
+    await client.profile.create({
       data: {
         userId,
         fullName: updateData.fullName || 'Member',
@@ -159,7 +174,7 @@ export async function updateMyProfile(
     });
   }
 
-  return getMyProfile(userId);
+  return getMyProfile(userId, client);
 }
 
 const publicDirectorySelect = {
@@ -184,8 +199,18 @@ const publicDirectorySelect = {
  * Lists active verified members for the community directory.
  * Never exposes phone numbers, password hashes, auth tokens, or administrative fields.
  * Restricted strictly to active users.
+ *
+ * TENANT ISOLATION (Phase 15C.2 Pilot):
+ * Explicitly requires a tenant-bound PrismaClient instance (`db`).
+ * Does NOT silently fall back to the global Prisma singleton.
  */
-export async function getDirectoryMembers(query: DirectoryQuery): Promise<DirectoryResponseData> {
+export async function getDirectoryMembers(
+  query: DirectoryQuery,
+  db?: PrismaClient
+): Promise<DirectoryResponseData> {
+  if (!db) {
+    throw new UserServiceError('Tenant database client is required for directory operations.', 400);
+  }
   const { page = 1, limit = 12, search, city, state, gotra } = query;
   const skip = (page - 1) * limit;
 
@@ -243,7 +268,7 @@ export async function getDirectoryMembers(query: DirectoryQuery): Promise<Direct
   let rawUsers: RawDirectoryUser[];
 
   if (page === 1) {
-    rawUsers = await prisma.user.findMany({
+    rawUsers = await db.user.findMany({
       where,
       skip: 0,
       take: limit,
@@ -254,12 +279,12 @@ export async function getDirectoryMembers(query: DirectoryQuery): Promise<Direct
     if (rawUsers.length < limit) {
       totalMembers = rawUsers.length;
     } else {
-      totalMembers = await prisma.user.count({ where });
+      totalMembers = await db.user.count({ where });
     }
   } else {
     const [count, users] = await Promise.all([
-      prisma.user.count({ where }),
-      prisma.user.findMany({
+      db.user.count({ where }),
+      db.user.findMany({
         where,
         skip,
         take: limit,
@@ -305,9 +330,11 @@ export async function uploadMyAvatar(
   userId: string,
   fileBuffer: Buffer,
   mimetype: string,
-  originalName: string
+  originalName: string,
+  db?: PrismaClient
 ): Promise<{ avatarUrl: string }> {
-  const user = await prisma.user.findUnique({
+  const client = assertDb(db);
+  const user = await client.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -332,12 +359,12 @@ export async function uploadMyAvatar(
   // 2. Persist avatarUrl to database
   try {
     if (user.profile) {
-      await prisma.profile.update({
+      await client.profile.update({
         where: { userId },
         data: { avatarUrl: uploadResult.url },
       });
     } else {
-      await prisma.profile.create({
+      await client.profile.create({
         data: {
           userId,
           fullName: 'Member',
@@ -380,8 +407,12 @@ export async function uploadMyAvatar(
  * Retrieves public profile information for a community member.
  * Only ACTIVE members are discoverable; never exposes phone numbers, password hashes, or sensitive account fields.
  */
-export async function getPublicMemberProfile(targetUserId: string): Promise<PublicMemberProfile> {
-  const user = await prisma.user.findUnique({
+export async function getPublicMemberProfile(
+  targetUserId: string,
+  db?: PrismaClient
+): Promise<PublicMemberProfile> {
+  const client = assertDb(db);
+  const user = await client.user.findUnique({
     where: { id: targetUserId },
     select: {
       id: true,

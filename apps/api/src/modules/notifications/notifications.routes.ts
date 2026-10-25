@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticateToken } from '../../middleware/authenticate';
 import { requireActiveUser } from '../../middleware/authorize';
+import { requireTenantContext } from '../../middleware/tenant.middleware';
 import {
   getUnreadCountHandler,
   getNotificationsHandler,
@@ -11,8 +12,8 @@ import {
 
 export const notificationsRouter = Router();
 
-// All notification endpoints require authenticated and active user status
-notificationsRouter.use(authenticateToken, requireActiveUser);
+// All notification endpoints require authenticated active user status and resolved community tenant
+notificationsRouter.use(authenticateToken, requireActiveUser, requireTenantContext);
 
 // GET /api/v1/notifications/unread-count - Fast unread notification count badge
 notificationsRouter.get('/unread-count', getUnreadCountHandler);

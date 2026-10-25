@@ -41,7 +41,7 @@ export async function listGroupsHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const data = await listGroups(parsedQuery.data, currentUserId);
+    const data = await listGroups(parsedQuery.data, currentUserId, req.db);
     const response: ApiResponse<ListGroupsResponseData> = {
       success: true,
       data,
@@ -83,7 +83,7 @@ export async function getGroupBySlugHandler(req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    const data = await getGroupBySlug(slug, currentUserId);
+    const data = await getGroupBySlug(slug, currentUserId, req.db);
     const response: ApiResponse<GroupDetails> = {
       success: true,
       data,
@@ -136,7 +136,7 @@ export async function createGroupHandler(req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    const data = await createGroup(currentUserId, parsed.data);
+    const data = await createGroup(currentUserId, parsed.data, req.db);
     const response: ApiResponse<GroupDetails> = {
       success: true,
       message: 'Group created successfully.',
@@ -189,7 +189,7 @@ export async function joinGroupHandler(req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    const data = await joinGroup(id, currentUserId);
+    const data = await joinGroup(id, currentUserId, req.db);
     const response: ApiResponse = {
       success: true,
       message: data.message,
@@ -242,7 +242,7 @@ export async function leaveGroupHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const data = await leaveGroup(id, currentUserId);
+    const data = await leaveGroup(id, currentUserId, req.db);
     const response: ApiResponse = {
       success: true,
       message: data.message,
@@ -297,7 +297,7 @@ export async function getGroupPostsHandler(req: AuthenticatedRequest, res: Respo
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 10));
 
-    const data = await getGroupPosts(slug, currentUserId, page, limit);
+    const data = await getGroupPosts(slug, currentUserId, page, limit, req.db);
     const response: ApiResponse<FeedResponseData> = {
       success: true,
       data,
@@ -365,7 +365,7 @@ export async function updateGroupHandler(req: AuthenticatedRequest, res: Respons
     const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
 
-    const data = await updateGroup(id, currentUserId, currentUserRole, parsed.data, ipAddress, userAgent);
+    const data = await updateGroup(id, currentUserId, currentUserRole, parsed.data, ipAddress, userAgent, req.db);
     const response: ApiResponse<GroupDetails> = {
       success: true,
       message: 'Group settings updated successfully.',
@@ -440,7 +440,8 @@ export async function uploadGroupCoverHandler(req: AuthenticatedRequest, res: Re
       req.file.mimetype,
       req.file.originalname,
       ipAddress,
-      userAgent
+      userAgent,
+      req.db
     );
 
     const response: ApiResponse<{ coverUrl: string }> = {
@@ -518,7 +519,8 @@ export async function updateGroupMemberRoleHandler(req: AuthenticatedRequest, re
       currentUserId,
       currentUserRole,
       ipAddress,
-      userAgent
+      userAgent,
+      req.db
     );
 
     const response: ApiResponse<GroupMemberActionResult> = {
@@ -583,7 +585,8 @@ export async function removeGroupMemberHandler(req: AuthenticatedRequest, res: R
       currentUserId,
       currentUserRole,
       ipAddress,
-      userAgent
+      userAgent,
+      req.db
     );
 
     const response: ApiResponse<{ success: boolean; message: string }> = {

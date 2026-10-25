@@ -1,4 +1,4 @@
-import { prisma, PostType as DbPostType, UserStatus as DbUserStatus, MediaType as DbMediaType } from '@apnasamaj/database';
+import { prisma, PostType as DbPostType, UserStatus as DbUserStatus, MediaType as DbMediaType, PrismaClient } from '@apnasamaj/database';
 import {
   PostItem,
   FeedResponseData,
@@ -24,6 +24,13 @@ export class PostServiceError extends Error {
     this.name = 'PostServiceError';
     this.statusCode = statusCode;
   }
+}
+
+function assertDb(db?: PrismaClient): PrismaClient {
+  if (!db) {
+    throw new PostServiceError('Tenant database client is required for post operations.', 400);
+  }
+  return db;
 }
 
 export class PostNotFoundError extends PostServiceError {
@@ -212,9 +219,11 @@ const postIncludeAuthorAndMedia = {
  */
 export async function verifyActivePost(
   postId: string,
-  currentUserId?: string
+  currentUserId?: string,
+  db?: PrismaClient
 ): Promise<{ id: string; authorId: string; groupId: string | null }> {
-  const post = await prisma.post.findUnique({
+  const client = assertDb(db);
+  const post = await client.post.findUnique({
     where: { id: postId },
     select: {
       id: true,
@@ -242,7 +251,7 @@ export async function verifyActivePost(
       throw new PostNotFoundError('Post not found or is unavailable.');
     }
 
-    const membership = await prisma.groupMember.findUnique({
+    const membership = await client.groupMember.findUnique({
       where: {
         groupId_userId: {
           groupId: post.group.id,
@@ -288,12 +297,16 @@ export function canPinPost(role?: UserRole): boolean {
 export async function createPost(
   authorId: string,
   authorRoleOrInput: UserRole | CreatePostInput,
-  maybeInput?: CreatePostInput
+  maybeInputOrDb?: CreatePostInput | PrismaClient,
+  maybeDb?: PrismaClient
 ): Promise<PostItem> {
   const authorRole: UserRole =
     typeof authorRoleOrInput === 'string' ? authorRoleOrInput : UserRole.MEMBER;
   const input: CreatePostInput =
-    typeof authorRoleOrInput === 'string' ? maybeInput! : authorRoleOrInput;
+    typeof authorRoleOrInput === 'string' ? (maybeInputOrDb as CreatePostInput) : authorRoleOrInput;
+  const client: PrismaClient = assertDb(
+    typeof authorRoleOrInput === 'string' ? maybeDb : (maybeInputOrDb as PrismaClient)
+  );
 
   // Only SUPER_ADMIN, COMMUNITY_ADMIN, and MODERATOR can publish ANNOUNCEMENT posts
   if (input.type === PostType.ANNOUNCEMENT && !canPublishAnnouncement(authorRole)) {
@@ -311,7 +324,7 @@ export async function createPost(
   // Validate group if groupId is provided
   let targetGroupId: string | null = null;
   if (input.groupId) {
-    const group = await prisma.group.findUnique({
+    const group = await client.group.findUnique({
       where: { id: input.groupId },
       select: {
         id: true,
@@ -339,7 +352,7 @@ export async function createPost(
   }
 
   try {
-    const post = await prisma.$transaction(async (tx) => {
+    const post = await client.$transaction(async (tx) => {
       const newPost = await tx.post.create({
         data: {
           authorId,
@@ -402,8 +415,10 @@ export async function createPost(
  */
 export async function getCommunityFeed(
   query: FeedQueryInput,
-  currentUserId?: string
+  currentUserId?: string,
+  db?: PrismaClient
 ): Promise<FeedResponseData> {
+  const client = assertDb(db);
   const { page, limit, type, authorId } = query;
   const skip = (page - 1) * limit;
 
@@ -451,7 +466,7 @@ export async function getCommunityFeed(
 
   if (page === 1) {
     // For page 1, fetch posts first using PostgreSQL relation join strategy
-    posts = await (prisma.post.findMany as any)({
+    posts = await (client.post.findMany as any)({
       relationLoadStrategy: 'join',
       where,
       skip: 0,
@@ -465,13 +480,13 @@ export async function getCommunityFeed(
     if (posts.length < limit) {
       totalPosts = posts.length;
     } else {
-      totalPosts = await prisma.post.count({ where });
+      totalPosts = await client.post.count({ where });
     }
   } else {
     // For subsequent pages, run count and findMany concurrently to preserve exact pagination
     [totalPosts, posts] = await Promise.all([
-      prisma.post.count({ where }),
-      (prisma.post.findMany as any)({
+      client.post.count({ where }),
+      (client.post.findMany as any)({
         relationLoadStrategy: 'join',
         where,
         skip,
@@ -500,10 +515,15 @@ export async function getCommunityFeed(
 /**
  * Retrieves a single post by ID including attached media and interaction counts.
  */
-export async function getPostById(postId: string, currentUserId?: string): Promise<PostItem> {
-  await verifyActivePost(postId, currentUserId);
+export async function getPostById(
+  postId: string,
+  currentUserId?: string,
+  db?: PrismaClient
+): Promise<PostItem> {
+  const client = assertDb(db);
+  await verifyActivePost(postId, currentUserId, client);
 
-  const post = await prisma.post.findUnique({
+  const post = await client.post.findUnique({
     where: { id: postId },
     include: {
       ...postIncludeAuthorAndMedia,
@@ -538,9 +558,11 @@ export async function updatePost(
   postId: string,
   userId: string,
   userRole: UserRole,
-  input: UpdatePostInput
+  input: UpdatePostInput,
+  db?: PrismaClient
 ): Promise<PostItem> {
-  const activePost = await verifyActivePost(postId, userId);
+  const client = assertDb(db);
+  const activePost = await verifyActivePost(postId, userId, client);
 
   // Only author can edit post
   if (activePost.authorId !== userId) {
@@ -554,7 +576,7 @@ export async function updatePost(
     );
   }
 
-  const post = await prisma.post.findUnique({
+  const post = await client.post.findUnique({
     where: { id: postId },
     include: { media: true },
   });
@@ -579,7 +601,7 @@ export async function updatePost(
   // Track media to delete from storage if media was updated
   let removedStoragePaths: string[] = [];
 
-  const updated = await prisma.$transaction(async (tx) => {
+  const updated = await client.$transaction(async (tx) => {
     if (Object.keys(updateData).length > 0) {
       await tx.post.update({
         where: { id: postId },
@@ -652,8 +674,10 @@ export async function deletePost(
   userId: string,
   userRole: UserRole,
   ipAddress?: string,
-  userAgent?: string
+  userAgent?: string,
+  db?: PrismaClient
 ): Promise<void> {
+  const client = assertDb(db);
   const isModerator = [
     UserRole.SUPER_ADMIN,
     UserRole.COMMUNITY_ADMIN,
@@ -661,10 +685,10 @@ export async function deletePost(
   ].includes(userRole);
 
   if (!isModerator) {
-    await verifyActivePost(postId, userId);
+    await verifyActivePost(postId, userId, client);
   }
 
-  const post = await prisma.post.findUnique({
+  const post = await client.post.findUnique({
     where: { id: postId },
     include: { media: true },
   });
@@ -684,7 +708,7 @@ export async function deletePost(
     .map((m) => extractStoragePathFromUrl(m.url))
     .filter(Boolean) as string[];
 
-  await prisma.post.delete({
+  await client.post.delete({
     where: { id: postId },
   });
 
@@ -697,7 +721,7 @@ export async function deletePost(
 
   // If deleted by an administrative moderator on behalf of moderation, record in AuditLog
   if (!isOwner && isModerator) {
-    await prisma.auditLog.create({
+    await client.auditLog.create({
       data: {
         actorId: userId,
         action: 'MODERATION_DELETE_POST',
@@ -714,15 +738,18 @@ export async function deletePost(
     });
 
     // Notify author of moderation action
-    sendNotificationSafely({
-      recipientId: post.authorId,
-      actorId: userId,
-      type: 'POST_MODERATED',
-      title: 'Post Removed by Moderation',
-      message: 'Your post was removed by a community moderator for violating community guidelines.',
-      entityType: 'Post',
-      entityId: postId,
-    }).catch((err) =>
+    sendNotificationSafely(
+      {
+        recipientId: post.authorId,
+        actorId: userId,
+        type: 'POST_MODERATED',
+        title: 'Post Removed by Moderation',
+        message: 'Your post was removed by a community moderator for violating community guidelines.',
+        entityType: 'Post',
+        entityId: postId,
+      },
+      client
+    ).catch((err) =>
       console.warn('[Posts Service] Failed to send moderation notification:', err)
     );
   }
@@ -736,17 +763,19 @@ export async function deletePost(
 export async function pinPost(
   postId: string,
   userId: string,
-  userRole: UserRole
+  userRole: UserRole,
+  db?: PrismaClient
 ): Promise<PostItem> {
+  const client = assertDb(db);
   if (!canPinPost(userRole)) {
     throw new ForbiddenPostActionError(
       'Only community administrators and moderators can pin posts.'
     );
   }
 
-  await verifyActivePost(postId, userId);
+  await verifyActivePost(postId, userId, client);
 
-  const updated = await prisma.post.update({
+  const updated = await client.post.update({
     where: { id: postId },
     data: { isPinned: true },
     include: {
@@ -776,17 +805,19 @@ export async function pinPost(
 export async function unpinPost(
   postId: string,
   userId: string,
-  userRole: UserRole
+  userRole: UserRole,
+  db?: PrismaClient
 ): Promise<PostItem> {
+  const client = assertDb(db);
   if (!canPinPost(userRole)) {
     throw new ForbiddenPostActionError(
       'Only community administrators and moderators can unpin posts.'
     );
   }
 
-  await verifyActivePost(postId, userId);
+  await verifyActivePost(postId, userId, client);
 
-  const updated = await prisma.post.update({
+  const updated = await client.post.update({
     where: { id: postId },
     data: { isPinned: false },
     include: {
@@ -816,17 +847,22 @@ export async function unpinPost(
  * Likes a post. Atomic and idempotent via database unique constraint.
  * Repeated likes safely return the current state without duplicating.
  */
-export async function likePost(postId: string, userId: string): Promise<PostLikesResponseData> {
-  const post = await verifyActivePost(postId, userId);
+export async function likePost(
+  postId: string,
+  userId: string,
+  db?: PrismaClient
+): Promise<PostLikesResponseData> {
+  const client = assertDb(db);
+  const post = await verifyActivePost(postId, userId, client);
 
   // Check if like already existed before upserting (to avoid duplicate notifications for repeated likes)
-  const existingLike = await prisma.postLike.findUnique({
+  const existingLike = await client.postLike.findUnique({
     where: {
       postId_userId: { postId, userId },
     },
   });
 
-  await prisma.postLike.upsert({
+  await client.postLike.upsert({
     where: {
       postId_userId: { postId, userId },
     },
@@ -837,26 +873,29 @@ export async function likePost(postId: string, userId: string): Promise<PostLike
     update: {}, // No-op if already liked
   });
 
-  const likesCount = await prisma.postLike.count({ where: { postId } });
+  const likesCount = await client.postLike.count({ where: { postId } });
 
   // If this was a new like and not a self-like, notify the post author
   if (!existingLike && post.authorId !== userId) {
-    prisma.profile
+    client.profile
       .findUnique({
         where: { userId },
         select: { fullName: true },
       })
       .then((actorProfile) => {
         const actorName = actorProfile?.fullName || 'Someone';
-        sendNotificationSafely({
-          recipientId: post.authorId,
-          actorId: userId,
-          type: 'POST_LIKE',
-          title: 'New Like',
-          message: `${actorName} liked your post.`,
-          entityType: 'Post',
-          entityId: postId,
-        });
+        sendNotificationSafely(
+          {
+            recipientId: post.authorId,
+            actorId: userId,
+            type: 'POST_LIKE',
+            title: 'New Like',
+            message: `${actorName} liked your post.`,
+            entityType: 'Post',
+            entityId: postId,
+          },
+          client
+        );
       })
       .catch((err) =>
         console.warn('[Posts Service] Failed to send like notification:', err)
@@ -873,17 +912,22 @@ export async function likePost(postId: string, userId: string): Promise<PostLike
 /**
  * Unlikes a post. Idempotent deletion.
  */
-export async function unlikePost(postId: string, userId: string): Promise<PostLikesResponseData> {
-  await verifyActivePost(postId, userId);
+export async function unlikePost(
+  postId: string,
+  userId: string,
+  db?: PrismaClient
+): Promise<PostLikesResponseData> {
+  const client = assertDb(db);
+  await verifyActivePost(postId, userId, client);
 
-  await prisma.postLike.deleteMany({
+  await client.postLike.deleteMany({
     where: {
       postId,
       userId,
     },
   });
 
-  const likesCount = await prisma.postLike.count({ where: { postId } });
+  const likesCount = await client.postLike.count({ where: { postId } });
 
   return {
     postId,
@@ -897,14 +941,16 @@ export async function unlikePost(postId: string, userId: string): Promise<PostLi
  */
 export async function getPostLikes(
   postId: string,
-  currentUserId?: string
+  currentUserId?: string,
+  db?: PrismaClient
 ): Promise<PostLikesResponseData> {
-  await verifyActivePost(postId, currentUserId);
+  const client = assertDb(db);
+  await verifyActivePost(postId, currentUserId, client);
 
   const [likesCount, userLike] = await Promise.all([
-    prisma.postLike.count({ where: { postId } }),
+    client.postLike.count({ where: { postId } }),
     currentUserId
-      ? prisma.postLike.findUnique({
+      ? client.postLike.findUnique({
           where: { postId_userId: { postId, userId: currentUserId } },
         })
       : null,
@@ -929,12 +975,14 @@ export async function getPostLikes(
  */
 export async function recordPostView(
   postId: string,
-  userId: string
+  userId: string,
+  db?: PrismaClient
 ): Promise<PostViewsResponseData> {
-  await verifyActivePost(postId, userId);
+  const client = assertDb(db);
+  await verifyActivePost(postId, userId, client);
 
   try {
-    await prisma.postView.upsert({
+    await client.postView.upsert({
       where: {
         postId_userId: { postId, userId },
       },
@@ -945,7 +993,7 @@ export async function recordPostView(
       update: {}, // No-op if already viewed
     });
 
-    const count = await prisma.postView.count({
+    const count = await client.postView.count({
       where: { postId },
     });
 
@@ -974,14 +1022,16 @@ export async function recordPostView(
  */
 export async function getPostViews(
   postId: string,
-  userId: string
+  userId: string,
+  db?: PrismaClient
 ): Promise<PostViewsResponseData> {
-  await verifyActivePost(postId, userId);
+  const client = assertDb(db);
+  await verifyActivePost(postId, userId, client);
 
   try {
     const [count, userView] = await Promise.all([
-      prisma.postView.count({ where: { postId } }),
-      prisma.postView.findUnique({
+      client.postView.count({ where: { postId } }),
+      client.postView.findUnique({
         where: { postId_userId: { postId, userId } },
         select: { id: true },
       }),
@@ -1017,15 +1067,17 @@ export async function getPostComments(
   postId: string,
   page: number = 1,
   limit: number = 10,
-  currentUserId?: string
+  currentUserId?: string,
+  db?: PrismaClient
 ): Promise<CommentsResponseData> {
-  await verifyActivePost(postId, currentUserId);
+  const client = assertDb(db);
+  await verifyActivePost(postId, currentUserId, client);
 
   const skip = (page - 1) * limit;
 
   const [totalComments, comments] = await Promise.all([
-    prisma.comment.count({ where: { postId } }),
-    prisma.comment.findMany({
+    client.comment.count({ where: { postId } }),
+    client.comment.findMany({
       where: { postId },
       skip,
       take: limit,
@@ -1070,16 +1122,18 @@ export async function getPostComments(
 export async function createComment(
   postId: string,
   authorId: string,
-  content: string
+  content: string,
+  db?: PrismaClient
 ): Promise<CommentItem> {
-  const post = await verifyActivePost(postId, authorId);
+  const client = assertDb(db);
+  const post = await verifyActivePost(postId, authorId, client);
 
   const trimmed = content.trim();
   if (!trimmed) {
     throw new PostServiceError('Comment content cannot be empty.', 400);
   }
 
-  const comment = await prisma.comment.create({
+  const comment = await client.comment.create({
     data: {
       postId,
       authorId,
@@ -1107,15 +1161,18 @@ export async function createComment(
   if (post.authorId !== authorId) {
     const actorName = comment.author.profile?.fullName || 'Someone';
     const preview = trimmed.length > 50 ? `${trimmed.substring(0, 47)}...` : trimmed;
-    sendNotificationSafely({
-      recipientId: post.authorId,
-      actorId: authorId,
-      type: 'POST_COMMENT',
-      title: 'New Comment',
-      message: `${actorName} commented: "${preview}"`,
-      entityType: 'Post',
-      entityId: postId,
-    }).catch((err) =>
+    sendNotificationSafely(
+      {
+        recipientId: post.authorId,
+        actorId: authorId,
+        type: 'POST_COMMENT',
+        title: 'New Comment',
+        message: `${actorName} commented: "${preview}"`,
+        entityType: 'Post',
+        entityId: postId,
+      },
+      client
+    ).catch((err) =>
       console.warn('[Posts Service] Failed to send comment notification:', err)
     );
   }
@@ -1130,11 +1187,13 @@ export async function updateComment(
   postId: string,
   commentId: string,
   userId: string,
-  content: string
+  content: string,
+  db?: PrismaClient
 ): Promise<CommentItem> {
-  await verifyActivePost(postId, userId);
+  const client = assertDb(db);
+  await verifyActivePost(postId, userId, client);
 
-  const comment = await prisma.comment.findUnique({
+  const comment = await client.comment.findUnique({
     where: { id: commentId },
   });
 
@@ -1151,7 +1210,7 @@ export async function updateComment(
     throw new PostServiceError('Comment content cannot be empty.', 400);
   }
 
-  const updated = await prisma.comment.update({
+  const updated = await client.comment.update({
     where: { id: commentId },
     data: { content: trimmed },
     include: {
@@ -1185,8 +1244,10 @@ export async function deleteComment(
   userId: string,
   userRole: UserRole,
   ipAddress?: string,
-  userAgent?: string
+  userAgent?: string,
+  db?: PrismaClient
 ): Promise<void> {
+  const client = assertDb(db);
   const isModerator = [
     UserRole.SUPER_ADMIN,
     UserRole.COMMUNITY_ADMIN,
@@ -1194,10 +1255,10 @@ export async function deleteComment(
   ].includes(userRole);
 
   if (!isModerator) {
-    await verifyActivePost(postId, userId);
+    await verifyActivePost(postId, userId, client);
   }
 
-  const comment = await prisma.comment.findUnique({
+  const comment = await client.comment.findUnique({
     where: { id: commentId },
   });
 
@@ -1213,7 +1274,7 @@ export async function deleteComment(
 
   // Audit log for administrative moderation
   if (!isOwner && isModerator) {
-    await prisma.auditLog.create({
+    await client.auditLog.create({
       data: {
         actorId: userId,
         action: 'MODERATION_DELETE_COMMENT',
@@ -1231,7 +1292,8 @@ export async function deleteComment(
     });
   }
 
-  await prisma.comment.delete({
+  await client.comment.delete({
     where: { id: commentId },
   });
 }
+

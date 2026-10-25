@@ -1,8 +1,10 @@
 import http from 'http';
 import { Server, Socket } from 'socket.io';
 import { config } from '../../config/env';
+import { isCorsOriginAllowed } from '../../config/cors';
 import { verifyAccessToken } from '../auth/auth.tokens';
-import { prisma } from '@apnasamaj/database';
+import { tenantDbManager, PrismaClient } from '@apnasamaj/database';
+import { resolveCommunityFromRequest } from '@apnasamaj/validation';
 import { sendChatMessage, verifyGroupChatAccess } from './chat.service';
 import { ChatMessageItem, NewChatMessageEvent } from '@apnasamaj/shared-types';
 
@@ -16,6 +18,10 @@ export interface AuthenticatedSocketUser {
 export interface CustomSocket extends Socket {
   data: {
     user?: AuthenticatedSocketUser;
+    tenant?: {
+      slug: string;
+    };
+    db?: PrismaClient;
   };
 }
 
@@ -42,21 +48,131 @@ export function getIO(): Server {
   return ioInstance;
 }
 
+export async function chatSocketAuthMiddleware(
+  socket: CustomSocket,
+  next: (err?: any) => void
+): Promise<void> {
+  const isProduction = process.env.NODE_ENV === 'production';
+  try {
+    // 1. Resolve community tenant context from handshake
+    const origin = (socket.handshake.headers['origin'] as string | undefined) || undefined;
+    const referer = (socket.handshake.headers['referer'] as string | undefined) || undefined;
+    const hostHeader = (socket.handshake.headers['host'] as string | undefined) || undefined;
+    const hostname = hostHeader ? hostHeader.split(':')[0] : undefined;
+    const headerSlug =
+      (socket.handshake.headers['x-community-slug'] as string | undefined) ||
+      (socket.handshake.auth?.community as string | undefined) ||
+      undefined;
+    const querySlug = (socket.handshake.query?.community as string | undefined) || undefined;
+
+    const resolved = resolveCommunityFromRequest({
+      hostname,
+      origin,
+      referer,
+      headerSlug,
+      querySlug,
+      isProduction,
+    });
+
+    // Reject if there is a conflict between origin/host and client header
+    if (resolved.conflict) {
+      return next(
+        new Error(`Authentication failed: Tenant conflict (${resolved.conflict.message})`)
+      );
+    }
+
+    // Community tenant is mandatory for chat
+    if (!resolved.slug) {
+      return next(
+        new Error(
+          'Authentication failed: Community tenant context required. Please connect via a community origin or declare community.'
+        )
+      );
+    }
+
+    // Validate tenant exists in preconfigured trusted registry
+    if (!tenantDbManager.hasCommunity(resolved.slug)) {
+      return next(
+        new Error(
+          `Authentication failed: Unknown community tenant "${resolved.slug}". This community is not registered.`
+        )
+      );
+    }
+
+    const tenantDb = tenantDbManager.getClient(resolved.slug);
+
+    // 2. Extract Bearer token from handshake auth or headers
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
+
+    if (!token || typeof token !== 'string' || !token.trim()) {
+      return next(new Error('Authentication required: Missing access token.'));
+    }
+
+    // 3. Cryptographic signature and expiration check
+    let payload;
+    try {
+      payload = verifyAccessToken(token.trim());
+    } catch (err: unknown) {
+      const isExpired = (err as { name?: string })?.name === 'TokenExpiredError';
+      return next(
+        new Error(
+          isExpired ? 'Authentication failed: Token expired.' : 'Authentication failed: Invalid token.'
+        )
+      );
+    }
+
+    // 4. Database verification on the resolved tenant database: user exists and status is ACTIVE
+    const dbUser = await tenantDb.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        role: true,
+        status: true,
+        profile: {
+          select: {
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    if (!dbUser || dbUser.status !== 'ACTIVE') {
+      return next(
+        new Error(
+          'Authentication failed: Account not found or inactive in this community.'
+        )
+      );
+    }
+
+    // 5. Strictly bind user and tenant database context to socket instance (immutable for connection lifetime)
+    socket.data.user = {
+      id: dbUser.id,
+      role: dbUser.role,
+      fullName: dbUser.profile?.fullName || 'Community Member',
+      avatarUrl: dbUser.profile?.avatarUrl || null,
+    };
+    socket.data.tenant = {
+      slug: resolved.slug,
+    };
+    socket.data.db = tenantDb;
+
+    next();
+  } catch {
+    next(new Error('Authentication failed: Server error.'));
+  }
+}
+
 export function initChatSocketServer(httpServer: http.Server): Server {
-  const rawOrigins = [
+  const isProduction = process.env.NODE_ENV === 'production';
+  const extraAllowed = [
     config.clientUrl,
     config.adminUrl,
     process.env.CLIENT_URL,
     process.env.ADMIN_URL,
-    'https://apna-samaj.vercel.app',
-    'https://apna-samaj-admin.vercel.app',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174',
-  ];
-
-  const allowedOrigins = rawOrigins
+  ]
     .flatMap((o) => (o ? o.split(',') : []))
     .map((o) => o.trim().replace(/\/+$/, ''))
     .filter(Boolean);
@@ -64,15 +180,7 @@ export function initChatSocketServer(httpServer: http.Server): Server {
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, callback) => {
-        // Allow requests with no origin (e.g. mobile apps, curl)
-        if (!origin) return callback(null, true);
-        const cleanOrigin = origin.trim().replace(/\/+$/, '');
-        if (
-          allowedOrigins.includes(cleanOrigin) ||
-          cleanOrigin.endsWith('.vercel.app') ||
-          cleanOrigin.includes('localhost') ||
-          cleanOrigin.includes('127.0.0.1')
-        ) {
+        if (isCorsOriginAllowed(origin, { isProduction, extraAllowed })) {
           return callback(null, true);
         }
         return callback(new Error('Not allowed by CORS'));
@@ -87,73 +195,25 @@ export function initChatSocketServer(httpServer: http.Server): Server {
   ioInstance = io;
 
   // --------------------------------------------------------
-  // SOCKET AUTHENTICATION MIDDLEWARE
+  // SOCKET TENANT RESOLUTION & AUTHENTICATION MIDDLEWARE
   // --------------------------------------------------------
-  io.use(async (socket: CustomSocket, next) => {
-    try {
-      // 1. Extract Bearer token from handshake auth or headers
-      const token =
-        socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
-
-      if (!token || typeof token !== 'string' || !token.trim()) {
-        return next(new Error('Authentication required: Missing access token.'));
-      }
-
-      // 2. Cryptographic signature and expiration check
-      let payload;
-      try {
-        payload = verifyAccessToken(token.trim());
-      } catch (err: unknown) {
-        const isExpired = (err as { name?: string })?.name === 'TokenExpiredError';
-        return next(
-          new Error(isExpired ? 'Authentication failed: Token expired.' : 'Authentication failed: Invalid token.')
-        );
-      }
-
-      // 3. Database verification: user exists and status is ACTIVE
-      const dbUser = await prisma.user.findUnique({
-        where: { id: payload.sub },
-        select: {
-          id: true,
-          role: true,
-          status: true,
-          profile: {
-            select: {
-              fullName: true,
-              avatarUrl: true,
-            },
-          },
-        },
-      });
-
-      if (!dbUser || dbUser.status !== 'ACTIVE') {
-        return next(new Error('Authentication failed: Account not found or inactive.'));
-      }
-
-      // Attach strictly verified user session to socket
-      socket.data.user = {
-        id: dbUser.id,
-        role: dbUser.role,
-        fullName: dbUser.profile?.fullName || 'Community Member',
-        avatarUrl: dbUser.profile?.avatarUrl || null,
-      };
-
-      next();
-    } catch {
-      next(new Error('Authentication failed: Server error.'));
-    }
-  });
+  io.use(chatSocketAuthMiddleware);
 
   // --------------------------------------------------------
-  // SOCKET EVENT LIFECYCLE & HANDLERS
+  // SOCKET EVENT LIFECYCLE & HANDLERS (TENANT ISOLATED)
   // --------------------------------------------------------
   io.on('connection', (socket: CustomSocket) => {
     const user = socket.data.user;
-    if (!user) {
+    const tenant = socket.data.tenant;
+    const db = socket.data.db;
+
+    if (!user || !tenant || !db) {
       socket.disconnect(true);
       return;
     }
+
+    const tenantSlug = tenant.slug;
+    const getTenantRoomName = (groupId: string) => `${tenantSlug}:group:${groupId}`;
 
     // 1. Join Group Chat Room
     socket.on(
@@ -169,9 +229,9 @@ export function initChatSocketServer(httpServer: http.Server): Server {
             return;
           }
 
-          // Authorize access against database
-          const { group } = await verifyGroupChatAccess(groupId, user.id, false);
-          const roomName = `group:${group.id}`;
+          // Authorize access against tenant database
+          const { group } = await verifyGroupChatAccess(groupId, user.id, false, db);
+          const roomName = getTenantRoomName(group.id);
           socket.join(roomName);
 
           callback?.({ success: true });
@@ -185,7 +245,7 @@ export function initChatSocketServer(httpServer: http.Server): Server {
     // 2. Leave Group Chat Room
     socket.on('leave_group', (payload: { groupId: string }) => {
       if (payload?.groupId) {
-        socket.leave(`group:${payload.groupId}`);
+        socket.leave(getTenantRoomName(payload.groupId));
       }
     });
 
@@ -212,15 +272,16 @@ export function initChatSocketServer(httpServer: http.Server): Server {
             return;
           }
 
-          // Server-side authorization & database persistence (runs before broadcast)
-          const savedMessage = await sendChatMessage(groupId, user.id, content, tempId);
+          // Server-side authorization & database persistence on tenant db
+          const savedMessage = await sendChatMessage(groupId, user.id, content, tempId, db);
 
-          // Broadcast to all sockets in the group room
+          // Broadcast strictly to sockets in the tenant's group room
           const eventPayload: NewChatMessageEvent = {
             message: savedMessage,
             tempId,
           };
-          io.to(`group:${savedMessage.groupId}`).emit('new_message', eventPayload);
+          const roomName = getTenantRoomName(savedMessage.groupId);
+          io.to(roomName).emit('new_message', eventPayload);
 
           // Acknowledge sender callback
           callback?.({ success: true, message: savedMessage });
@@ -234,7 +295,7 @@ export function initChatSocketServer(httpServer: http.Server): Server {
     // 4. Typing Indicators
     socket.on('typing_start', (payload: { groupId: string }) => {
       if (payload?.groupId) {
-        socket.to(`group:${payload.groupId}`).emit('user_typing', {
+        socket.to(getTenantRoomName(payload.groupId)).emit('user_typing', {
           groupId: payload.groupId,
           userId: user.id,
           userName: user.fullName,
@@ -245,7 +306,7 @@ export function initChatSocketServer(httpServer: http.Server): Server {
 
     socket.on('typing_stop', (payload: { groupId: string }) => {
       if (payload?.groupId) {
-        socket.to(`group:${payload.groupId}`).emit('user_typing', {
+        socket.to(getTenantRoomName(payload.groupId)).emit('user_typing', {
           groupId: payload.groupId,
           userId: user.id,
           userName: user.fullName,

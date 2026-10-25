@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticateToken } from '../../middleware/authenticate';
 import { requireActiveUser } from '../../middleware/authorize';
+import { requireTenantContext } from '../../middleware/tenant.middleware';
 import { singleImageUpload } from '../../middleware/upload.middleware';
 import {
   listGroupsHandler,
@@ -18,8 +19,8 @@ import { getGroupMessagesHandler, sendGroupMessageHandler } from '../chat/chat.c
 
 export const groupsRouter = Router();
 
-// All group interactions require valid authenticated ACTIVE member status
-groupsRouter.use(authenticateToken, requireActiveUser);
+// All group interactions require valid authenticated ACTIVE member status and tenant context
+groupsRouter.use(authenticateToken, requireActiveUser, requireTenantContext);
 
 // GET /api/v1/groups - List community groups with search & pagination
 groupsRouter.get('/', listGroupsHandler);

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticateToken } from '../../middleware/authenticate';
 import { requireActiveUser } from '../../middleware/authorize';
+import { requireTenantContext } from '../../middleware/tenant.middleware';
 import { singleImageUpload } from '../../middleware/upload.middleware';
 import {
   getMyProfileHandler,
@@ -19,8 +20,8 @@ import {
 
 export const matrimonialRouter = Router();
 
-// All matrimonial endpoints strictly require authentication and ACTIVE account status
-matrimonialRouter.use(authenticateToken, requireActiveUser);
+// All matrimonial endpoints strictly require authentication, ACTIVE account status, and tenant context
+matrimonialRouter.use(authenticateToken, requireActiveUser, requireTenantContext);
 
 // ---------------------------------------------------------------------------
 // 1. Own Profile & Photos Management (/me)

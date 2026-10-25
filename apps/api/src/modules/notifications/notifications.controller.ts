@@ -37,7 +37,7 @@ export async function getUnreadCountHandler(
       return;
     }
 
-    const data = await getUnreadCount(userId);
+    const data = await getUnreadCount(userId, req.db);
     const response: ApiResponse<UnreadCountResponse> = {
       success: true,
       data,
@@ -96,7 +96,7 @@ export async function getNotificationsHandler(
       return;
     }
 
-    const data = await getNotifications(userId, parsedQuery.data);
+    const data = await getNotifications(userId, parsedQuery.data, req.db);
     const response: ApiResponse<NotificationsResponseData> = {
       success: true,
       data,
@@ -154,7 +154,7 @@ export async function markAsReadHandler(
       return;
     }
 
-    const data = await markAsRead(parsedParams.data.id, userId);
+    const data = await markAsRead(parsedParams.data.id, userId, req.db);
     const response: ApiResponse<MarkNotificationReadResponse> = {
       success: true,
       message: 'Notification marked as read.',
@@ -212,7 +212,7 @@ export async function markAllAsReadHandler(
       return;
     }
 
-    const data = await markAllAsRead(userId);
+    const data = await markAllAsRead(userId, req.db);
     const response: ApiResponse<MarkAllNotificationsReadResponse> = {
       success: true,
       message: 'All notifications marked as read.',
@@ -271,7 +271,7 @@ export async function deleteNotificationHandler(
       return;
     }
 
-    await deleteNotification(parsedParams.data.id, userId);
+    await deleteNotification(parsedParams.data.id, userId, req.db);
     const response: ApiResponse = {
       success: true,
       message: 'Notification removed successfully.',

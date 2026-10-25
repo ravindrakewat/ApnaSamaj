@@ -53,7 +53,7 @@ export async function getGroupMessagesHandler(
       return;
     }
 
-    const data = await getGroupChatHistory(parsedParams.data.id, userId, parsedQuery.data);
+    const data = await getGroupChatHistory(parsedParams.data.id, userId, parsedQuery.data, req.db);
 
     const response: ApiResponse<ChatMessagesResponseData> = {
       success: true,
@@ -153,13 +153,16 @@ export async function sendGroupMessageHandler(
       parsedParams.data.id,
       userId,
       parsedBody.data.content,
-      parsedBody.data.tempId
+      parsedBody.data.tempId,
+      req.db
     );
 
-    // Broadcast through Socket.IO if connected
+    // Broadcast through Socket.IO if connected, scoped to tenant
     try {
       const io = getIO();
-      io.to(`group:${message.groupId}`).emit('new_message', {
+      const tenantSlug = req.tenant?.slug;
+      const roomName = tenantSlug ? `${tenantSlug}:group:${message.groupId}` : `group:${message.groupId}`;
+      io.to(roomName).emit('new_message', {
         message,
         tempId: parsedBody.data.tempId,
       });

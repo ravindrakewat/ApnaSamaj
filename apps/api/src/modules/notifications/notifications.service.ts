@@ -1,4 +1,4 @@
-import { prisma, NotificationType as DbNotificationType, Prisma } from '@apnasamaj/database';
+import { NotificationType as DbNotificationType, Prisma, PrismaClient } from '@apnasamaj/database';
 import {
   NotificationType,
   NotificationItem,
@@ -22,6 +22,13 @@ export class NotificationNotFoundError extends NotificationServiceError {
   constructor(message: string = 'Notification not found.') {
     super(message, 404);
   }
+}
+
+function assertDb(db?: PrismaClient): PrismaClient {
+  if (!db) {
+    throw new NotificationServiceError('Tenant database context is required.', 400);
+  }
+  return db;
 }
 
 export interface CreateNotificationParams {
@@ -78,8 +85,12 @@ function mapToNotificationItem(item: RawNotificationWithActor): NotificationItem
 /**
  * Retrieves the count of unread notifications for a user.
  */
-export async function getUnreadCount(userId: string): Promise<UnreadCountResponse> {
-  const unreadCount = await prisma.notification.count({
+export async function getUnreadCount(
+  userId: string,
+  db?: PrismaClient
+): Promise<UnreadCountResponse> {
+  const client = assertDb(db);
+  const unreadCount = await client.notification.count({
     where: {
       recipientId: userId,
       isRead: false,
@@ -94,8 +105,10 @@ export async function getUnreadCount(userId: string): Promise<UnreadCountRespons
  */
 export async function getNotifications(
   userId: string,
-  query: NotificationsQueryInput
+  query: NotificationsQueryInput,
+  db?: PrismaClient
 ): Promise<NotificationsResponseData> {
+  const client = assertDb(db);
   const { page = 1, limit = 20, unreadOnly } = query;
   const skip = (page - 1) * limit;
 
@@ -105,14 +118,14 @@ export async function getNotifications(
   };
 
   const [total, unreadCount, rawNotifications] = await Promise.all([
-    prisma.notification.count({ where }),
-    prisma.notification.count({
+    client.notification.count({ where }),
+    client.notification.count({
       where: {
         recipientId: userId,
         isRead: false,
       },
     }),
-    prisma.notification.findMany({
+    client.notification.findMany({
       where,
       skip,
       take: limit,
@@ -143,9 +156,11 @@ export async function getNotifications(
  */
 export async function markAsRead(
   id: string,
-  userId: string
+  userId: string,
+  db?: PrismaClient
 ): Promise<MarkNotificationReadResponse> {
-  const notification = await prisma.notification.findUnique({
+  const client = assertDb(db);
+  const notification = await client.notification.findUnique({
     where: { id },
     select: {
       id: true,
@@ -168,7 +183,7 @@ export async function markAsRead(
   }
 
   const now = new Date();
-  const updated = await prisma.notification.update({
+  const updated = await client.notification.update({
     where: { id },
     data: {
       isRead: true,
@@ -187,10 +202,12 @@ export async function markAsRead(
  * Marks all unread notifications as read for the authenticated user.
  */
 export async function markAllAsRead(
-  userId: string
+  userId: string,
+  db?: PrismaClient
 ): Promise<MarkAllNotificationsReadResponse> {
+  const client = assertDb(db);
   const now = new Date();
-  const result = await prisma.notification.updateMany({
+  const result = await client.notification.updateMany({
     where: {
       recipientId: userId,
       isRead: false,
@@ -212,9 +229,11 @@ export async function markAllAsRead(
  */
 export async function deleteNotification(
   id: string,
-  userId: string
+  userId: string,
+  db?: PrismaClient
 ): Promise<void> {
-  const notification = await prisma.notification.findUnique({
+  const client = assertDb(db);
+  const notification = await client.notification.findUnique({
     where: { id },
     select: {
       id: true,
@@ -226,7 +245,7 @@ export async function deleteNotification(
     throw new NotificationNotFoundError();
   }
 
-  await prisma.notification.delete({
+  await client.notification.delete({
     where: { id },
   });
 }
@@ -237,15 +256,47 @@ export async function deleteNotification(
  * Catches and logs all errors so notification failures never disrupt primary operations.
  */
 export async function sendNotificationSafely(
-  params: CreateNotificationParams
+  params: CreateNotificationParams,
+  db?: PrismaClient
 ): Promise<void> {
   // Suppress self-action notifications
   if (params.actorId && params.recipientId === params.actorId) {
     return;
   }
 
+  if (!db) {
+    console.warn('[Notification Service] Safe delivery skipped: missing tenant database client.', {
+      type: params.type,
+      recipientId: params.recipientId,
+    });
+    return;
+  }
+
   try {
-    await prisma.notification.create({
+    // Deduplication safeguard for POST_LIKE:
+    // Skip if an unread POST_LIKE notification from the same actor for the same post exists within the last 24 hours.
+    if (params.type === 'POST_LIKE' && params.actorId && params.entityId) {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const existingUnreadLikeNotification = await db.notification.findFirst({
+        where: {
+          recipientId: params.recipientId,
+          actorId: params.actorId,
+          type: 'POST_LIKE' as unknown as DbNotificationType,
+          entityId: params.entityId,
+          isRead: false,
+          createdAt: {
+            gte: twentyFourHoursAgo,
+          },
+        },
+        select: { id: true },
+      });
+
+      if (existingUnreadLikeNotification) {
+        return; // Suppress duplicate unread like notification
+      }
+    }
+
+    await db.notification.create({
       data: {
         recipientId: params.recipientId,
         actorId: params.actorId || null,

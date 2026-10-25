@@ -1,4 +1,4 @@
-import { prisma, Prisma } from '@apnasamaj/database';
+import { PrismaClient, Prisma } from '@apnasamaj/database';
 import {
   OwnMatrimonialProfile,
   MatrimonialPhotoItem,
@@ -63,6 +63,13 @@ export class MatrimonialValidationError extends MatrimonialServiceError {
     this.name = 'MatrimonialValidationError';
     this.errors = errors;
   }
+}
+
+function assertDb(db?: PrismaClient): PrismaClient {
+  if (!db) {
+    throw new MatrimonialServiceError('Tenant database connection is required for matrimonial operations.', 400);
+  }
+  return db;
 }
 
 /**
@@ -180,9 +187,13 @@ function mapToOwnMatrimonialProfile(raw: RawMatrimonialProfile): OwnMatrimonialP
  * Retrieves the current authenticated user's own matrimonial profile.
  * Returns null if the user has not created a matrimonial profile yet.
  */
-export async function getMyMatrimonialProfile(userId: string): Promise<OwnMatrimonialProfile | null> {
+export async function getMyMatrimonialProfile(
+  userId: string,
+  db?: PrismaClient
+): Promise<OwnMatrimonialProfile | null> {
+  const client = assertDb(db);
   try {
-    const raw = await prisma.matrimonialProfile.findUnique({
+    const raw = await client.matrimonialProfile.findUnique({
       where: { userId },
       include: matrimonialProfileInclude,
     });
@@ -204,11 +215,13 @@ export async function getMyMatrimonialProfile(userId: string): Promise<OwnMatrim
  */
 export async function upsertMyMatrimonialProfile(
   userId: string,
-  input: UpsertMatrimonialProfileInput
+  input: UpsertMatrimonialProfileInput,
+  db?: PrismaClient
 ): Promise<OwnMatrimonialProfile> {
+  const client = assertDb(db);
   try {
     // Check if profile already exists
-    const existing = await prisma.matrimonialProfile.findUnique({
+    const existing = await client.matrimonialProfile.findUnique({
       where: { userId },
       select: { id: true, status: true },
     });
@@ -262,7 +275,7 @@ export async function upsertMyMatrimonialProfile(
           : {}),
       };
 
-      saved = await prisma.matrimonialProfile.update({
+      saved = await client.matrimonialProfile.update({
         where: { userId },
         data: updateData,
         include: matrimonialProfileInclude,
@@ -313,7 +326,7 @@ export async function upsertMyMatrimonialProfile(
         partnerExpectations: input.partnerExpectations,
       };
 
-      saved = await prisma.matrimonialProfile.create({
+      saved = await client.matrimonialProfile.create({
         data: createData,
         include: matrimonialProfileInclude,
       });
@@ -334,10 +347,12 @@ export async function upsertMyMatrimonialProfile(
  */
 export async function upsertMyPartnerPreferences(
   userId: string,
-  input: UpdatePartnerPreferenceInput
+  input: UpdatePartnerPreferenceInput,
+  db?: PrismaClient
 ): Promise<MatrimonialPartnerPreferenceItem> {
+  const client = assertDb(db);
   try {
-    const profile = await prisma.matrimonialProfile.findUnique({
+    const profile = await client.matrimonialProfile.findUnique({
       where: { userId },
       select: { id: true },
     });
@@ -346,7 +361,7 @@ export async function upsertMyPartnerPreferences(
       throw new MatrimonialNotFoundError('Please create your matrimonial profile before setting partner preferences.');
     }
 
-    const saved = await prisma.matrimonialPartnerPreference.upsert({
+    const saved = await client.matrimonialPartnerPreference.upsert({
       where: { profileId: profile.id },
       create: {
         profileId: profile.id,
@@ -419,10 +434,12 @@ export async function upsertMyPartnerPreferences(
  */
 export async function submitMyMatrimonialProfile(
   userId: string,
-  meta?: { ipAddress?: string; userAgent?: string }
+  meta?: { ipAddress?: string; userAgent?: string },
+  db?: PrismaClient
 ): Promise<OwnMatrimonialProfile> {
+  const client = assertDb(db);
   try {
-    const profile = await prisma.matrimonialProfile.findUnique({
+    const profile = await client.matrimonialProfile.findUnique({
       where: { userId },
       include: matrimonialProfileInclude,
     });
@@ -489,7 +506,7 @@ export async function submitMyMatrimonialProfile(
     }
 
     // Atomic status transition and audit log recording
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await client.$transaction(async (tx) => {
       const updateResult = await tx.matrimonialProfile.updateMany({
         where: {
           id: profile.id,
@@ -549,9 +566,11 @@ export async function uploadMyMatrimonialPhoto(
   fileBuffer: Buffer,
   claimedMime?: string,
   originalName: string = 'matrimonial.jpg',
-  isPrimary?: boolean
+  isPrimary?: boolean,
+  db?: PrismaClient
 ): Promise<MatrimonialPhotoItem> {
-  const profile = await prisma.matrimonialProfile.findUnique({
+  const client = assertDb(db);
+  const profile = await client.matrimonialProfile.findUnique({
     where: { userId },
     select: {
       id: true,
@@ -578,7 +597,7 @@ export async function uploadMyMatrimonialPhoto(
   try {
     // If setting as primary, unset previous primary
     if (shouldBePrimary && profile.photos.some((p) => p.isPrimary)) {
-      await prisma.matrimonialPhoto.updateMany({
+      await client.matrimonialPhoto.updateMany({
         where: { profileId: profile.id, isPrimary: true },
         data: { isPrimary: false },
       });
@@ -586,7 +605,7 @@ export async function uploadMyMatrimonialPhoto(
 
     const nextOrder = profile.photos.length;
 
-    const photo = await prisma.matrimonialPhoto.create({
+    const photo = await client.matrimonialPhoto.create({
       data: {
         profileId: profile.id,
         url: uploadResult.url,
@@ -623,9 +642,14 @@ export async function uploadMyMatrimonialPhoto(
  * Deletes a matrimonial photo belonging to the authenticated member.
  * If the primary photo is deleted, promotes the next available photo to primary.
  */
-export async function deleteMyMatrimonialPhoto(userId: string, photoId: string): Promise<void> {
+export async function deleteMyMatrimonialPhoto(
+  userId: string,
+  photoId: string,
+  db?: PrismaClient
+): Promise<void> {
+  const client = assertDb(db);
   try {
-    const photo = await prisma.matrimonialPhoto.findUnique({
+    const photo = await client.matrimonialPhoto.findUnique({
       where: { id: photoId },
       include: {
         profile: {
@@ -642,19 +666,19 @@ export async function deleteMyMatrimonialPhoto(userId: string, photoId: string):
     const profileId = photo.profileId;
 
     // Delete photo from database
-    await prisma.matrimonialPhoto.delete({
+    await client.matrimonialPhoto.delete({
       where: { id: photoId },
     });
 
     // If deleted photo was primary, promote oldest remaining photo to primary
     if (wasPrimary) {
-      const remainingPhoto = await prisma.matrimonialPhoto.findFirst({
+      const remainingPhoto = await client.matrimonialPhoto.findFirst({
         where: { profileId },
         orderBy: { order: 'asc' },
       });
 
       if (remainingPhoto) {
-        await prisma.matrimonialPhoto.update({
+        await client.matrimonialPhoto.update({
           where: { id: remainingPhoto.id },
           data: { isPrimary: true },
         });
@@ -701,8 +725,10 @@ function calculateAge(dob: Date | null | undefined): number | null {
  */
 export async function listDiscoveryProfiles(
   currentUserId: string,
-  query: ListMatrimonialProfilesQueryInput
+  query: ListMatrimonialProfilesQueryInput,
+  db?: PrismaClient
 ): Promise<PaginatedMatrimonialProfilesResponse> {
+  const client = assertDb(db);
   const {
     gender,
     minAge,
@@ -810,8 +836,8 @@ export async function listDiscoveryProfiles(
 
   try {
     const [total, rawProfiles] = await Promise.all([
-      prisma.matrimonialProfile.count({ where }),
-      prisma.matrimonialProfile.findMany({
+      client.matrimonialProfile.count({ where }),
+      client.matrimonialProfile.findMany({
         where,
         skip,
         take: limit,
@@ -846,7 +872,7 @@ export async function listDiscoveryProfiles(
     const targetUserIds = rawProfiles.map((p) => p.user.id);
     const interests =
       targetUserIds.length > 0
-        ? await prisma.matrimonialInterest.findMany({
+        ? await client.matrimonialInterest.findMany({
             where: {
               OR: [
                 { senderId: currentUserId, receiverId: { in: targetUserIds } },
@@ -921,10 +947,12 @@ export async function listDiscoveryProfiles(
  */
 export async function getDiscoveryProfileById(
   currentUserId: string,
-  profileId: string
+  profileId: string,
+  db?: PrismaClient
 ): Promise<PublicMatrimonialProfileDetail> {
+  const client = assertDb(db);
   try {
-    const raw = await prisma.matrimonialProfile.findUnique({
+    const raw = await client.matrimonialProfile.findUnique({
       where: { id: profileId },
       include: {
         user: {
@@ -973,7 +1001,7 @@ export async function getDiscoveryProfileById(
         isMutualAccepted: true,
       };
     } else {
-      const interest = await prisma.matrimonialInterest.findFirst({
+      const interest = await client.matrimonialInterest.findFirst({
         where: {
           OR: [
             { senderId: currentUserId, receiverId: raw.userId },
@@ -1097,8 +1125,10 @@ export async function getDiscoveryProfileById(
  */
 export async function sendInterest(
   currentUserId: string,
-  input: SendMatrimonialInterestInput
+  input: SendMatrimonialInterestInput,
+  db?: PrismaClient
 ): Promise<MatrimonialInterestItem> {
+  const client = assertDb(db);
   const { receiverId, message } = input;
 
   if (receiverId === currentUserId) {
@@ -1107,7 +1137,7 @@ export async function sendInterest(
 
   try {
     // 1. Verify receiver exists, is ACTIVE, and has an APPROVED matrimonial profile
-    const receiver = await prisma.user.findUnique({
+    const receiver = await client.user.findUnique({
       where: { id: receiverId },
       select: {
         id: true,
@@ -1128,7 +1158,7 @@ export async function sendInterest(
     }
 
     // 2. Verify sender has an APPROVED matrimonial profile
-    const senderProfile = await prisma.matrimonialProfile.findUnique({
+    const senderProfile = await client.matrimonialProfile.findUnique({
       where: { userId: currentUserId },
       select: { id: true, status: true },
     });
@@ -1141,7 +1171,7 @@ export async function sendInterest(
     }
 
     // 3. Check for existing interest in either direction
-    const existing = await prisma.matrimonialInterest.findFirst({
+    const existing = await client.matrimonialInterest.findFirst({
       where: {
         OR: [
           { senderId: currentUserId, receiverId },
@@ -1178,7 +1208,7 @@ export async function sendInterest(
     }
 
     // 4. Create the interest
-    const interest = await prisma.matrimonialInterest.create({
+    const interest = await client.matrimonialInterest.create({
       data: {
         senderId: currentUserId,
         receiverId,
@@ -1188,15 +1218,18 @@ export async function sendInterest(
     });
 
     // 5. Side-effect: Dispatch in-app notification after successful DB commit
-    sendNotificationSafely({
-      recipientId: receiverId,
-      actorId: currentUserId,
-      type: 'MATRIMONIAL_INTEREST_RECEIVED',
-      title: 'New Matrimonial Interest',
-      message: 'A member has expressed interest in your matrimonial profile.',
-      entityType: 'MATRIMONIAL_INTEREST',
-      entityId: interest.id,
-    });
+    sendNotificationSafely(
+      {
+        recipientId: receiverId,
+        actorId: currentUserId,
+        type: 'MATRIMONIAL_INTEREST_RECEIVED',
+        title: 'New Matrimonial Interest',
+        message: 'A member has expressed interest in your matrimonial profile.',
+        entityType: 'MATRIMONIAL_INTEREST',
+        entityId: interest.id,
+      },
+      client
+    );
 
     return {
       id: interest.id,
@@ -1227,16 +1260,18 @@ export async function sendInterest(
 export async function listReceivedInterests(
   currentUserId: string,
   page: number = 1,
-  limit: number = 20
+  limit: number = 20,
+  db?: PrismaClient
 ): Promise<PaginatedMatrimonialInterestsResponse> {
+  const client = assertDb(db);
   const skip = (page - 1) * limit;
 
   try {
     const [total, items] = await Promise.all([
-      prisma.matrimonialInterest.count({
+      client.matrimonialInterest.count({
         where: { receiverId: currentUserId },
       }),
-      prisma.matrimonialInterest.findMany({
+      client.matrimonialInterest.findMany({
         where: { receiverId: currentUserId },
         skip,
         take: limit,
@@ -1353,16 +1388,18 @@ export async function listReceivedInterests(
 export async function listSentInterests(
   currentUserId: string,
   page: number = 1,
-  limit: number = 20
+  limit: number = 20,
+  db?: PrismaClient
 ): Promise<PaginatedMatrimonialInterestsResponse> {
+  const client = assertDb(db);
   const skip = (page - 1) * limit;
 
   try {
     const [total, items] = await Promise.all([
-      prisma.matrimonialInterest.count({
+      client.matrimonialInterest.count({
         where: { senderId: currentUserId },
       }),
-      prisma.matrimonialInterest.findMany({
+      client.matrimonialInterest.findMany({
         where: { senderId: currentUserId },
         skip,
         take: limit,
@@ -1484,12 +1521,14 @@ export async function listSentInterests(
 export async function respondToInterest(
   currentUserId: string,
   interestId: string,
-  input: RespondMatrimonialInterestInput
+  input: RespondMatrimonialInterestInput,
+  db?: PrismaClient
 ): Promise<MatrimonialInterestItem> {
+  const client = assertDb(db);
   const { status } = input;
 
   try {
-    const interest = await prisma.matrimonialInterest.findUnique({
+    const interest = await client.matrimonialInterest.findUnique({
       where: { id: interestId },
     });
 
@@ -1527,7 +1566,7 @@ export async function respondToInterest(
       throw new MatrimonialServiceError(`Invalid status transition to ${status}.`, 400);
     }
 
-    const updated = await prisma.matrimonialInterest.update({
+    const updated = await client.matrimonialInterest.update({
       where: { id: interestId },
       data: {
         status,
@@ -1537,15 +1576,18 @@ export async function respondToInterest(
 
     // Notify sender when interest request is accepted
     if (status === 'ACCEPTED') {
-      sendNotificationSafely({
-        recipientId: interest.senderId,
-        actorId: currentUserId,
-        type: 'MATRIMONIAL_INTEREST_ACCEPTED',
-        title: 'Matrimonial Interest Accepted',
-        message: 'Your matrimonial interest request was accepted! Contact details are now unlocked.',
-        entityType: 'MATRIMONIAL_INTEREST',
-        entityId: interest.id,
-      });
+      sendNotificationSafely(
+        {
+          recipientId: interest.senderId,
+          actorId: currentUserId,
+          type: 'MATRIMONIAL_INTEREST_ACCEPTED',
+          title: 'Matrimonial Interest Accepted',
+          message: 'Your matrimonial interest request was accepted! Contact details are now unlocked.',
+          entityType: 'MATRIMONIAL_INTEREST',
+          entityId: interest.id,
+        },
+        client
+      );
     }
 
     return {

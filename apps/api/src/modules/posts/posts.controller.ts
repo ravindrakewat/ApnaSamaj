@@ -68,7 +68,7 @@ export async function createPostHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const post = await createPost(userId, userRole, parsed.data);
+    const post = await createPost(userId, userRole, parsed.data, req.db);
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -113,7 +113,7 @@ export async function getFeedHandler(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const feed = await getCommunityFeed(parsed.data, req.user?.id);
+    const feed = await getCommunityFeed(parsed.data, req.user?.id, req.db);
 
     const response: ApiResponse<FeedResponseData> = {
       success: true,
@@ -156,7 +156,7 @@ export async function getPostHandler(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const post = await getPostById(parsedParam.data.id, req.user?.id);
+    const post = await getPostById(parsedParam.data.id, req.user?.id, req.db);
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -223,7 +223,7 @@ export async function updatePostHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const updated = await updatePost(parsedParam.data.id, userId, userRole, parsedBody.data);
+    const updated = await updatePost(parsedParam.data.id, userId, userRole, parsedBody.data, req.db);
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -284,7 +284,8 @@ export async function deletePostHandler(req: AuthenticatedRequest, res: Response
       userId,
       userRole,
       req.ip,
-      req.headers['user-agent']
+      req.headers['user-agent'],
+      req.db
     );
 
     const response: ApiResponse<{ message: string }> = {
@@ -341,7 +342,7 @@ export async function pinPostHandler(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const updated = await pinPost(parsedParam.data.id, userId, userRole);
+    const updated = await pinPost(parsedParam.data.id, userId, userRole, req.db);
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -397,7 +398,7 @@ export async function unpinPostHandler(req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    const updated = await unpinPost(parsedParam.data.id, userId, userRole);
+    const updated = await unpinPost(parsedParam.data.id, userId, userRole, req.db);
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -456,7 +457,7 @@ export async function likePostHandler(req: AuthenticatedRequest, res: Response):
       return;
     }
 
-    const result = await likePost(parsedParam.data.id, userId);
+    const result = await likePost(parsedParam.data.id, userId, req.db);
 
     const response: ApiResponse<PostLikesResponseData> = {
       success: true,
@@ -511,7 +512,7 @@ export async function unlikePostHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const result = await unlikePost(parsedParam.data.id, userId);
+    const result = await unlikePost(parsedParam.data.id, userId, req.db);
 
     const response: ApiResponse<PostLikesResponseData> = {
       success: true,
@@ -555,7 +556,7 @@ export async function getPostLikesHandler(req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    const result = await getPostLikes(parsedParam.data.id, req.user?.id);
+    const result = await getPostLikes(parsedParam.data.id, req.user?.id, req.db);
 
     const response: ApiResponse<PostLikesResponseData> = {
       success: true,
@@ -613,7 +614,7 @@ export async function recordPostViewHandler(req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    const result = await recordPostView(parsedParam.data.id, userId);
+    const result = await recordPostView(parsedParam.data.id, userId, req.db);
 
     const response: ApiResponse<PostViewsResponseData> = {
       success: true,
@@ -668,7 +669,7 @@ export async function getPostViewsHandler(req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    const result = await getPostViews(parsedParam.data.id, userId);
+    const result = await getPostViews(parsedParam.data.id, userId, req.db);
 
     const response: ApiResponse<PostViewsResponseData> = {
       success: true,
@@ -731,7 +732,8 @@ export async function getCommentsHandler(req: AuthenticatedRequest, res: Respons
       parsedParam.data.id,
       parsedQuery.data.page,
       parsedQuery.data.limit,
-      req.user?.id
+      req.user?.id,
+      req.db
     );
 
     const response: ApiResponse<CommentsResponseData> = {
@@ -801,7 +803,8 @@ export async function createCommentHandler(req: AuthenticatedRequest, res: Respo
     const comment = await createComment(
       parsedParam.data.id,
       userId,
-      parsedBody.data.content
+      parsedBody.data.content,
+      req.db
     );
 
     const response: ApiResponse<CommentItem> = {
@@ -873,7 +876,8 @@ export async function updateCommentHandler(req: AuthenticatedRequest, res: Respo
       parsedParam.data.id,
       parsedParam.data.commentId,
       userId,
-      parsedBody.data.content
+      parsedBody.data.content,
+      req.db
     );
 
     const response: ApiResponse<CommentItem> = {
@@ -936,7 +940,8 @@ export async function deleteCommentHandler(req: AuthenticatedRequest, res: Respo
       userId,
       userRole,
       req.ip,
-      req.headers['user-agent']
+      req.headers['user-agent'],
+      req.db
     );
 
     const response: ApiResponse<{ message: string }> = {

@@ -123,7 +123,7 @@ export async function getMyProfileHandler(
       return;
     }
 
-    const profile = await getMyMatrimonialProfile(userId);
+    const profile = await getMyMatrimonialProfile(userId, req.db);
 
     const response: ApiResponse<OwnMatrimonialProfile | null> = {
       success: true,
@@ -170,7 +170,7 @@ export async function upsertProfileHandler(
       return;
     }
 
-    const profile = await upsertMyMatrimonialProfile(userId, parsed.data);
+    const profile = await upsertMyMatrimonialProfile(userId, parsed.data, req.db);
 
     const response: ApiResponse<OwnMatrimonialProfile> = {
       success: true,
@@ -211,7 +211,7 @@ export async function submitProfileHandler(
     const profile = await submitMyMatrimonialProfile(userId, {
       ipAddress,
       userAgent,
-    });
+    }, req.db);
 
     const response: ApiResponse<OwnMatrimonialProfile> = {
       success: true,
@@ -258,7 +258,7 @@ export async function upsertPreferencesHandler(
       return;
     }
 
-    const preferences = await upsertMyPartnerPreferences(userId, parsed.data);
+    const preferences = await upsertMyPartnerPreferences(userId, parsed.data, req.db);
 
     const response: ApiResponse<MatrimonialPartnerPreferenceItem> = {
       success: true,
@@ -317,7 +317,8 @@ export async function uploadPhotoHandler(
       req.file.buffer,
       req.file.mimetype,
       req.file.originalname,
-      isPrimary
+      isPrimary,
+      req.db
     );
 
     const response: ApiResponse<MatrimonialPhotoItem> = {
@@ -365,7 +366,7 @@ export async function deletePhotoHandler(
       return;
     }
 
-    await deleteMyMatrimonialPhoto(userId, parsedParams.data.id);
+    await deleteMyMatrimonialPhoto(userId, parsedParams.data.id, req.db);
 
     const response: ApiResponse = {
       success: true,
@@ -411,7 +412,7 @@ export async function listProfilesHandler(
       return;
     }
 
-    const result = await listDiscoveryProfiles(userId, parsed.data);
+    const result = await listDiscoveryProfiles(userId, parsed.data, req.db);
 
     const response: ApiResponse<PaginatedMatrimonialProfilesResponse> = {
       success: true,
@@ -458,7 +459,7 @@ export async function getProfileByIdHandler(
       return;
     }
 
-    const profile = await getDiscoveryProfileById(userId, parsedParams.data.id);
+    const profile = await getDiscoveryProfileById(userId, parsedParams.data.id, req.db);
 
     const response: ApiResponse<PublicMatrimonialProfileDetail> = {
       success: true,
@@ -504,7 +505,7 @@ export async function sendInterestHandler(
       return;
     }
 
-    const interest = await sendInterest(userId, parsed.data);
+    const interest = await sendInterest(userId, parsed.data, req.db);
 
     const response: ApiResponse<MatrimonialInterestItem> = {
       success: true,
@@ -543,7 +544,7 @@ export async function listReceivedInterestsHandler(
     const page = parsedQuery.success ? parsedQuery.data.page : 1;
     const limit = parsedQuery.success ? parsedQuery.data.limit : 20;
 
-    const result = await listReceivedInterests(userId, page, limit);
+    const result = await listReceivedInterests(userId, page, limit, req.db);
 
     const response: ApiResponse<PaginatedMatrimonialInterestsResponse> = {
       success: true,
@@ -581,7 +582,7 @@ export async function listSentInterestsHandler(
     const page = parsedQuery.success ? parsedQuery.data.page : 1;
     const limit = parsedQuery.success ? parsedQuery.data.limit : 20;
 
-    const result = await listSentInterests(userId, page, limit);
+    const result = await listSentInterests(userId, page, limit, req.db);
 
     const response: ApiResponse<PaginatedMatrimonialInterestsResponse> = {
       success: true,
@@ -639,7 +640,7 @@ export async function respondInterestHandler(
       return;
     }
 
-    const updated = await respondToInterest(userId, parsedParams.data.id, parsedBody.data);
+    const updated = await respondToInterest(userId, parsedParams.data.id, parsedBody.data, req.db);
 
     const actionText =
       parsedBody.data.status === 'ACCEPTED'
