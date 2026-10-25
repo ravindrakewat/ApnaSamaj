@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { UserRole } from '@apnasamaj/shared-types';
 import { authenticateToken } from '../../../middleware/authenticate';
 import { requireActiveUser, requireRoles } from '../../../middleware/authorize';
+import { authorizeAdminCommunitySwitch } from '../../../middleware/tenant.middleware';
 import {
   listProfilesHandler,
   getProfileDetailsHandler,
@@ -15,7 +16,8 @@ export const adminMatrimonialRouter = Router();
 adminMatrimonialRouter.use(
   authenticateToken,
   requireActiveUser,
-  requireRoles(UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN)
+  requireRoles(UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN),
+  authorizeAdminCommunitySwitch
 );
 
 // GET /api/v1/admin/matrimonial/profiles - List matrimonial profiles awaiting approval or with status filter

@@ -1,5 +1,5 @@
 import { ApiResponse, AuthUser, LoginResponseData, RefreshResponseData } from '@apnasamaj/shared-types';
-import { apiFetch, setInMemoryToken } from './api.client';
+import { apiFetch, setInMemoryToken, clearAuthSession, executeTokenRefresh } from './api.client';
 
 export async function loginApi(phone: string, password: string): Promise<LoginResponseData> {
   const response = await apiFetch<LoginResponseData>('/api/v1/auth/login', {
@@ -16,17 +16,7 @@ export async function loginApi(phone: string, password: string): Promise<LoginRe
 }
 
 export async function refreshApi(): Promise<RefreshResponseData> {
-  const response = await apiFetch<RefreshResponseData>('/api/v1/auth/refresh', {
-    method: 'POST',
-  });
-
-  if (!response.success || !response.data) {
-    setInMemoryToken(null);
-    throw new Error(response.error || 'Session expired. Please log in again.');
-  }
-
-  setInMemoryToken(response.data.accessToken);
-  return response.data;
+  return executeTokenRefresh();
 }
 
 export async function getMeApi(): Promise<AuthUser> {
@@ -47,6 +37,6 @@ export async function logoutApi(): Promise<void> {
       method: 'POST',
     });
   } finally {
-    setInMemoryToken(null);
+    clearAuthSession();
   }
 }

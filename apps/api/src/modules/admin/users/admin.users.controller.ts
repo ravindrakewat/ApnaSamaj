@@ -11,6 +11,16 @@ import {
 
 export async function getUsersHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for user administration. Please specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const parsedQuery = listUsersQuerySchema.safeParse(req.query);
     if (!parsedQuery.success) {
       const issue = parsedQuery.error.issues[0]?.message || 'Invalid query parameters.';
@@ -23,7 +33,7 @@ export async function getUsersHandler(req: AuthenticatedRequest, res: Response):
       return;
     }
 
-    const data = await listAdminUsers(parsedQuery.data);
+    const data = await listAdminUsers(parsedQuery.data, req.db);
 
     const response: ApiResponse<ListUsersResponseData> = {
       success: true,
@@ -45,6 +55,16 @@ export async function getUsersHandler(req: AuthenticatedRequest, res: Response):
 
 export async function getUserDetailsHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for user administration. Please specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const { id } = req.params;
     if (!id || typeof id !== 'string') {
       const response: ApiResponse = {
@@ -56,7 +76,7 @@ export async function getUserDetailsHandler(req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    const data = await getAdminUserDetails(id);
+    const data = await getAdminUserDetails(id, req.db);
 
     const response: ApiResponse<AdminUserDetails> = {
       success: true,
@@ -88,6 +108,16 @@ export async function getUserDetailsHandler(req: AuthenticatedRequest, res: Resp
 
 export async function updateUserStatusHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for user administration. Please specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const { id } = req.params;
     if (!id || typeof id !== 'string') {
       const response: ApiResponse = {
@@ -128,7 +158,8 @@ export async function updateUserStatusHandler(req: AuthenticatedRequest, res: Re
       actor,
       parsedBody.data.reason,
       req.ip,
-      req.headers['user-agent']
+      req.headers['user-agent'],
+      req.db
     );
 
     const response: ApiResponse<AdminUserDetails> = {

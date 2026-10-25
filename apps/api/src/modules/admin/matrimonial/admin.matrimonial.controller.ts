@@ -79,6 +79,16 @@ export async function listProfilesHandler(
   res: Response
 ): Promise<void> {
   try {
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for matrimonial administration. Please specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const parsedQuery = listAdminMatrimonialProfilesQuerySchema.safeParse(req.query);
     if (!parsedQuery.success) {
       const issue = parsedQuery.error.issues[0]?.message || 'Invalid query parameters.';
@@ -91,7 +101,7 @@ export async function listProfilesHandler(
       return;
     }
 
-    const data = await listAdminMatrimonialProfiles(parsedQuery.data);
+    const data = await listAdminMatrimonialProfiles(parsedQuery.data, req.db);
 
     const response: ApiResponse<PaginatedAdminMatrimonialProfilesResponse> = {
       success: true,
@@ -114,6 +124,16 @@ export async function getProfileDetailsHandler(
   res: Response
 ): Promise<void> {
   try {
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for matrimonial administration. Please specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const parsedParams = idParamSchema.safeParse(req.params);
     if (!parsedParams.success) {
       const issue = parsedParams.error.issues[0]?.message || 'Invalid profile ID parameter.';
@@ -126,7 +146,7 @@ export async function getProfileDetailsHandler(
       return;
     }
 
-    const data = await getAdminMatrimonialProfileDetails(parsedParams.data.id);
+    const data = await getAdminMatrimonialProfileDetails(parsedParams.data.id, req.db);
 
     const response: ApiResponse<AdminMatrimonialProfileDetail> = {
       success: true,
@@ -149,6 +169,16 @@ export async function moderateProfileHandler(
   res: Response
 ): Promise<void> {
   try {
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for matrimonial administration. Please specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const actor = req.user;
     if (!actor) {
       const response: ApiResponse = {
@@ -189,7 +219,8 @@ export async function moderateProfileHandler(
       actor,
       parsedBody.data,
       req.ip,
-      req.headers['user-agent']
+      req.headers['user-agent'],
+      req.db
     );
 
     const actionText =
@@ -221,6 +252,16 @@ export async function moderatePhotoHandler(
   res: Response
 ): Promise<void> {
   try {
+    if (!req.tenant || !req.tenant.isResolved || !req.db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for matrimonial administration. Please specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const actor = req.user;
     if (!actor) {
       const response: ApiResponse = {
@@ -261,7 +302,8 @@ export async function moderatePhotoHandler(
       actor,
       parsedBody.data,
       req.ip,
-      req.headers['user-agent']
+      req.headers['user-agent'],
+      req.db
     );
 
     const response: ApiResponse<{ id: string; isApproved: boolean }> = {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { UserRole } from '@apnasamaj/shared-types';
 import { authenticateToken } from '../../../middleware/authenticate';
 import { requireActiveUser, requireRoles } from '../../../middleware/authorize';
+import { authorizeAdminCommunitySwitch } from '../../../middleware/tenant.middleware';
 import {
   getUsersHandler,
   getUserDetailsHandler,
@@ -14,7 +15,8 @@ export const adminUsersRouter = Router();
 adminUsersRouter.use(
   authenticateToken,
   requireActiveUser,
-  requireRoles(UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN)
+  requireRoles(UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN),
+  authorizeAdminCommunitySwitch
 );
 
 // GET /api/v1/admin/users - List users with pagination, search, and filtering

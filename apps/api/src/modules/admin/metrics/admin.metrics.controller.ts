@@ -1,11 +1,22 @@
 import { Response } from 'express';
-import { ApiResponse, AdminMetrics } from '@apnasamaj/shared-types';
+import { ApiResponse, AdminMetrics, UserRole } from '@apnasamaj/shared-types';
 import { AuthenticatedRequest } from '../../../middleware/authenticate';
 import { getAdminMetrics } from './admin.metrics.service';
 
-export async function getMetricsHandler(_req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function getMetricsHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const data = await getAdminMetrics();
+    // COMMUNITY_ADMIN must be bound to their assigned community database
+    if (req.user?.role === UserRole.COMMUNITY_ADMIN && (!req.tenant || !req.tenant.isResolved || !req.db)) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for community administrative metrics.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const data = await getAdminMetrics(req.db);
     const response: ApiResponse<AdminMetrics> = {
       success: true,
       data,

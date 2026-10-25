@@ -1,4 +1,4 @@
-import { prisma, Prisma } from '@apnasamaj/database';
+import { prisma, Prisma, PrismaClient } from '@apnasamaj/database';
 import { ListAuditLogsResponseData, AuditLogItem, UserRole } from '@apnasamaj/shared-types';
 import { ListAuditLogsQuery } from '@apnasamaj/validation';
 
@@ -6,7 +6,11 @@ import { ListAuditLogsQuery } from '@apnasamaj/validation';
  * Lists audit logs with pagination and multi-criteria filtering.
  * Selects only safe actor fields to prevent leaking credentials or tokens.
  */
-export async function listAuditLogs(query: ListAuditLogsQuery): Promise<ListAuditLogsResponseData> {
+export async function listAuditLogs(
+  query: ListAuditLogsQuery,
+  db?: PrismaClient
+): Promise<ListAuditLogsResponseData> {
+  const client = db || prisma;
   const { page = 1, limit = 20, action, targetType, actorId, fromDate, toDate } = query;
   const skip = (page - 1) * limit;
 
@@ -40,8 +44,8 @@ export async function listAuditLogs(query: ListAuditLogsQuery): Promise<ListAudi
   }
 
   const [totalLogs, logs] = await Promise.all([
-    prisma.auditLog.count({ where }),
-    prisma.auditLog.findMany({
+    client.auditLog.count({ where }),
+    client.auditLog.findMany({
       where,
       skip,
       take: limit,

@@ -1,4 +1,4 @@
-import { prisma, Role as DbRole, UserStatus as DbUserStatus, Prisma } from '@apnasamaj/database';
+import { prisma, Role as DbRole, UserStatus as DbUserStatus, Prisma, PrismaClient } from '@apnasamaj/database';
 import {
   AdminUserDetails,
   AdminUserListItem,
@@ -61,7 +61,11 @@ const safeUserSelect = {
 /**
  * Lists users with pagination, text search on phone or full name, and role/status filtering.
  */
-export async function listAdminUsers(query: ListUsersQuery): Promise<ListUsersResponseData> {
+export async function listAdminUsers(query: ListUsersQuery, db?: PrismaClient): Promise<ListUsersResponseData> {
+  if (!db) {
+    throw new AdminServiceError('Tenant database client is required for user administration.', 400);
+  }
+  const client = db;
   const { page = 1, limit = 10, search, role, status } = query;
   const skip = (page - 1) * limit;
 
@@ -93,7 +97,7 @@ export async function listAdminUsers(query: ListUsersQuery): Promise<ListUsersRe
 
   if (page === 1) {
     // For page 1, fetch up to limit records.
-    rawUsers = await prisma.user.findMany({
+    rawUsers = await client.user.findMany({
       where,
       skip: 0,
       take: limit,
@@ -106,13 +110,13 @@ export async function listAdminUsers(query: ListUsersQuery): Promise<ListUsersRe
     if (rawUsers.length < limit) {
       totalUsers = rawUsers.length;
     } else {
-      totalUsers = await prisma.user.count({ where });
+      totalUsers = await client.user.count({ where });
     }
   } else {
     // For subsequent pages, run count and findMany concurrently without transaction overhead
     [totalUsers, rawUsers] = await Promise.all([
-      prisma.user.count({ where }),
-      prisma.user.findMany({
+      client.user.count({ where }),
+      client.user.findMany({
         where,
         skip,
         take: limit,
@@ -164,8 +168,12 @@ export async function listAdminUsers(query: ListUsersQuery): Promise<ListUsersRe
 /**
  * Retrieves comprehensive sanitized user details including social engagement counters.
  */
-export async function getAdminUserDetails(userId: string): Promise<AdminUserDetails> {
-  const user = await prisma.user.findUnique({
+export async function getAdminUserDetails(userId: string, db?: PrismaClient): Promise<AdminUserDetails> {
+  if (!db) {
+    throw new AdminServiceError('Tenant database client is required for user administration.', 400);
+  }
+  const client = db;
+  const user = await client.user.findUnique({
     where: { id: userId },
     select: {
       ...safeUserSelect,
@@ -221,15 +229,21 @@ export async function updateAdminUserStatus(
   actor: AuthUser,
   reason?: string,
   ipAddress?: string,
-  userAgent?: string
+  userAgent?: string,
+  db?: PrismaClient
 ): Promise<AdminUserDetails> {
+  if (!db) {
+    throw new AdminServiceError('Tenant database client is required for user administration.', 400);
+  }
+  const client = db;
+
   // 1. Prevent self-modification of status
   if (targetUserId === actor.id) {
     throw new AdminServiceError('Administrators cannot modify their own account status.', 400);
   }
 
   // 2. Fetch target user
-  const targetUser = await prisma.user.findUnique({
+  const targetUser = await client.user.findUnique({
     where: { id: targetUserId },
     select: {
       id: true,
@@ -253,7 +267,7 @@ export async function updateAdminUserStatus(
   const previousStatus = targetUser.status;
 
   // 4. Atomic status update, refresh token revocation (if suspended), and audit log creation
-  await prisma.$transaction(async (tx) => {
+  await client.$transaction(async (tx) => {
     // A. Update user status
     await tx.user.update({
       where: { id: targetUserId },
@@ -294,18 +308,21 @@ export async function updateAdminUserStatus(
     });
   });
 
-  // Safe notification side-effect after successful transaction
-  sendNotificationSafely({
-    recipientId: targetUserId,
-    actorId: actor.id,
-    type: 'ACCOUNT_STATUS_UPDATE',
-    title: 'Account Status Updated',
-    message: `Your account status has been updated to ${newStatus}.${reason ? ` Reason: ${reason}` : ''}`,
-    entityType: 'User',
-    entityId: targetUserId,
-  }).catch((err) =>
+  // Safe notification side-effect after successful transaction within tenant database
+  sendNotificationSafely(
+    {
+      recipientId: targetUserId,
+      actorId: actor.id,
+      type: 'ACCOUNT_STATUS_UPDATE',
+      title: 'Account Status Updated',
+      message: `Your account status has been updated to ${newStatus}.${reason ? ` Reason: ${reason}` : ''}`,
+      entityType: 'User',
+      entityId: targetUserId,
+    },
+    client
+  ).catch((err) =>
     console.warn('[Admin Users Service] Failed to send account status notification:', err)
   );
 
-  return getAdminUserDetails(targetUserId);
+  return getAdminUserDetails(targetUserId, client);
 }

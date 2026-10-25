@@ -1,4 +1,4 @@
-import { prisma, Prisma } from '@apnasamaj/database';
+import { prisma, Prisma, PrismaClient } from '@apnasamaj/database';
 import {
   AuthUser,
   AdminMatrimonialProfileListItem,
@@ -47,8 +47,13 @@ function calculateAge(dob: Date | null | undefined): number | null {
  * Lists matrimonial profiles for administrative moderation with pagination and filtering.
  */
 export async function listAdminMatrimonialProfiles(
-  query: ListAdminMatrimonialProfilesQueryInput
+  query: ListAdminMatrimonialProfilesQueryInput,
+  db?: PrismaClient
 ): Promise<PaginatedAdminMatrimonialProfilesResponse> {
+  if (!db) {
+    throw new MatrimonialServiceError('Tenant database client is required for matrimonial administration.', 400);
+  }
+  const client = db;
   const { status = 'PENDING_APPROVAL', page = 1, limit = 10, search } = query;
   const skip = (page - 1) * limit;
 
@@ -72,8 +77,8 @@ export async function listAdminMatrimonialProfiles(
 
   try {
     const [total, rawProfiles] = await Promise.all([
-      prisma.matrimonialProfile.count({ where }),
-      prisma.matrimonialProfile.findMany({
+      client.matrimonialProfile.count({ where }),
+      client.matrimonialProfile.findMany({
         where,
         skip,
         take: limit,
@@ -175,10 +180,15 @@ export async function listAdminMatrimonialProfiles(
  * Retrieves full matrimonial profile details and submitted photos for admin review.
  */
 export async function getAdminMatrimonialProfileDetails(
-  profileId: string
+  profileId: string,
+  db?: PrismaClient
 ): Promise<AdminMatrimonialProfileDetail> {
+  if (!db) {
+    throw new MatrimonialServiceError('Tenant database client is required for matrimonial administration.', 400);
+  }
+  const client = db;
   try {
-    const raw = await prisma.matrimonialProfile.findUnique({
+    const raw = await client.matrimonialProfile.findUnique({
       where: { id: profileId },
       include: {
         user: {
@@ -342,12 +352,17 @@ export async function moderateMatrimonialProfile(
   actor: AuthUser,
   input: AdminModerateMatrimonialProfileInput,
   ipAddress?: string,
-  userAgent?: string
+  userAgent?: string,
+  db?: PrismaClient
 ): Promise<AdminMatrimonialProfileDetail> {
+  if (!db) {
+    throw new MatrimonialServiceError('Tenant database client is required for matrimonial administration.', 400);
+  }
+  const client = db;
   const { status: newStatus, rejectionReason } = input;
 
   try {
-    const profile = await prisma.matrimonialProfile.findUnique({
+    const profile = await client.matrimonialProfile.findUnique({
       where: { id: profileId },
       select: {
         id: true,
@@ -372,13 +387,13 @@ export async function moderateMatrimonialProfile(
 
     // 2. Prevent duplicate processing if already at target status
     if (profile.status === newStatus) {
-      return getAdminMatrimonialProfileDetails(profileId);
+      return getAdminMatrimonialProfileDetails(profileId, client);
     }
 
     const previousStatus = profile.status;
 
     // 3. Perform atomic state update and audit log creation
-    await prisma.$transaction(async (tx) => {
+    await client.$transaction(async (tx) => {
       await tx.matrimonialProfile.update({
         where: { id: profileId },
         data: {
@@ -407,34 +422,40 @@ export async function moderateMatrimonialProfile(
       });
     });
 
-    // 4. Safe notification side-effect after committed transaction
+    // 4. Safe notification side-effect after committed transaction within tenant database
     if (newStatus === 'APPROVED') {
-      sendNotificationSafely({
-        recipientId: profile.userId,
-        actorId: actor.id,
-        type: 'MATRIMONIAL_PROFILE_APPROVED',
-        title: 'Matrimonial Profile Approved',
-        message: 'Congratulations! Your matrimonial profile has been approved and is now visible in community discovery.',
-        entityType: 'MatrimonialProfile',
-        entityId: profileId,
-      }).catch((err) =>
+      sendNotificationSafely(
+        {
+          recipientId: profile.userId,
+          actorId: actor.id,
+          type: 'MATRIMONIAL_PROFILE_APPROVED',
+          title: 'Matrimonial Profile Approved',
+          message: 'Congratulations! Your matrimonial profile has been approved and is now visible in community discovery.',
+          entityType: 'MatrimonialProfile',
+          entityId: profileId,
+        },
+        client
+      ).catch((err) =>
         console.warn('[Admin Matrimonial Service] Failed to send approval notification:', err)
       );
     } else if (newStatus === 'REJECTED') {
-      sendNotificationSafely({
-        recipientId: profile.userId,
-        actorId: actor.id,
-        type: 'MATRIMONIAL_PROFILE_REJECTED',
-        title: 'Matrimonial Profile Changes Requested',
-        message: `Your matrimonial profile requires changes: ${rejectionReason}`,
-        entityType: 'MatrimonialProfile',
-        entityId: profileId,
-      }).catch((err) =>
+      sendNotificationSafely(
+        {
+          recipientId: profile.userId,
+          actorId: actor.id,
+          type: 'MATRIMONIAL_PROFILE_REJECTED',
+          title: 'Matrimonial Profile Changes Requested',
+          message: `Your matrimonial profile requires changes: ${rejectionReason}`,
+          entityType: 'MatrimonialProfile',
+          entityId: profileId,
+        },
+        client
+      ).catch((err) =>
         console.warn('[Admin Matrimonial Service] Failed to send rejection notification:', err)
       );
     }
 
-    return getAdminMatrimonialProfileDetails(profileId);
+    return getAdminMatrimonialProfileDetails(profileId, client);
   } catch (err: unknown) {
     if (isMatrimonialTableMissingError(err)) {
       console.warn('[Admin Matrimonial Service] Table does not exist (migration pending):', err);
@@ -452,10 +473,15 @@ export async function moderateMatrimonialPhoto(
   actor: AuthUser,
   input: AdminModerateMatrimonialPhotoInput,
   ipAddress?: string,
-  userAgent?: string
+  userAgent?: string,
+  db?: PrismaClient
 ): Promise<{ id: string; isApproved: boolean }> {
+  if (!db) {
+    throw new MatrimonialServiceError('Tenant database client is required for matrimonial administration.', 400);
+  }
+  const client = db;
   try {
-    const photo = await prisma.matrimonialPhoto.findUnique({
+    const photo = await client.matrimonialPhoto.findUnique({
       where: { id: photoId },
     });
 
@@ -469,7 +495,7 @@ export async function moderateMatrimonialPhoto(
 
     const previousApproved = photo.isApproved;
 
-    await prisma.$transaction(async (tx) => {
+    await client.$transaction(async (tx) => {
       await tx.matrimonialPhoto.update({
         where: { id: photoId },
         data: {
