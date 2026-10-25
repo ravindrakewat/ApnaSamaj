@@ -14,6 +14,7 @@ export function generateAccessToken(user: {
   phone: string;
   role: string;
   status: string;
+  communitySlug?: string;
 }): string {
   const jti = crypto.randomUUID();
   const options: SignOptions = {
@@ -22,11 +23,15 @@ export function generateAccessToken(user: {
     subject: user.id,
   };
 
-  const claims = {
+  const claims: Record<string, unknown> = {
     role: user.role,
     status: user.status,
     phone: user.phone,
   };
+
+  if (user.communitySlug) {
+    claims.communitySlug = user.communitySlug;
+  }
 
   return jwt.sign(claims, config.jwtAccessSecret, options);
 }
@@ -46,6 +51,7 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
     phone: (decoded.phone as string) || '',
     role: decoded.role,
     status: decoded.status,
+    communitySlug: typeof decoded.communitySlug === 'string' ? decoded.communitySlug : undefined,
     jti: decoded.jti,
     iat: decoded.iat,
     exp: decoded.exp,

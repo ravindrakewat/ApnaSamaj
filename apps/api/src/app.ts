@@ -11,23 +11,18 @@ import { groupsRouter } from './modules/groups';
 import { notificationsRouter } from './modules/notifications';
 import { matrimonialRouter } from './modules/matrimonial';
 
+import { isCorsOriginAllowed } from './config/cors';
+import { resolveTenantContext } from './middleware/tenant.middleware';
+
 export function createApp(): Express {
   const app = express();
 
-  const rawOrigins = [
+  const extraAllowed = [
     config.clientUrl,
     config.adminUrl,
     process.env.CLIENT_URL,
     process.env.ADMIN_URL,
-    'https://apna-samaj.vercel.app',
-    'https://apna-samaj-admin.vercel.app',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174',
-  ];
-
-  const allowedOrigins = rawOrigins
+  ]
     .flatMap((o) => (o ? o.split(',') : []))
     .map((o) => o.trim().replace(/\/+$/, ''))
     .filter(Boolean);
@@ -35,28 +30,20 @@ export function createApp(): Express {
   app.use(
     cors({
       origin: (origin, callback) => {
-        // Allow requests with no origin (e.g. mobile apps, curl, Postman)
-        if (!origin) return callback(null, true);
-
-        const cleanOrigin = origin.trim().replace(/\/+$/, '');
-        if (
-          allowedOrigins.includes(cleanOrigin) ||
-          cleanOrigin.endsWith('.vercel.app') ||
-          cleanOrigin.includes('localhost') ||
-          cleanOrigin.includes('127.0.0.1')
-        ) {
+        if (isCorsOriginAllowed(origin, { extraAllowed })) {
           return callback(null, true);
         }
         return callback(null, false);
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Community-Slug'],
     })
   );
 
   app.use(cookieParser());
   app.use(express.json());
+  app.use(resolveTenantContext);
 
   app.use('/', healthRouter);
   app.use('/api/v1/auth', authRouter);

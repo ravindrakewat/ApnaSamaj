@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
-    "build": "npx prisma generate --schema=../../packages/database/prisma/schema.prisma",
-    "build:api": "npx prisma generate --schema=../../packages/database/prisma/schema.prisma",
+    "build": "tsc",
+    "build:api": "tsc",
+    "db:generate": "npx prisma generate --schema=../../packages/database/prisma/schema.prisma",
     "db:migrate": "npx prisma migrate deploy --schema=../../packages/database/prisma/schema.prisma",
     "start": "npx tsx src/server.ts",
     "start:api": "npx tsx src/server.ts"

@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import * as argon2 from 'argon2';
-import { prisma, Role as DbRole, UserStatus as DbUserStatus, Gender } from '@apnasamaj/database';
+import { PrismaClient, Role as DbRole, UserStatus as DbUserStatus, Gender } from '@apnasamaj/database';
 import { AuthUser, LoginResponseData, RefreshResponseData, UserRole, UserStatus } from '@apnasamaj/shared-types';
 import { RegisterInput } from '@apnasamaj/validation';
 import { verifyPassword } from './auth.password';
@@ -62,17 +62,31 @@ export interface AuthSessionResult {
 }
 
 /**
+ * Validates that an active tenant PrismaClient instance is provided.
+ */
+function assertDb(db?: PrismaClient): PrismaClient {
+  if (!db) {
+    throw new AuthError('Tenant database connection is required for authentication operations.', 500);
+  }
+  return db;
+}
+
+/**
  * Authenticates user with phone and password, issues access token and creates
- * a new refresh token family session.
+ * a new refresh token family session in the specified tenant database.
  */
 export async function loginWithPhonePassword(
   phone: string,
   password: string,
   userAgent?: string,
-  ipAddress?: string
+  ipAddress?: string,
+  db?: PrismaClient,
+  communitySlug?: string
 ): Promise<AuthSessionResult> {
+  const activeDb = assertDb(db);
+
   // 1. Look up user by normalized phone number
-  const user = await prisma.user.findUnique({
+  const user = await activeDb.user.findUnique({
     where: { phone },
     select: {
       id: true,
@@ -111,6 +125,7 @@ export async function loginWithPhonePassword(
     phone: user.phone,
     role: user.role,
     status: user.status,
+    communitySlug,
   });
 
   // 6. Generate cryptographically secure refresh token and new familyId
@@ -120,7 +135,7 @@ export async function loginWithPhonePassword(
   const refreshExpiresAt = calculateRefreshTokenExpiry();
 
   // 7. Store SHA-256 hash in database
-  await prisma.refreshToken.create({
+  await activeDb.refreshToken.create({
     data: {
       userId: user.id,
       tokenHash,
@@ -160,10 +175,14 @@ export async function loginWithPhonePassword(
 export async function registerMember(
   data: RegisterInput,
   userAgent?: string,
-  ipAddress?: string
+  ipAddress?: string,
+  db?: PrismaClient,
+  communitySlug?: string
 ): Promise<AuthSessionResult> {
+  const activeDb = assertDb(db);
+
   // 1. Check if an account with this normalized phone already exists
-  const existingUser = await prisma.user.findUnique({
+  const existingUser = await activeDb.user.findUnique({
     where: { phone: data.phone },
     select: { id: true },
   });
@@ -187,7 +206,7 @@ export async function registerMember(
   const refreshExpiresAt = calculateRefreshTokenExpiry();
 
   // 4. Create User, Profile, and RefreshToken atomically
-  const newUser = await prisma.$transaction(async (tx) => {
+  const newUser = await activeDb.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         phone: data.phone,
@@ -240,6 +259,7 @@ export async function registerMember(
     phone: newUser.phone,
     role: newUser.role,
     status: newUser.status,
+    communitySlug,
   });
 
   const authUser: AuthUser = {
@@ -270,8 +290,12 @@ export async function registerMember(
 export async function refreshSession(
   rawRefreshToken: string,
   userAgent?: string,
-  ipAddress?: string
+  ipAddress?: string,
+  db?: PrismaClient,
+  communitySlug?: string
 ): Promise<AuthSessionResult> {
+  const activeDb = assertDb(db);
+
   if (!rawRefreshToken || typeof rawRefreshToken !== 'string' || !rawRefreshToken.trim()) {
     throw new InvalidRefreshTokenError('Refresh token is required');
   }
@@ -279,7 +303,7 @@ export async function refreshSession(
   const tokenHash = hashToken(rawRefreshToken);
 
   // 1. Find token record with associated user
-  const tokenRecord = await prisma.refreshToken.findUnique({
+  const tokenRecord = await activeDb.refreshToken.findUnique({
     where: { tokenHash },
     include: {
       user: {
@@ -307,7 +331,7 @@ export async function refreshSession(
   // If the token is already revoked, an attacker or compromised client is reusing a rotated token.
   // Immediately invalidate the ENTIRE token family.
   if (tokenRecord.isRevoked) {
-    await prisma.refreshToken.updateMany({
+    await activeDb.refreshToken.updateMany({
       where: { familyId: tokenRecord.familyId },
       data: {
         isRevoked: true,
@@ -320,7 +344,7 @@ export async function refreshSession(
 
   // 3. Expiration Check
   if (tokenRecord.expiresAt < new Date()) {
-    await prisma.refreshToken.update({
+    await activeDb.refreshToken.update({
       where: { id: tokenRecord.id },
       data: {
         isRevoked: true,
@@ -338,7 +362,7 @@ export async function refreshSession(
   }
 
   if (user.status === DbUserStatus.SUSPENDED) {
-    await prisma.refreshToken.update({
+    await activeDb.refreshToken.update({
       where: { id: tokenRecord.id },
       data: { isRevoked: true, revokedAt: new Date() },
     });
@@ -346,7 +370,7 @@ export async function refreshSession(
   }
 
   if (user.status !== DbUserStatus.ACTIVE) {
-    await prisma.refreshToken.update({
+    await activeDb.refreshToken.update({
       where: { id: tokenRecord.id },
       data: { isRevoked: true, revokedAt: new Date() },
     });
@@ -358,9 +382,9 @@ export async function refreshSession(
   const newTokenHash = hashToken(newRawRefreshToken);
   const newExpiresAt = calculateRefreshTokenExpiry();
 
-  await prisma.$transaction([
+  await activeDb.$transaction([
     // Mark current token as revoked and rotated
-    prisma.refreshToken.update({
+    activeDb.refreshToken.update({
       where: { id: tokenRecord.id },
       data: {
         isRevoked: true,
@@ -369,7 +393,7 @@ export async function refreshSession(
       },
     }),
     // Create new rotated token maintaining the same familyId
-    prisma.refreshToken.create({
+    activeDb.refreshToken.create({
       data: {
         userId: user.id,
         tokenHash: newTokenHash,
@@ -387,6 +411,7 @@ export async function refreshSession(
     phone: user.phone,
     role: user.role,
     status: user.status,
+    communitySlug,
   });
 
   const authUser: AuthUser = {
@@ -410,14 +435,15 @@ export async function refreshSession(
  * Revokes the server-side refresh session for the provided token.
  * Safe and idempotent.
  */
-export async function logoutSession(rawRefreshToken?: string): Promise<void> {
+export async function logoutSession(rawRefreshToken?: string, db?: PrismaClient): Promise<void> {
   if (!rawRefreshToken || typeof rawRefreshToken !== 'string' || !rawRefreshToken.trim()) {
     return;
   }
 
+  const activeDb = assertDb(db);
   const tokenHash = hashToken(rawRefreshToken);
 
-  await prisma.refreshToken.updateMany({
+  await activeDb.refreshToken.updateMany({
     where: {
       tokenHash,
       isRevoked: false,

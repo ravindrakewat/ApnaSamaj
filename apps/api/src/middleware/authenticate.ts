@@ -1,10 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
-import { prisma, UserStatus as DbUserStatus } from '@apnasamaj/database';
+import { prisma, UserStatus as DbUserStatus, PrismaClient, tenantDbManager } from '@apnasamaj/database';
 import { ApiResponse, AuthUser, UserRole, UserStatus } from '@apnasamaj/shared-types';
 import { verifyAccessToken } from '../modules/auth/auth.tokens';
+import { TenantRequestInfo } from './tenant.middleware';
 
 export interface AuthenticatedRequest extends Request {
   user?: AuthUser;
+  tenant?: TenantRequestInfo;
+  db?: PrismaClient;
+  isCentralAdmin?: boolean;
 }
 
 /**
@@ -54,9 +58,34 @@ export async function authenticateToken(
     return;
   }
 
+  // Cross-tenant token boundary check:
+  // If the access token was issued for a specific community, and the current request
+  // is targeting a different community, reject with HTTP 403 Forbidden.
+  if (
+    payload.communitySlug &&
+    req.tenant?.isResolved &&
+    req.tenant.slug &&
+    req.tenant.slug !== payload.communitySlug
+  ) {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Forbidden: Access token was issued for a different community.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(403).json(response);
+    return;
+  }
+
   try {
-    // Reload user status/role from database for immediate enforcement
-    const dbUser = await prisma.user.findUnique({
+    // Reload user status/role from active tenant database (or fallback to default prisma)
+    let activeDb = req.db || prisma;
+    if (payload.communitySlug && (!req.tenant || !req.tenant.isResolved)) {
+      if (tenantDbManager.hasCommunity(payload.communitySlug)) {
+        activeDb = tenantDbManager.getClient(payload.communitySlug);
+      }
+    }
+
+    const dbUser = await activeDb.user.findUnique({
       where: { id: payload.sub },
       select: {
         id: true,
@@ -94,6 +123,7 @@ export async function authenticateToken(
       role: dbUser.role as unknown as UserRole,
       status: dbUser.status as unknown as UserStatus,
       isPhoneVerified: dbUser.isPhoneVerified,
+      communitySlug: payload.communitySlug,
     };
 
     next();

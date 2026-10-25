@@ -7,6 +7,7 @@ import {
   RegisterResponseData,
   RefreshResponseData,
   AuthUser,
+  UserRole,
 } from '@apnasamaj/shared-types';
 import {
   loginWithPhonePassword,
@@ -26,6 +27,7 @@ import {
   getClearRefreshCookieOptions,
 } from './auth.tokens';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
+import { TenantRequest } from '../../middleware/tenant.middleware';
 
 /**
  * Extracts the refresh token from either HttpOnly cookie or request body.
@@ -55,24 +57,66 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    const tenantReq = req as TenantRequest;
+    const isCentralAdmin = Boolean(tenantReq.isCentralAdmin);
+    const tenant = tenantReq.tenant;
+    const db = tenantReq.db;
+
+    // Fail-closed tenant check:
+    // Community member login requires an active, resolved tenant context.
+    // Central Admin login is allowed only when isCentralAdmin is true.
+    if (!isCentralAdmin && (!tenant || !tenant.isResolved || !db)) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for member login. Please access via a valid community subdomain or specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Database connection not available for this community.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(500).json(response);
+      return;
+    }
+
     const { phone, password } = parsed.data;
 
-    // 2. Authenticate user and issue tokens
+    // 2. Authenticate user and issue tokens in target database
     const result = await loginWithPhonePassword(
       phone,
       password,
       req.headers['user-agent'],
-      req.ip
+      req.ip,
+      db,
+      tenant?.slug
     );
 
-    // 3. Set secure HttpOnly cookie for browser sessions
+    // 3. Central Admin Role Enforcement:
+    // Access to central admin console strictly requires the SUPER_ADMIN role in the central database.
+    if (isCentralAdmin && result.user.role !== UserRole.SUPER_ADMIN) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Forbidden: Access to central admin console requires SUPER_ADMIN role.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(403).json(response);
+      return;
+    }
+
+    // 4. Set secure HttpOnly cookie for browser sessions
     res.cookie(
       REFRESH_COOKIE_NAME,
       result.refreshToken,
       getRefreshCookieOptions(result.refreshExpiresAt)
     );
 
-    // 4. Respond with access token, non-sensitive user profile, and refresh token
+    // 5. Respond with access token, non-sensitive user profile, and refresh token
     const responseData: LoginResponseData = {
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -127,10 +171,37 @@ export async function registerHandler(req: Request, res: Response): Promise<void
       return;
     }
 
+    const tenantReq = req as TenantRequest;
+    const isCentralAdmin = Boolean(tenantReq.isCentralAdmin);
+    const tenant = tenantReq.tenant;
+    const db = tenantReq.db;
+
+    if (isCentralAdmin) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Public registration is disabled on the central admin console. Please register through your community portal.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!tenant || !tenant.isResolved || !db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for member registration. Please access via a valid community subdomain or specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
     const result = await registerMember(
       parsed.data,
       req.headers['user-agent'],
-      req.ip
+      req.ip,
+      db,
+      tenant.slug
     );
 
     // Set secure HttpOnly cookie for session
@@ -203,11 +274,52 @@ export async function refreshHandler(req: Request, res: Response): Promise<void>
       return;
     }
 
+    const tenantReq = req as TenantRequest;
+    const isCentralAdmin = Boolean(tenantReq.isCentralAdmin);
+    const tenant = tenantReq.tenant;
+    const db = tenantReq.db;
+
+    if (!isCentralAdmin && (!tenant || !tenant.isResolved || !db)) {
+      res.clearCookie(REFRESH_COOKIE_NAME, getClearRefreshCookieOptions());
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for session refresh. Please access via a valid community subdomain or specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!db) {
+      res.clearCookie(REFRESH_COOKIE_NAME, getClearRefreshCookieOptions());
+      const response: ApiResponse = {
+        success: false,
+        error: 'Database connection not available for this session.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(500).json(response);
+      return;
+    }
+
     const result = await refreshSession(
       rawToken,
       req.headers['user-agent'],
-      req.ip
+      req.ip,
+      db,
+      tenant?.slug
     );
+
+    // If Central Admin session, enforce that user is SUPER_ADMIN
+    if (isCentralAdmin && result.user.role !== UserRole.SUPER_ADMIN) {
+      res.clearCookie(REFRESH_COOKIE_NAME, getClearRefreshCookieOptions());
+      const response: ApiResponse = {
+        success: false,
+        error: 'Forbidden: Access to central admin console requires SUPER_ADMIN role.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(403).json(response);
+      return;
+    }
 
     // Set rotated refresh token in HttpOnly cookie
     res.cookie(
@@ -266,9 +378,11 @@ export async function refreshHandler(req: Request, res: Response): Promise<void>
 export async function logoutHandler(req: Request, res: Response): Promise<void> {
   try {
     const rawToken = extractRefreshToken(req);
+    const tenantReq = req as TenantRequest;
+    const db = tenantReq.db;
 
-    if (rawToken) {
-      await logoutSession(rawToken);
+    if (rawToken && db) {
+      await logoutSession(rawToken, db);
     }
 
     res.clearCookie(REFRESH_COOKIE_NAME, getClearRefreshCookieOptions());
@@ -307,10 +421,12 @@ export async function getMeHandler(req: AuthenticatedRequest, res: Response): Pr
     return;
   }
 
+  const activeDb = req.db || prisma;
+
   // If fullName was not loaded by middleware, populate it for /auth/me contract
   let authUser = req.user;
   if (!authUser.fullName) {
-    const profile = await prisma.profile.findUnique({
+    const profile = await activeDb.profile.findUnique({
       where: { userId: req.user.id },
       select: { fullName: true },
     });
