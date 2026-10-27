@@ -1,4 +1,4 @@
-import { NotificationType as DbNotificationType, Prisma, PrismaClient } from '@apnasamaj/database';
+import { NotificationType as DbNotificationType, Prisma, PrismaClient, tenantDbManager } from '@apnasamaj/database';
 import {
   NotificationType,
   NotificationItem,
@@ -8,6 +8,7 @@ import {
   MarkAllNotificationsReadResponse,
 } from '@apnasamaj/shared-types';
 import { NotificationsQueryInput } from '@apnasamaj/validation';
+import { emitRealtimeNotification, emitRealtimeUnreadCount } from '../chat/chat.socket';
 
 export class NotificationServiceError extends Error {
   public statusCode: number;
@@ -39,6 +40,7 @@ export interface CreateNotificationParams {
   message: string;
   entityType?: string | null;
   entityId?: string | null;
+  tenantSlug?: string;
 }
 
 const notificationInclude = {
@@ -191,6 +193,17 @@ export async function markAsRead(
     },
   });
 
+  // Emit updated unread count via Socket.IO
+  try {
+    const slug = tenantDbManager.getCommunitySlugForClient(client);
+    if (slug) {
+      const data = await getUnreadCount(userId, client);
+      emitRealtimeUnreadCount(slug, userId, data.unreadCount);
+    }
+  } catch (err) {
+    console.warn('[Notification Service] Real-time unread count emission failed:', err);
+  }
+
   return {
     id: updated.id,
     isRead: true,
@@ -217,6 +230,16 @@ export async function markAllAsRead(
       readAt: now,
     },
   });
+
+  // Emit updated unread count (0) via Socket.IO
+  try {
+    const slug = tenantDbManager.getCommunitySlugForClient(client);
+    if (slug) {
+      emitRealtimeUnreadCount(slug, userId, 0);
+    }
+  } catch (err) {
+    console.warn('[Notification Service] Real-time unread count emission failed:', err);
+  }
 
   return {
     updatedCount: result.count,
@@ -248,6 +271,17 @@ export async function deleteNotification(
   await client.notification.delete({
     where: { id },
   });
+
+  // Emit updated unread count if deleted notification was unread
+  try {
+    const slug = tenantDbManager.getCommunitySlugForClient(client);
+    if (slug) {
+      const data = await getUnreadCount(userId, client);
+      emitRealtimeUnreadCount(slug, userId, data.unreadCount);
+    }
+  } catch (err) {
+    console.warn('[Notification Service] Real-time unread count emission failed:', err);
+  }
 }
 
 /**
@@ -296,7 +330,7 @@ export async function sendNotificationSafely(
       }
     }
 
-    await db.notification.create({
+    const created = await db.notification.create({
       data: {
         recipientId: params.recipientId,
         actorId: params.actorId || null,
@@ -306,7 +340,21 @@ export async function sendNotificationSafely(
         entityType: params.entityType || null,
         entityId: params.entityId || null,
       },
+      include: notificationInclude,
     });
+
+    // Real-time notification dispatch via Socket.IO (non-blocking)
+    try {
+      const slug = params.tenantSlug || tenantDbManager.getCommunitySlugForClient(db);
+      if (slug) {
+        const unreadCount = await db.notification.count({
+          where: { recipientId: params.recipientId, isRead: false },
+        });
+        emitRealtimeNotification(slug, params.recipientId, created, unreadCount);
+      }
+    } catch (socketErr: unknown) {
+      console.warn('[Notification Service] Real-time socket emission failed:', socketErr);
+    }
   } catch (err: unknown) {
     // Non-blocking error handling: log warning, never throw
     console.warn('[Notification Service] Safe delivery failed:', {

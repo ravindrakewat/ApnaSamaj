@@ -19,6 +19,7 @@ import {
   DialogContentText,
   DialogActions,
   Button,
+  Link,
   TextField,
   Box,
   CircularProgress,
@@ -39,6 +40,9 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import ShieldIcon from '@mui/icons-material/Shield';
 import CloseIcon from '@mui/icons-material/Close';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
+import BrokenImageIcon from '@mui/icons-material/BrokenImage';
+import VideocamOffIcon from '@mui/icons-material/VideocamOff';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
@@ -51,17 +55,19 @@ import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import type {
   PostItem,
   PostMediaType,
   PostMediaItem,
   CommentItem,
+  ReportPostReason,
 } from '@apnasamaj/shared-types';
 import {
   PostType,
   UserRole,
 } from '@apnasamaj/shared-types';
-import { updatePostSchema, createCommentSchema } from '@apnasamaj/validation';
+import { updatePostSchema, createCommentSchema, parseYouTubeUrl } from '@apnasamaj/validation';
 import {
   updatePostApi,
   deletePostApi,
@@ -76,6 +82,7 @@ import {
   createCommentApi,
   updateCommentApi,
   deleteCommentApi,
+  reportPostApi,
 } from '../services/posts.service';
 import { useAuth } from '../context/AuthContext';
 import { buildSharePayload } from '../utils/post-sharing';
@@ -140,6 +147,26 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   // Media preview lightbox state
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Media load failure tracking (graceful fallback states)
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
+  const [failedVideoUrls, setFailedVideoUrls] = useState<Set<string>>(new Set());
+
+  const handleImageError = (url: string) => {
+    setFailedImageUrls((prev) => {
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  };
+
+  const handleVideoError = (url: string) => {
+    setFailedVideoUrls((prev) => {
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  };
 
   // Likes state
   const [isLiked, setIsLiked] = useState<boolean>(Boolean(post.isLikedByMe));
@@ -295,6 +322,39 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
+  // Post Reporting state & handlers
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<ReportPostReason>('INAPPROPRIATE_CONTENT');
+  const [reportDetails, setReportDetails] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportSuccess, setReportSuccess] = useState<string | null>(null);
+
+  const handleOpenReport = () => {
+    setReportReason('INAPPROPRIATE_CONTENT');
+    setReportDetails('');
+    setReportError(null);
+    setIsReportDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleConfirmReport = async () => {
+    setIsSubmittingReport(true);
+    setReportError(null);
+    try {
+      const res = await reportPostApi(post.id, {
+        reason: reportReason,
+        details: reportDetails.trim() || undefined,
+      });
+      setIsReportDialogOpen(false);
+      setReportSuccess(res.message);
+    } catch (err: unknown) {
+      setReportError(err instanceof Error ? err.message : 'Failed to submit report.');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   // Share state & handlers
   const [shareAnchorEl, setShareAnchorEl] = useState<null | HTMLElement>(null);
   const isShareMenuOpen = Boolean(shareAnchorEl);
@@ -312,6 +372,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       authorName: post.author.fullName,
       content: post.content,
       canonicalUrl: getCanonicalPostUrl(),
+      isPrivateGroup: post.group?.privacy === 'PRIVATE',
     });
   };
 
@@ -354,12 +415,16 @@ export const PostCard: React.FC<PostCardProps> = ({
     handleMenuClose();
     handleShareMenuClose();
     const canonicalUrl = getCanonicalPostUrl();
+    const isPrivateGroupPost = post.group?.privacy === 'PRIVATE';
+    const successMsg = isPrivateGroupPost
+      ? 'Post link copied! Note: Only members of this private group can view it.'
+      : 'Post link copied to clipboard!';
 
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       navigator.clipboard
         .writeText(canonicalUrl)
         .then(() => {
-          setCopyFeedback('Post link copied to clipboard!');
+          setCopyFeedback(successMsg);
         })
         .catch(() => {
           setCopyFeedback('Failed to copy link to clipboard.');
@@ -375,7 +440,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         const success = document.execCommand('copy');
         document.body.removeChild(textarea);
         if (success) {
-          setCopyFeedback('Post link copied to clipboard!');
+          setCopyFeedback(successMsg);
         } else {
           setCopyFeedback('Failed to copy link to clipboard.');
         }
@@ -393,6 +458,12 @@ export const PostCard: React.FC<PostCardProps> = ({
   // Likes Handler
   const handleToggleLike = async () => {
     if (isLikePending) return;
+
+    if (!user) {
+      setCopyFeedback('Please log in to like posts.');
+      return;
+    }
+
     triggerViewRecord();
 
     // Optimistic UI update
@@ -403,19 +474,27 @@ export const PostCard: React.FC<PostCardProps> = ({
     setIsLikePending(true);
 
     try {
+      let res: { postId: string; likesCount: number; isLikedByMe: boolean };
       if (nextIsLiked) {
-        const res = await likePostApi(post.id);
-        setIsLiked(res.isLikedByMe);
-        setLikesCount(res.likesCount);
+        res = await likePostApi(post.id);
       } else {
-        const res = await unlikePostApi(post.id);
-        setIsLiked(res.isLikedByMe);
-        setLikesCount(res.likesCount);
+        res = await unlikePostApi(post.id);
       }
+      setIsLiked(res.isLikedByMe);
+      setLikesCount(res.likesCount);
+
+      // Keep parent feed and post state in exact synchronization
+      onPostUpdated({
+        ...post,
+        isLikedByMe: res.isLikedByMe,
+        likesCount: res.likesCount,
+      });
     } catch (err: unknown) {
       // Revert optimistic update
       setIsLiked(!nextIsLiked);
       setLikesCount(likesCount);
+      const msg = err instanceof Error ? err.message : 'Failed to update like status.';
+      setCopyFeedback(msg);
       console.error('Failed to toggle like:', err);
     } finally {
       setIsLikePending(false);
@@ -503,6 +582,12 @@ export const PostCard: React.FC<PostCardProps> = ({
   // Create Comment Handler
   const handleCreateComment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!user) {
+      setCommentError('Please log in to post a comment.');
+      return;
+    }
+
     const trimmed = newCommentText.trim();
     if (!trimmed || isSubmittingComment) return;
 
@@ -517,8 +602,15 @@ export const PostCard: React.FC<PostCardProps> = ({
     try {
       const created = await createCommentApi(post.id, { content: trimmed });
       setComments((prev) => [...prev, created]);
-      setCommentsCount((prev) => prev + 1);
+      const nextCount = commentsCount + 1;
+      setCommentsCount(nextCount);
       setNewCommentText('');
+
+      // Keep parent feed and post state synchronized
+      onPostUpdated({
+        ...post,
+        commentsCount: nextCount,
+      });
     } catch (err: unknown) {
       setCommentError(err instanceof Error ? err.message : 'Failed to post comment.');
     } finally {
@@ -565,8 +657,15 @@ export const PostCard: React.FC<PostCardProps> = ({
     try {
       await deleteCommentApi(post.id, commentToDelete.id);
       setComments((prev) => prev.filter((c) => c.id !== commentToDelete.id));
-      setCommentsCount((prev) => Math.max(0, prev - 1));
+      const nextCount = Math.max(0, commentsCount - 1);
+      setCommentsCount(nextCount);
       setCommentToDelete(null);
+
+      // Keep parent feed and post state synchronized
+      onPostUpdated({
+        ...post,
+        commentsCount: nextCount,
+      });
     } catch (err: unknown) {
       setDeleteCommentError(err instanceof Error ? err.message : 'Failed to delete comment.');
     } finally {
@@ -722,102 +821,99 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   const isEdited = post.createdAt !== post.updatedAt;
 
-  // Render Post Images Grid
+  // Render Post Media (YouTube embeds, uploaded videos, and image grid with graceful fallbacks)
   const renderMediaGrid = () => {
     if (!post.media || post.media.length === 0) return null;
 
-    const count = post.media.length;
+    // Check if there is a video item (YouTube or uploaded video)
+    const videoItem = post.media.find(
+      (m) => m.mediaType === 'VIDEO' || parseYouTubeUrl(m.url) !== null
+    );
+    const parsedYt = videoItem ? parseYouTubeUrl(videoItem.url) : null;
+
+    // Images are all other items
+    const imageItems = post.media.filter((m) => m !== videoItem && m.mediaType !== 'VIDEO');
+    const imageCount = imageItems.length;
 
     const imageLoading = priority ? 'eager' : 'lazy';
     const imageDecoding = 'async';
 
-    if (count === 1) {
-      const item = post.media[0];
+    // Renders a single image or an accessible graceful fallback card if the image fails to load
+    const renderSlot = (
+      item: PostMediaItem,
+      index: number,
+      containerSx?: any,
+      fixedHeight?: number | string
+    ) => {
+      const isFailed = failedImageUrls.has(item.url);
+
+      if (isFailed) {
+        return (
+          <Box
+            key={item.id || item.url || index}
+            sx={{
+              width: '100%',
+              height: fixedHeight || '100%',
+              minHeight: fixedHeight ? undefined : 140,
+              bgcolor: 'action.hover',
+              borderRadius: 1.5,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 1,
+              color: 'text.secondary',
+              p: 2,
+              border: '1px dashed',
+              borderColor: 'divider',
+              userSelect: 'none',
+              ...containerSx,
+            }}
+            role="img"
+            aria-label={`Attachment ${index + 1} unavailable`}
+          >
+            <BrokenImageIcon sx={{ fontSize: 32, opacity: 0.6 }} />
+            <Typography variant="caption" color="text.secondary" textAlign="center">
+              Image unavailable
+            </Typography>
+          </Box>
+        );
+      }
+
       return (
-        <Box sx={{ mt: 1.5, mb: 1, borderRadius: 2, overflow: 'hidden' }}>
+        <Box
+          key={item.id || item.url || index}
+          sx={{
+            position: 'relative',
+            width: '100%',
+            height: fixedHeight || '100%',
+            bgcolor: 'action.hover',
+            overflow: 'hidden',
+            borderRadius: 1.5,
+            ...containerSx,
+          }}
+        >
           <Box
             component="img"
             src={item.url}
-            alt="Community Post attachment"
+            alt={`Attachment ${index + 1} from ${post.author.fullName}'s post`}
             loading={imageLoading}
             decoding={imageDecoding}
+            onError={() => handleImageError(item.url)}
             onClick={() => setPreviewImage(item.url)}
-            sx={{
-              width: '100%',
-              maxHeight: 460,
-              objectFit: 'cover',
-              cursor: 'pointer',
-              display: 'block',
-              transition: 'opacity 0.2s',
-              '&:hover': { opacity: 0.95 },
+            onKeyDown={(e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setPreviewImage(item.url);
+              }
             }}
-          />
-        </Box>
-      );
-    }
-
-    if (count === 2) {
-      return (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: 1,
-            mt: 1.5,
-            mb: 1,
-            borderRadius: 2,
-            overflow: 'hidden',
-          }}
-        >
-          {post.media.map((item) => (
-            <Box
-              key={item.id}
-              component="img"
-              src={item.url}
-              alt="Community Post attachment"
-              loading={imageLoading}
-              decoding={imageDecoding}
-              onClick={() => setPreviewImage(item.url)}
-              sx={{
-                width: '100%',
-                height: 250,
-                objectFit: 'cover',
-                cursor: 'pointer',
-                display: 'block',
-                transition: 'opacity 0.2s',
-                '&:hover': { opacity: 0.95 },
-              }}
-            />
-          ))}
-        </Box>
-      );
-    }
-
-    if (count === 3) {
-      return (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gridTemplateRows: 'repeat(2, 140px)',
-            gap: 1,
-            mt: 1.5,
-            mb: 1,
-            borderRadius: 2,
-            overflow: 'hidden',
-          }}
-        >
-          <Box
-            component="img"
-            src={post.media[0].url}
-            alt="Community Post attachment"
-            loading={imageLoading}
-            decoding={imageDecoding}
-            onClick={() => setPreviewImage(post.media[0].url)}
+            tabIndex={0}
+            role="button"
+            aria-label={`View full image ${index + 1} from ${post.author.fullName}`}
             sx={{
-              gridRow: 'span 2',
               width: '100%',
               height: '100%',
+              maxHeight: fixedHeight ? undefined : 460,
               objectFit: 'cover',
               cursor: 'pointer',
               display: 'block',
@@ -825,64 +921,197 @@ export const PostCard: React.FC<PostCardProps> = ({
               '&:hover': { opacity: 0.95 },
             }}
           />
-          {post.media.slice(1, 3).map((item) => (
-            <Box
-              key={item.id}
-              component="img"
-              src={item.url}
-              alt="Community Post attachment"
-              loading={imageLoading}
-              decoding={imageDecoding}
-              onClick={() => setPreviewImage(item.url)}
-              sx={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                cursor: 'pointer',
-                display: 'block',
-                transition: 'opacity 0.2s',
-                '&:hover': { opacity: 0.95 },
-              }}
-            />
-          ))}
         </Box>
       );
-    }
+    };
 
-    // 4 images: 2x2 grid
+    const renderImages = () => {
+      if (imageCount === 0) return null;
+
+      if (imageCount === 1) {
+        return (
+          <Box sx={{ mt: 1.5, mb: 1, borderRadius: 2, overflow: 'hidden' }}>
+            {renderSlot(
+              imageItems[0],
+              0,
+              {
+                borderRadius: 2,
+                minHeight: { xs: 200, sm: 260 },
+              }
+            )}
+          </Box>
+        );
+      }
+
+      if (imageCount === 2) {
+        return (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: 1,
+              mt: 1.5,
+              mb: 1,
+              borderRadius: 2,
+              overflow: 'hidden',
+            }}
+          >
+            {imageItems.map((item, idx) => renderSlot(item, idx, undefined, 250))}
+          </Box>
+        );
+      }
+
+      if (imageCount === 3) {
+        return (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gridTemplateRows: 'repeat(2, 140px)',
+              gap: 1,
+              mt: 1.5,
+              mb: 1,
+              borderRadius: 2,
+              overflow: 'hidden',
+            }}
+          >
+            {renderSlot(imageItems[0], 0, { gridRow: 'span 2' }, '100%')}
+            {imageItems.slice(1, 3).map((item, idx) =>
+              renderSlot(item, idx + 1, undefined, 140)
+            )}
+          </Box>
+        );
+      }
+
+      // 4 images: 2x2 grid
+      return (
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gridTemplateRows: 'repeat(2, 160px)',
+            gap: 1,
+            mt: 1.5,
+            mb: 1,
+            borderRadius: 2,
+            overflow: 'hidden',
+          }}
+        >
+          {imageItems.slice(0, 4).map((item, idx) =>
+            renderSlot(item, idx, undefined, 160)
+          )}
+        </Box>
+      );
+    };
+
     return (
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gridTemplateRows: 'repeat(2, 160px)',
-          gap: 1,
-          mt: 1.5,
-          mb: 1,
-          borderRadius: 2,
-          overflow: 'hidden',
-        }}
-      >
-        {post.media.slice(0, 4).map((item) => (
-          <Box
-            key={item.id}
-            component="img"
-            src={item.url}
-            alt="Community Post attachment"
-            loading={imageLoading}
-            decoding={imageDecoding}
-            onClick={() => setPreviewImage(item.url)}
-            sx={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              cursor: 'pointer',
-              display: 'block',
-              transition: 'opacity 0.2s',
-              '&:hover': { opacity: 0.95 },
-            }}
-          />
-        ))}
+      <Box>
+        {/* Validated YouTube Video Embed */}
+        {videoItem && parsedYt && (
+          <Box sx={{ mt: 1.5, mb: 1 }}>
+            <Box
+              sx={{
+                position: 'relative',
+                width: '100%',
+                pt: '56.25%', // 16:9 Aspect Ratio
+                borderRadius: 2,
+                overflow: 'hidden',
+                bgcolor: '#000',
+                boxShadow: 2,
+              }}
+            >
+              <Box
+                component="iframe"
+                src={parsedYt.embedUrl}
+                title={`YouTube video player: Post by ${post.author.fullName}`}
+                loading="lazy"
+                allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  border: 0,
+                }}
+              />
+            </Box>
+            {/* Fallback Watch on YouTube link */}
+            <Box display="flex" justifyContent="flex-end" alignItems="center" mt={0.75} px={0.5}>
+              <Link
+                href={parsedYt.watchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                underline="hover"
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  fontSize: '0.8125rem',
+                  color: 'text.secondary',
+                  '&:hover': { color: 'primary.main' },
+                }}
+                aria-label={`Watch video on YouTube in a new tab (ID: ${parsedYt.videoId})`}
+              >
+                <span>Watch on YouTube</span>
+                <OpenInNewIcon sx={{ fontSize: 14 }} />
+              </Link>
+            </Box>
+          </Box>
+        )}
+
+        {/* Uploaded direct video (non-YouTube) with error fallback */}
+        {videoItem && !parsedYt && (
+          <Box sx={{ mt: 1.5, mb: 1, borderRadius: 2, overflow: 'hidden', bgcolor: '#000' }}>
+            {failedVideoUrls.has(videoItem.url) ? (
+              <Box
+                sx={{
+                  width: '100%',
+                  minHeight: 200,
+                  bgcolor: 'action.hover',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1,
+                  p: 3,
+                  border: '1px dashed',
+                  borderColor: 'divider',
+                  color: 'text.secondary',
+                }}
+                role="alert"
+                aria-label="Video playback unavailable"
+              >
+                <VideocamOffIcon sx={{ fontSize: 40, opacity: 0.6 }} />
+                <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                  Video playback unavailable
+                </Typography>
+                <Typography variant="caption" color="text.disabled" textAlign="center">
+                  The video file could not be loaded or is in an unsupported format.
+                </Typography>
+              </Box>
+            ) : (
+              <Box
+                component="video"
+                controls
+                preload="metadata"
+                src={videoItem.url}
+                poster={videoItem.thumbnail || undefined}
+                onError={() => handleVideoError(videoItem.url)}
+                aria-label={`Video attachment from ${post.author.fullName}`}
+                sx={{
+                  width: '100%',
+                  maxHeight: 460,
+                  display: 'block',
+                }}
+              />
+            )}
+          </Box>
+        )}
+
+        {/* Image Grid */}
+        {renderImages()}
       </Box>
     );
   };
@@ -959,6 +1188,14 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <ListItemText>
                       {!isOwner && isModerator ? 'Moderate Delete' : 'Delete Post'}
                     </ListItemText>
+                  </MenuItem>
+                )}
+                {!isOwner && user && (
+                  <MenuItem onClick={handleOpenReport} sx={{ color: 'warning.main' }}>
+                    <ListItemIcon>
+                      <FlagOutlinedIcon fontSize="small" color="warning" />
+                    </ListItemIcon>
+                    <ListItemText>Report Post</ListItemText>
                   </MenuItem>
                 )}
               </Menu>
@@ -1655,6 +1892,10 @@ export const PostCard: React.FC<PostCardProps> = ({
             component="img"
             src={previewImage}
             alt="Full size preview"
+            onError={() => {
+              handleImageError(previewImage);
+              setPreviewImage(null);
+            }}
             sx={{
               maxWidth: '90vw',
               maxHeight: '90vh',
@@ -1665,11 +1906,90 @@ export const PostCard: React.FC<PostCardProps> = ({
           />
         )}
       </Dialog>
+      {/* Report Post Dialog */}
+      <Dialog
+        open={isReportDialogOpen}
+        onClose={() => !isSubmittingReport && setIsReportDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold' }}>Report Community Post</DialogTitle>
+        <DialogContent dividers>
+          {reportError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {reportError}
+            </Alert>
+          )}
+          <DialogContentText sx={{ mb: 2 }}>
+            Help our moderators keep this community safe. What is the issue with this post?
+          </DialogContentText>
+          <TextField
+            select
+            fullWidth
+            size="small"
+            label="Report Reason"
+            value={reportReason}
+            onChange={(e) => setReportReason(e.target.value as ReportPostReason)}
+            disabled={isSubmittingReport}
+            sx={{ mb: 2 }}
+          >
+            <MenuItem value="INAPPROPRIATE_CONTENT">Inappropriate Content</MenuItem>
+            <MenuItem value="SPAM">Spam or Promotional</MenuItem>
+            <MenuItem value="HARASSMENT">Harassment or Bullying</MenuItem>
+            <MenuItem value="HATE_SPEECH">Hate Speech</MenuItem>
+            <MenuItem value="MISINFORMATION">Misinformation</MenuItem>
+            <MenuItem value="OTHER">Other Reason</MenuItem>
+          </TextField>
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            size="small"
+            label="Additional Details (Optional)"
+            placeholder="Describe why this content violates community guidelines..."
+            value={reportDetails}
+            onChange={(e) => setReportDetails(e.target.value)}
+            disabled={isSubmittingReport}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setIsReportDialogOpen(false)}
+            disabled={isSubmittingReport}
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmReport}
+            color="warning"
+            variant="contained"
+            disabled={isSubmittingReport}
+            startIcon={
+              isSubmittingReport ? (
+                <CircularProgress size={18} color="inherit" />
+              ) : (
+                <FlagOutlinedIcon />
+              )
+            }
+          >
+            {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={Boolean(copyFeedback)}
         autoHideDuration={3000}
         onClose={() => setCopyFeedback(null)}
         message={copyFeedback}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
+      <Snackbar
+        open={Boolean(reportSuccess)}
+        autoHideDuration={4000}
+        onClose={() => setReportSuccess(null)}
+        message={reportSuccess}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
     </>

@@ -1,12 +1,12 @@
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../config/api.config';
-import { getInMemoryToken } from './api.client';
+import { getInMemoryToken, getActiveCommunitySlug } from './api.client';
 
 let socketInstance: Socket | null = null;
 
 /**
  * Returns the singleton Socket.IO client connection.
- * Connects with the in-memory access token via dynamic auth callback.
+ * Connects with the in-memory access token and community context via dynamic auth callback.
  */
 export function getChatSocket(): Socket {
   if (!socketInstance) {
@@ -16,7 +16,8 @@ export function getChatSocket(): Socket {
       withCredentials: true,
       auth: (cb) => {
         const token = getInMemoryToken();
-        cb({ token: token || '' });
+        const community = getActiveCommunitySlug();
+        cb({ token: token || '', community: community || undefined });
       },
       reconnection: true,
       reconnectionAttempts: 10,
@@ -29,7 +30,7 @@ export function getChatSocket(): Socket {
 }
 
 /**
- * Connects the chat socket if it is currently disconnected.
+ * Connects the socket if it is currently disconnected.
  */
 export function connectChatSocket(): Socket {
   const socket = getChatSocket();
@@ -40,7 +41,7 @@ export function connectChatSocket(): Socket {
 }
 
 /**
- * Disconnects the chat socket and cleans up listeners (e.g. on user logout).
+ * Disconnects the socket and cleans up listeners (e.g. on user logout).
  */
 export function disconnectChatSocket(): void {
   if (socketInstance) {
@@ -49,3 +50,9 @@ export function disconnectChatSocket(): void {
     socketInstance = null;
   }
 }
+
+// Generic aliases for application-wide real-time usage (chat & notifications)
+export const getAppSocket = getChatSocket;
+export const connectAppSocket = connectChatSocket;
+export const disconnectAppSocket = disconnectChatSocket;
+

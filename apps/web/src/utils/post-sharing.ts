@@ -7,6 +7,7 @@ export interface ShareFormatOptions {
   authorName: string;
   content?: string | null;
   canonicalUrl: string;
+  isPrivateGroup?: boolean;
 }
 
 export interface FormattedSharePayload {
@@ -42,23 +43,26 @@ export function buildSharePayload({
   authorName,
   content,
   canonicalUrl,
+  isPrivateGroup = false,
 }: ShareFormatOptions): FormattedSharePayload {
-  const title = `${authorName} on Apna Samaj`;
+  const title = isPrivateGroup
+    ? `${authorName} on Apna Samaj (Private Group)`
+    : `${authorName} on Apna Samaj`;
   const snippet = getCleanShareSnippet(content, canonicalUrl);
 
   // Native Web Share:
   // When passing `url: canonicalUrl`, `text` MUST NOT contain `canonicalUrl`
   // because native share targets (WhatsApp, Slack, Twitter, etc.) append the URL to the text.
   const nativeShareText = snippet
-    ? `*${authorName} on Apna Samaj*:\n"${snippet}"`
-    : `*${authorName} on Apna Samaj*`;
+    ? `*${title}*:\n"${snippet}"`
+    : `*${title}*`;
 
   // WhatsApp Message (direct URL parameter):
   // WhatsApp direct API uses a single text string. Include the author header,
   // excerpt (if present and not just the URL), and canonical URL exactly once.
   const whatsappMessage = snippet
-    ? `*${authorName} on Apna Samaj*:\n"${snippet}"\n\n${canonicalUrl}`
-    : `*${authorName} on Apna Samaj*:\n${canonicalUrl}`;
+    ? `*${title}*:\n"${snippet}"\n\n${canonicalUrl}`
+    : `*${title}*:\n${canonicalUrl}`;
 
   const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappMessage)}`;
 

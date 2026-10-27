@@ -6,7 +6,7 @@ import { verifyAccessToken } from '../auth/auth.tokens';
 import { tenantDbManager, PrismaClient } from '@apnasamaj/database';
 import { resolveCommunityFromRequest } from '@apnasamaj/validation';
 import { sendChatMessage, verifyGroupChatAccess } from './chat.service';
-import { ChatMessageItem, NewChatMessageEvent } from '@apnasamaj/shared-types';
+import { ChatMessageItem, NewChatMessageEvent, NotificationItem } from '@apnasamaj/shared-types';
 
 export interface AuthenticatedSocketUser {
   id: string;
@@ -46,6 +46,83 @@ export function getIO(): Server {
     throw new Error('Socket.IO has not been initialized yet.');
   }
   return ioInstance;
+}
+
+export function getUserNotificationRoomName(tenantSlug: string, userId: string): string {
+  return `${tenantSlug}:user:${userId}`;
+}
+
+/**
+ * Emits a real-time notification and updated unread count to the recipient's authenticated room.
+ * Minimum safe payload required by the frontend is transmitted.
+ */
+export function emitRealtimeNotification(
+  tenantSlug: string,
+  recipientId: string,
+  notification: any,
+  unreadCount: number
+): void {
+  if (!ioInstance) return;
+  try {
+    const userRoom = getUserNotificationRoomName(tenantSlug, recipientId);
+
+    const mappedNotification: NotificationItem = {
+      id: notification.id,
+      recipientId: notification.recipientId,
+      actorId: notification.actorId || null,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      entityType: notification.entityType || null,
+      entityId: notification.entityId || null,
+      isRead: Boolean(notification.isRead),
+      readAt: notification.readAt
+        ? typeof notification.readAt === 'string'
+          ? notification.readAt
+          : notification.readAt.toISOString()
+        : null,
+      createdAt:
+        typeof notification.createdAt === 'string'
+          ? notification.createdAt
+          : notification.createdAt.toISOString(),
+      actor: notification.actor
+        ? {
+            id: notification.actor.id,
+            fullName: notification.actor.profile?.fullName || 'Community Member',
+            avatarUrl: notification.actor.profile?.avatarUrl || null,
+          }
+        : undefined,
+    };
+
+    ioInstance.to(userRoom).emit('notification:new', {
+      notification: mappedNotification,
+    });
+
+    ioInstance.to(userRoom).emit('notification:unread-count', {
+      unreadCount,
+    });
+  } catch (err: unknown) {
+    console.warn('[Realtime Notification] Failed to emit to user room:', err);
+  }
+}
+
+/**
+ * Emits updated unread count to a recipient's authenticated room (e.g. after mark as read).
+ */
+export function emitRealtimeUnreadCount(
+  tenantSlug: string,
+  recipientId: string,
+  unreadCount: number
+): void {
+  if (!ioInstance) return;
+  try {
+    const userRoom = getUserNotificationRoomName(tenantSlug, recipientId);
+    ioInstance.to(userRoom).emit('notification:unread-count', {
+      unreadCount,
+    });
+  } catch (err: unknown) {
+    console.warn('[Realtime Notification] Failed to emit unread count:', err);
+  }
 }
 
 export async function chatSocketAuthMiddleware(
@@ -214,6 +291,30 @@ export function initChatSocketServer(httpServer: http.Server): Server {
 
     const tenantSlug = tenant.slug;
     const getTenantRoomName = (groupId: string) => `${tenantSlug}:group:${groupId}`;
+    const userRoomName = getUserNotificationRoomName(tenantSlug, user.id);
+
+    // Automatically join the authenticated user's notification room within their verified tenant
+    socket.join(userRoomName);
+
+    // Guard: Prevent arbitrary-user room subscription attempts
+    socket.on(
+      'join_user_notifications',
+      (
+        payload: { userId?: string },
+        callback?: (res: { success: boolean; error?: string }) => void
+      ) => {
+        // Strict Security Guard: Never trust a client-supplied userId
+        if (payload?.userId && payload.userId !== user.id) {
+          callback?.({
+            success: false,
+            error: 'Forbidden: Cannot subscribe to another user notification room.',
+          });
+          return;
+        }
+        socket.join(userRoomName);
+        callback?.({ success: true });
+      }
+    );
 
     // 1. Join Group Chat Room
     socket.on(

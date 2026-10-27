@@ -11,6 +11,8 @@ import {
   CreateCommentRequest,
   UpdateCommentRequest,
   CommentsResponseData,
+  ReportPostRequest,
+  ReportPostResponseData,
 } from '@apnasamaj/shared-types';
 import { apiFetch } from './api.client';
 
@@ -34,7 +36,8 @@ export async function getFeedApi(
   page: number = 1,
   limit: number = 10,
   type?: PostType,
-  authorId?: string
+  authorId?: string,
+  options?: { signal?: AbortSignal }
 ): Promise<FeedResponseData> {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -44,6 +47,7 @@ export async function getFeedApi(
 
   const response = await apiFetch<FeedResponseData>(`/api/v1/posts?${params.toString()}`, {
     method: 'GET',
+    signal: options?.signal,
   });
 
   if (!response.success || !response.data) {
@@ -264,3 +268,24 @@ export async function deleteCommentApi(postId: string, commentId: string): Promi
     throw new Error(response.error || 'Failed to delete comment.');
   }
 }
+
+// --------------------------------------------------------
+// REPORTING API METHODS
+// --------------------------------------------------------
+
+export async function reportPostApi(
+  postId: string,
+  data: ReportPostRequest
+): Promise<ReportPostResponseData> {
+  const response = await apiFetch<ReportPostResponseData>(`/api/v1/posts/${postId}/report`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to submit post report.');
+  }
+
+  return response.data;
+}
+

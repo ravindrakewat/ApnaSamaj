@@ -25,6 +25,13 @@ import DoneAllIcon from '@mui/icons-material/DoneAll';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import ChatBubbleIcon from '@mui/icons-material/ChatBubble';
+import GroupsIcon from '@mui/icons-material/Groups';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import VolunteerActivismIcon from '@mui/icons-material/VolunteerActivism';
+import GavelIcon from '@mui/icons-material/Gavel';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { NotificationItem } from '@apnasamaj/shared-types';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -34,48 +41,62 @@ import {
   markAllNotificationsAsRead,
   deleteNotification,
 } from '../services/notifications.service';
+import { connectAppSocket } from '../services/chat.socket';
+import {
+  resolveNotificationTarget,
+  formatRelativeTime,
+  getNotificationTypeMeta,
+} from '../utils/notifications';
 
-export function formatRelativeTime(dateString: string): string {
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return '';
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    if (diffMs < 0) return 'Just now';
-    const diffSec = Math.floor(diffMs / 1000);
-    if (diffSec < 60) return 'Just now';
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHour = Math.floor(diffMin / 60);
-    if (diffHour < 24) return `${diffHour}h ago`;
-    const diffDay = Math.floor(diffHour / 24);
-    if (diffDay < 7) return `${diffDay}d ago`;
-    return date.toLocaleDateString();
-  } catch {
-    return '';
-  }
-}
+export { resolveNotificationTarget, formatRelativeTime, getNotificationTypeMeta };
 
-export function resolveNotificationTarget(item: NotificationItem): string | null {
-  switch (item.type) {
-    case 'POST_LIKE':
-    case 'POST_COMMENT':
-      return item.entityId ? `/posts/${item.entityId}` : '/feed';
-    case 'GROUP_ROLE_UPDATE':
-    case 'GROUP_MEMBER_REMOVED':
-      return '/groups';
-    case 'ACCOUNT_STATUS_UPDATE':
-      return '/profile';
-    case 'POST_MODERATED':
-      return '/feed';
-    case 'MATRIMONIAL_INTEREST_RECEIVED':
-    case 'MATRIMONIAL_INTEREST_ACCEPTED':
-    case 'MATRIMONIAL_PROFILE_APPROVED':
-    case 'MATRIMONIAL_PROFILE_REJECTED':
-      return '/matrimonial/me';
+function NotificationTypeBadgeIcon({ type }: { type: string }) {
+  const meta = getNotificationTypeMeta(type);
+  const iconProps = { sx: { fontSize: 10, color: '#ffffff' } };
+
+  let iconNode = null;
+  switch (meta.iconType) {
+    case 'like':
+      iconNode = <FavoriteIcon {...iconProps} />;
+      break;
+    case 'comment':
+      iconNode = <ChatBubbleIcon {...iconProps} />;
+      break;
+    case 'group':
+      iconNode = <GroupsIcon {...iconProps} />;
+      break;
+    case 'security':
+      iconNode = <VerifiedUserIcon {...iconProps} />;
+      break;
+    case 'matrimonial':
+      iconNode = <VolunteerActivismIcon {...iconProps} />;
+      break;
+    case 'moderation':
+      iconNode = <GavelIcon {...iconProps} />;
+      break;
     default:
-      return null;
+      iconNode = null;
   }
+
+  if (!iconNode) return null;
+
+  return (
+    <Box
+      sx={{
+        width: 16,
+        height: 16,
+        borderRadius: '50%',
+        bgcolor: meta.color,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1.5px solid #ffffff',
+        boxShadow: 1,
+      }}
+    >
+      {iconNode}
+    </Box>
+  );
 }
 
 export const NotificationBell: React.FC = () => {
@@ -139,6 +160,60 @@ export const NotificationBell: React.FC = () => {
       clearInterval(interval);
     };
   }, [user, loadUnreadCount]);
+
+  // Real-time notification updates via Socket.IO
+  useEffect(() => {
+    if (!user) return;
+
+    let socket: any = null;
+    try {
+      socket = connectAppSocket();
+    } catch (err) {
+      console.warn('[NotificationBell] Could not initialize real-time socket:', err);
+      return;
+    }
+
+    const handleNewNotification = (data: { notification: NotificationItem }) => {
+      if (!data?.notification || !isMountedRef.current) return;
+      const newNotif = data.notification;
+
+      setNotifications((prev) => {
+        // Prevent duplicate entries after reconnects or repeated events
+        if (prev.some((n) => n.id === newNotif.id)) {
+          return prev;
+        }
+        return [newNotif, ...prev];
+      });
+
+      if (!newNotif.isRead) {
+        setUnreadCount((prev) => prev + 1);
+      }
+    };
+
+    const handleUnreadCount = (data: { unreadCount: number }) => {
+      if (typeof data?.unreadCount === 'number' && isMountedRef.current) {
+        setUnreadCount(data.unreadCount);
+      }
+    };
+
+    const handleConnect = () => {
+      // Re-synchronize unread count on reconnect to guarantee state consistency
+      loadUnreadCount();
+      if (anchorEl) {
+        loadNotifications(1, false, activeTab);
+      }
+    };
+
+    socket.on('notification:new', handleNewNotification);
+    socket.on('notification:unread-count', handleUnreadCount);
+    socket.on('connect', handleConnect);
+
+    return () => {
+      socket.off('notification:new', handleNewNotification);
+      socket.off('notification:unread-count', handleUnreadCount);
+      socket.off('connect', handleConnect);
+    };
+  }, [user, anchorEl, activeTab, loadUnreadCount]);
 
   const loadNotifications = async (
     pageNum: number = 1,
@@ -330,8 +405,9 @@ export const NotificationBell: React.FC = () => {
         }}
         PaperProps={{
           sx: {
-            width: { xs: 320, sm: 380 },
-            maxHeight: 520,
+            width: { xs: 'calc(100vw - 24px)', sm: 380 },
+            maxWidth: 400,
+            maxHeight: { xs: '80vh', sm: 520 },
             display: 'flex',
             flexDirection: 'column',
             boxShadow: 4,
@@ -415,7 +491,21 @@ export const NotificationBell: React.FC = () => {
             </Box>
           ) : error ? (
             <Box sx={{ p: 2 }}>
-              <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>
+              <Alert
+                severity="warning"
+                sx={{ fontSize: '0.85rem' }}
+                action={
+                  <Button
+                    color="inherit"
+                    size="small"
+                    startIcon={<RefreshIcon fontSize="small" />}
+                    onClick={() => loadNotifications(1, false, activeTab)}
+                    sx={{ textTransform: 'none', fontWeight: 600 }}
+                  >
+                    Retry
+                  </Button>
+                }
+              >
                 {error}
               </Alert>
             </Box>
@@ -459,8 +549,8 @@ export const NotificationBell: React.FC = () => {
                             ? 'action.hover'
                             : (theme) =>
                                 theme.palette.mode === 'dark'
-                                  ? 'rgba(25, 118, 210, 0.14)'
-                                  : 'rgba(25, 118, 210, 0.08)',
+                                    ? 'rgba(25, 118, 210, 0.14)'
+                                    : 'rgba(25, 118, 210, 0.08)',
                         },
                       }}
                       secondaryAction={
@@ -492,21 +582,27 @@ export const NotificationBell: React.FC = () => {
                         </Box>
                       }
                     >
-                      <ListItemAvatar sx={{ minWidth: 44, mt: 0.25 }}>
-                        <Avatar
-                          src={item.actor?.avatarUrl || undefined}
-                          alt={item.actor?.fullName || 'User'}
-                          onClick={(e) => handleActorClick(item.actorId, e)}
-                          sx={{
-                            width: 36,
-                            height: 36,
-                            cursor: item.actorId ? 'pointer' : 'default',
-                            bgcolor: 'primary.light',
-                            fontSize: '0.875rem',
-                          }}
+                      <ListItemAvatar sx={{ minWidth: 48, mt: 0.25 }}>
+                        <Badge
+                          overlap="circular"
+                          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                          badgeContent={<NotificationTypeBadgeIcon type={item.type} />}
                         >
-                          {(item.actor?.fullName || item.title || 'U').charAt(0).toUpperCase()}
-                        </Avatar>
+                          <Avatar
+                            src={item.actor?.avatarUrl || undefined}
+                            alt={item.actor?.fullName || 'User'}
+                            onClick={(e) => handleActorClick(item.actorId, e)}
+                            sx={{
+                              width: 36,
+                              height: 36,
+                              cursor: item.actorId ? 'pointer' : 'default',
+                              bgcolor: 'primary.light',
+                              fontSize: '0.875rem',
+                            }}
+                          >
+                            {(item.actor?.fullName || item.title || 'U').charAt(0).toUpperCase()}
+                          </Avatar>
+                        </Badge>
                       </ListItemAvatar>
 
                       <ListItemText

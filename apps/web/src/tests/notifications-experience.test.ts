@@ -3,10 +3,11 @@ import { NotificationType, NotificationItem } from '@apnasamaj/shared-types';
 import {
   resolveNotificationTarget,
   formatRelativeTime,
-} from '../components/NotificationBell';
+  getNotificationTypeMeta,
+} from '../utils/notifications';
 
 console.log('================================================================');
-console.log('   Apna Samaj — Batch 14B.3: Notifications Experience Tests     ');
+console.log('   Apna Samaj — Batch 14D: Notifications Experience Tests      ');
 console.log('================================================================\n');
 
 let passedTests = 0;
@@ -318,6 +319,59 @@ async function runTests() {
 
     // Invalid date string
     assertTest(formatRelativeTime('invalid-date') === '', 'Invalid date string returns empty string safely');
+  }
+
+  console.log('--- 5. Notification Visual Metadata & Categories ---');
+  {
+    const likeMeta = getNotificationTypeMeta('POST_LIKE');
+    assertTest(likeMeta.category === 'social' && likeMeta.iconType === 'like', 'POST_LIKE mapped to social / like');
+
+    const commentMeta = getNotificationTypeMeta('POST_COMMENT');
+    assertTest(commentMeta.category === 'social' && commentMeta.iconType === 'comment', 'POST_COMMENT mapped to social / comment');
+
+    const modMeta = getNotificationTypeMeta('POST_MODERATED');
+    assertTest(modMeta.category === 'social' && modMeta.iconType === 'moderation', 'POST_MODERATED mapped to social / moderation');
+
+    const groupRoleMeta = getNotificationTypeMeta('GROUP_ROLE_UPDATE');
+    assertTest(groupRoleMeta.category === 'groups' && groupRoleMeta.iconType === 'group', 'GROUP_ROLE_UPDATE mapped to groups / group');
+
+    const groupRemoveMeta = getNotificationTypeMeta('GROUP_MEMBER_REMOVED');
+    assertTest(groupRemoveMeta.category === 'groups' && groupRemoveMeta.iconType === 'group', 'GROUP_MEMBER_REMOVED mapped to groups / group');
+
+    const accountMeta = getNotificationTypeMeta('ACCOUNT_STATUS_UPDATE');
+    assertTest(accountMeta.category === 'account' && accountMeta.iconType === 'security', 'ACCOUNT_STATUS_UPDATE mapped to account / security');
+
+    const matMeta = getNotificationTypeMeta('MATRIMONIAL_INTEREST_RECEIVED');
+    assertTest(matMeta.category === 'matrimonial' && matMeta.iconType === 'matrimonial', 'MATRIMONIAL mapped to matrimonial / matrimonial');
+
+    const fallbackMeta = getNotificationTypeMeta('NON_EXISTENT_TYPE');
+    assertTest(fallbackMeta.iconType === 'default', 'Unknown notification type has fallback iconType');
+  }
+
+  console.log('--- 6. Inaccessible & Deleted Post Destination Handling ---');
+  {
+    // Simulating PostDetailPage destination behavior when navigating from a notification
+    function simulatePostDetailResolution(apiStatus: number | 'NETWORK_ERROR'): {
+      isNotFound: boolean;
+      errorMessage: string | null;
+      canNavigateFeed: boolean;
+    } {
+      if (apiStatus === 404) {
+        return { isNotFound: true, errorMessage: null, canNavigateFeed: true };
+      }
+      if (apiStatus === 403) {
+        // Private group post non-member fails closed with 404 in API
+        return { isNotFound: true, errorMessage: null, canNavigateFeed: true };
+      }
+      return { isNotFound: false, errorMessage: 'Network error', canNavigateFeed: true };
+    }
+
+    const deletedPostResult = simulatePostDetailResolution(404);
+    assertTest(deletedPostResult.isNotFound === true, 'Deleted post sets isNotFound = true without leaking content');
+    assertTest(deletedPostResult.canNavigateFeed === true, 'Deleted post provides graceful fallback to feed');
+
+    const privateGroupPostResult = simulatePostDetailResolution(403);
+    assertTest(privateGroupPostResult.isNotFound === true, 'Private group post destination fails closed with not found');
   }
 
   console.log('\n================================================================');

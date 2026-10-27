@@ -44,6 +44,9 @@ const KNOWN_ACTIONS = [
   { value: 'USER_STATUS_UPDATE', label: 'User Status Update' },
   { value: 'MODERATION_DELETE_POST', label: 'Post Moderation Delete' },
   { value: 'MODERATION_DELETE_COMMENT', label: 'Comment Moderation Delete' },
+  { value: 'MODERATION_PIN_POST', label: 'Post Moderation Pin' },
+  { value: 'MODERATION_UNPIN_POST', label: 'Post Moderation Unpin' },
+  { value: 'POST_REPORT', label: 'Post Member Report' },
 ];
 
 const KNOWN_TARGET_TYPES = [
@@ -150,6 +153,12 @@ export const AuditLogsPage: React.FC = () => {
         return <Chip label="Delete Post" size="small" color="error" variant="filled" sx={{ fontWeight: 'bold' }} />;
       case 'MODERATION_DELETE_COMMENT':
         return <Chip label="Delete Comment" size="small" color="warning" variant="filled" sx={{ fontWeight: 'bold' }} />;
+      case 'MODERATION_PIN_POST':
+        return <Chip label="Pin Post" size="small" color="info" variant="filled" sx={{ fontWeight: 'bold' }} />;
+      case 'MODERATION_UNPIN_POST':
+        return <Chip label="Unpin Post" size="small" color="default" variant="outlined" sx={{ fontWeight: 'bold' }} />;
+      case 'POST_REPORT':
+        return <Chip label="Post Report" size="small" color="error" variant="outlined" sx={{ fontWeight: 'bold' }} />;
       default:
         return <Chip label={action} size="small" variant="outlined" />;
     }

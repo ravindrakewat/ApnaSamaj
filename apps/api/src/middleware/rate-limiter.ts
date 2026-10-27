@@ -76,3 +76,19 @@ export const createCommentRateLimiter = rateLimit({
   },
 });
 
+export const reportPostRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Limit each IP to 20 post reports per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many reports submitted from this network. Please wait a few minutes before reporting again.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});
+
+

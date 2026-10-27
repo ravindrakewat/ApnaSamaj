@@ -9,8 +9,16 @@ import {
   PostViewsResponseData,
   CommentItem,
   CommentsResponseData,
+  ReportPostResponseData,
 } from '@apnasamaj/shared-types';
-import { CreatePostInput, UpdatePostInput, FeedQueryInput } from '@apnasamaj/validation';
+import {
+  CreatePostInput,
+  UpdatePostInput,
+  FeedQueryInput,
+  PostMediaItemInput,
+  ReportPostInput,
+  parseYouTubeUrl,
+} from '@apnasamaj/validation';
 import {
   deleteStorageObjects,
   extractStoragePathFromUrl,
@@ -31,6 +39,16 @@ function assertDb(db?: PrismaClient): PrismaClient {
     throw new PostServiceError('Tenant database client is required for post operations.', 400);
   }
   return db;
+}
+
+async function executeWithTransaction<T>(
+  client: PrismaClient,
+  action: (tx: any) => Promise<T>
+): Promise<T> {
+  if (typeof (client as any)?.$transaction === 'function') {
+    return (client as any).$transaction(action);
+  }
+  return action(client);
 }
 
 export class PostNotFoundError extends PostServiceError {
@@ -106,6 +124,7 @@ function mapToPostItem(
           id: post.group.id,
           name: post.group.name,
           slug: post.group.slug,
+          privacy: (post.group as any).privacy || undefined,
         }
       : null,
     type: post.type as unknown as PostType,
@@ -207,6 +226,7 @@ const postIncludeAuthorAndMedia = {
       id: true,
       name: true,
       slug: true,
+      privacy: true,
     },
   },
 } as const;
@@ -291,6 +311,93 @@ export function canPinPost(role?: UserRole): boolean {
 }
 
 /**
+ * Validates, normalizes, and canonicalizes media items for post creation and updates.
+ * - Enforces maximum of 4 attachments per post.
+ * - Allows at most 1 video (YouTube embed or direct uploaded video).
+ * - Validates YouTube URLs and canonicalizes them to privacy-enhanced embed URLs (youtube-nocookie.com).
+ * - Automatically generates YouTube thumbnail URLs.
+ * - Preserves uploaded image and document handling.
+ */
+export function normalizePostMediaInputs(mediaInputs: PostMediaItemInput[]): Array<{
+  mediaType: DbMediaType;
+  url: string;
+  thumbnail: string | null;
+  order: number;
+}> {
+  if (mediaInputs.length > 4) {
+    throw new PostServiceError('A maximum of 4 media attachments can be attached per post.', 400);
+  }
+
+  let videoCount = 0;
+
+  return mediaInputs.map((item, index) => {
+    const isExplicitVideo = item.mediaType === 'VIDEO';
+    const parsedYt = parseYouTubeUrl(item.url);
+
+    if (isExplicitVideo || parsedYt) {
+      videoCount++;
+      if (videoCount > 1) {
+        throw new PostServiceError('Only one video can be attached per post.', 400);
+      }
+
+      if (parsedYt) {
+        return {
+          mediaType: DbMediaType.VIDEO,
+          url: parsedYt.embedUrl, // Canonical privacy-enhanced embed URL
+          thumbnail: parsedYt.thumbnailUrl,
+          order: item.order !== undefined ? item.order : index,
+        };
+      }
+
+      // Check if item.url claims to be youtube but failed parsing
+      if (
+        item.url.includes('youtube.com') ||
+        item.url.includes('youtu.be') ||
+        item.url.includes('youtube-nocookie.com')
+      ) {
+        throw new PostServiceError('Invalid or unsupported YouTube URL format.', 400);
+      }
+
+      // Check if direct video is a recognized storage or video file URL
+      const isDirectVideo =
+        /\.(mp4|webm|mov|ogg)($|\?)/i.test(item.url) ||
+        item.url.includes('/storage/v1/object/public/');
+
+      if (!isDirectVideo) {
+        throw new PostServiceError(
+          'Invalid video URL: must be a valid YouTube URL or direct video file.',
+          400
+        );
+      }
+
+      // Uploaded direct video (e.g. storage video)
+      return {
+        mediaType: DbMediaType.VIDEO,
+        url: item.url,
+        thumbnail: item.thumbnail || null,
+        order: item.order !== undefined ? item.order : index,
+      };
+    }
+
+    if (item.mediaType === 'DOCUMENT') {
+      return {
+        mediaType: DbMediaType.DOCUMENT,
+        url: item.url,
+        thumbnail: null,
+        order: item.order !== undefined ? item.order : index,
+      };
+    }
+
+    return {
+      mediaType: DbMediaType.IMAGE,
+      url: item.url,
+      thumbnail: item.thumbnail || null,
+      order: item.order !== undefined ? item.order : index,
+    };
+  });
+}
+
+/**
  * Creates a new post in the community, with optional media attachments.
  * If database persistence fails, cleans up any newly uploaded Supabase Storage objects.
  */
@@ -316,10 +423,7 @@ export async function createPost(
   }
 
   const mediaInputs = input.media || [];
-
-  if (mediaInputs.length > 4) {
-    throw new PostServiceError('A maximum of 4 images can be attached per post.', 400);
-  }
+  const normalizedMedia = normalizePostMediaInputs(mediaInputs);
 
   // Validate group if groupId is provided
   let targetGroupId: string | null = null;
@@ -362,14 +466,14 @@ export async function createPost(
         },
       });
 
-      if (mediaInputs.length > 0) {
+      if (normalizedMedia.length > 0) {
         await tx.postMedia.createMany({
-          data: mediaInputs.map((item, index) => ({
+          data: normalizedMedia.map((item) => ({
             postId: newPost.id,
-            mediaType: DbMediaType.IMAGE,
+            mediaType: item.mediaType,
             url: item.url,
-            thumbnail: item.thumbnail || null,
-            order: item.order ?? index,
+            thumbnail: item.thumbnail,
+            order: item.order,
           })),
         });
       }
@@ -471,7 +575,7 @@ export async function getCommunityFeed(
       where,
       skip: 0,
       take: limit,
-      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       include: postInclude,
     });
 
@@ -491,7 +595,7 @@ export async function getCommunityFeed(
         where,
         skip,
         take: limit,
-        orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         include: postInclude,
       }),
     ]);
@@ -591,7 +695,7 @@ export async function updatePost(
   }
 
   if (input.media && input.media.length > 4) {
-    throw new PostServiceError('A maximum of 4 images can be attached per post.', 400);
+    throw new PostServiceError('A maximum of 4 media attachments can be attached per post.', 400);
   }
 
   const updateData: { content?: string; type?: DbPostType } = {};
@@ -610,7 +714,8 @@ export async function updatePost(
     }
 
     if (input.media !== undefined) {
-      const currentUrls = new Set(input.media.map((m) => m.url));
+      const normalizedMedia = normalizePostMediaInputs(input.media);
+      const currentUrls = new Set(normalizedMedia.map((m) => m.url));
       const removedMedia = post.media.filter((m) => !currentUrls.has(m.url));
       removedStoragePaths = removedMedia
         .map((m) => extractStoragePathFromUrl(m.url))
@@ -619,14 +724,14 @@ export async function updatePost(
       // Replace post media
       await tx.postMedia.deleteMany({ where: { postId } });
 
-      if (input.media.length > 0) {
+      if (normalizedMedia.length > 0) {
         await tx.postMedia.createMany({
-          data: input.media.map((item, index) => ({
+          data: normalizedMedia.map((item) => ({
             postId,
-            mediaType: DbMediaType.IMAGE,
+            mediaType: item.mediaType,
             url: item.url,
-            thumbnail: item.thumbnail || null,
-            order: item.order ?? index,
+            thumbnail: item.thumbnail,
+            order: item.order,
           })),
         });
       }
@@ -708,36 +813,41 @@ export async function deletePost(
     .map((m) => extractStoragePathFromUrl(m.url))
     .filter(Boolean) as string[];
 
-  await client.post.delete({
-    where: { id: postId },
+  // Execute deletion and audit log recording atomically in a transaction
+  await executeWithTransaction(client, async (tx) => {
+    await tx.post.delete({
+      where: { id: postId },
+    });
+
+    // If deleted by an administrative moderator on behalf of moderation, record in AuditLog
+    if (!isOwner && isModerator) {
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          action: 'MODERATION_DELETE_POST',
+          targetType: 'Post',
+          targetId: postId,
+          details: {
+            postAuthorId: post.authorId,
+            moderatorRole: userRole,
+            mediaCount: post.media?.length || 0,
+          },
+          ipAddress: ipAddress || null,
+          userAgent: userAgent || null,
+        },
+      });
+    }
   });
 
-  // Clean up Supabase storage files
+  // Clean up Supabase storage files after transaction has successfully committed
   if (storagePaths.length > 0) {
     deleteStorageObjects(storagePaths).catch((err) =>
       console.warn('[Posts Service] Failed to delete post media from storage:', err)
     );
   }
 
-  // If deleted by an administrative moderator on behalf of moderation, record in AuditLog
+  // Notify author of moderation action
   if (!isOwner && isModerator) {
-    await client.auditLog.create({
-      data: {
-        actorId: userId,
-        action: 'MODERATION_DELETE_POST',
-        targetType: 'Post',
-        targetId: postId,
-        details: {
-          postAuthorId: post.authorId,
-          moderatorRole: userRole,
-          mediaCount: post.media?.length || 0,
-        },
-        ipAddress: ipAddress || null,
-        userAgent: userAgent || null,
-      },
-    });
-
-    // Notify author of moderation action
     sendNotificationSafely(
       {
         recipientId: post.authorId,
@@ -758,12 +868,15 @@ export async function deletePost(
 /**
  * Pins a post to the top of feeds.
  * Only SUPER_ADMIN, COMMUNITY_ADMIN, and MODERATOR may pin posts.
+ * Records a MODERATION_PIN_POST audit log atomically.
  * Idempotent: pinning an already pinned post is safe and does not corrupt state.
  */
 export async function pinPost(
   postId: string,
   userId: string,
   userRole: UserRole,
+  ipAddress?: string,
+  userAgent?: string,
   db?: PrismaClient
 ): Promise<PostItem> {
   const client = assertDb(db);
@@ -775,23 +888,42 @@ export async function pinPost(
 
   await verifyActivePost(postId, userId, client);
 
-  const updated = await client.post.update({
-    where: { id: postId },
-    data: { isPinned: true },
-    include: {
-      ...postIncludeAuthorAndMedia,
-      _count: {
-        select: {
-          likes: true,
-          comments: true,
-          views: true,
+  const updated = await executeWithTransaction(client, async (tx) => {
+    const post = await tx.post.update({
+      where: { id: postId },
+      data: { isPinned: true },
+      include: {
+        ...postIncludeAuthorAndMedia,
+        _count: {
+          select: {
+            likes: true,
+            comments: true,
+            views: true,
+          },
+        },
+        likes: {
+          where: { userId },
+          select: { id: true },
         },
       },
-      likes: {
-        where: { userId },
-        select: { id: true },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorId: userId,
+        action: 'MODERATION_PIN_POST',
+        targetType: 'Post',
+        targetId: postId,
+        details: {
+          postAuthorId: post.authorId,
+          moderatorRole: userRole,
+        },
+        ipAddress: ipAddress || null,
+        userAgent: userAgent || null,
       },
-    },
+    });
+
+    return post;
   });
 
   return mapToPostItem(updated as unknown as PostWithAuthorAndMedia, userId);
@@ -800,12 +932,15 @@ export async function pinPost(
 /**
  * Unpins a post.
  * Only SUPER_ADMIN, COMMUNITY_ADMIN, and MODERATOR may unpin posts.
+ * Records a MODERATION_UNPIN_POST audit log atomically.
  * Idempotent: unpinning an already unpinned post is safe and does not corrupt state.
  */
 export async function unpinPost(
   postId: string,
   userId: string,
   userRole: UserRole,
+  ipAddress?: string,
+  userAgent?: string,
   db?: PrismaClient
 ): Promise<PostItem> {
   const client = assertDb(db);
@@ -817,26 +952,106 @@ export async function unpinPost(
 
   await verifyActivePost(postId, userId, client);
 
-  const updated = await client.post.update({
-    where: { id: postId },
-    data: { isPinned: false },
-    include: {
-      ...postIncludeAuthorAndMedia,
-      _count: {
-        select: {
-          likes: true,
-          comments: true,
-          views: true,
+  const updated = await executeWithTransaction(client, async (tx) => {
+    const post = await tx.post.update({
+      where: { id: postId },
+      data: { isPinned: false },
+      include: {
+        ...postIncludeAuthorAndMedia,
+        _count: {
+          select: {
+            likes: true,
+            comments: true,
+            views: true,
+          },
+        },
+        likes: {
+          where: { userId },
+          select: { id: true },
         },
       },
-      likes: {
-        where: { userId },
-        select: { id: true },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorId: userId,
+        action: 'MODERATION_UNPIN_POST',
+        targetType: 'Post',
+        targetId: postId,
+        details: {
+          postAuthorId: post.authorId,
+          moderatorRole: userRole,
+        },
+        ipAddress: ipAddress || null,
+        userAgent: userAgent || null,
       },
-    },
+    });
+
+    return post;
   });
 
   return mapToPostItem(updated as unknown as PostWithAuthorAndMedia, userId);
+}
+
+/**
+ * Submits a community report for a post.
+ * - Verifies the post exists, is active, and is accessible (private group membership checked).
+ * - Prevents authors from reporting their own post.
+ * - Prevents duplicate reports from the same user for the same post.
+ * - Records an immutable audit log entry (action: 'POST_REPORT') with reason, details, and post author.
+ * - Does NOT automatically delete or hide content.
+ * - Keeps reporter identity confidential from post authors and regular members.
+ */
+export async function reportPost(
+  postId: string,
+  userId: string,
+  input: ReportPostInput,
+  ipAddress?: string,
+  userAgent?: string,
+  db?: PrismaClient
+): Promise<ReportPostResponseData> {
+  const client = assertDb(db);
+  const post = await verifyActivePost(postId, userId, client);
+
+  if (post.authorId === userId) {
+    throw new PostServiceError('You cannot report your own post.', 400);
+  }
+
+  // Duplicate report prevention: one report per post per user
+  const existingReport = await client.auditLog.findFirst({
+    where: {
+      actorId: userId,
+      action: 'POST_REPORT',
+      targetType: 'Post',
+      targetId: postId,
+    },
+  });
+
+  if (existingReport) {
+    throw new PostServiceError('You have already submitted a report for this post.', 409);
+  }
+
+  await client.auditLog.create({
+    data: {
+      actorId: userId,
+      action: 'POST_REPORT',
+      targetType: 'Post',
+      targetId: postId,
+      details: {
+        reason: input.reason,
+        details: input.details ? input.details.trim() : null,
+        postAuthorId: post.authorId,
+        groupId: post.groupId,
+        status: 'PENDING',
+      },
+      ipAddress: ipAddress || null,
+      userAgent: userAgent || null,
+    },
+  });
+
+  return {
+    message: 'Thank you for your report. Our community moderation team will review this post.',
+  };
 }
 
 // --------------------------------------------------------
@@ -1272,28 +1487,31 @@ export async function deleteComment(
     throw new ForbiddenPostActionError('You do not have permission to delete this comment.');
   }
 
-  // Audit log for administrative moderation
-  if (!isOwner && isModerator) {
-    await client.auditLog.create({
-      data: {
-        actorId: userId,
-        action: 'MODERATION_DELETE_COMMENT',
-        targetType: 'Comment',
-        targetId: commentId,
-        details: {
-          postId,
-          commentAuthorId: comment.authorId,
-          moderatorRole: userRole,
-          contentPreview: comment.content.slice(0, 100),
-        },
-        ipAddress: ipAddress || null,
-        userAgent: userAgent || null,
-      },
+  // Execute deletion and moderation audit log atomically in a transaction
+  await executeWithTransaction(client, async (tx) => {
+    await tx.comment.delete({
+      where: { id: commentId },
     });
-  }
 
-  await client.comment.delete({
-    where: { id: commentId },
+    // Audit log for administrative moderation
+    if (!isOwner && isModerator) {
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          action: 'MODERATION_DELETE_COMMENT',
+          targetType: 'Comment',
+          targetId: commentId,
+          details: {
+            postId,
+            commentAuthorId: comment.authorId,
+            moderatorRole: userRole,
+            contentPreview: comment.content.slice(0, 100),
+          },
+          ipAddress: ipAddress || null,
+          userAgent: userAgent || null,
+        },
+      });
+    }
   });
 }
 

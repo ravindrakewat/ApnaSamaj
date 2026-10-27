@@ -39,6 +39,7 @@ export interface PostMediaInput {
   url: string;
   thumbnail?: string;
   order?: number;
+  mediaType?: PostMediaType;
 }
 
 export interface PostItem {
@@ -46,7 +47,7 @@ export interface PostItem {
   authorId: string;
   author: PostAuthor;
   groupId?: string | null;
-  group?: { id: string; name: string; slug: string } | null;
+  group?: { id: string; name: string; slug: string; privacy?: 'PUBLIC' | 'PRIVATE' } | null;
   type: PostType;
   content: string;
   isPinned: boolean;
@@ -150,3 +151,25 @@ export interface CommentsResponseData {
   comments: CommentItem[];
   pagination: CommentsPaginationMeta;
 }
+
+// --------------------------------------------------------
+// POST REPORTING TYPES
+// --------------------------------------------------------
+
+export type ReportPostReason =
+  | 'SPAM'
+  | 'HARASSMENT'
+  | 'HATE_SPEECH'
+  | 'INAPPROPRIATE_CONTENT'
+  | 'MISINFORMATION'
+  | 'OTHER';
+
+export interface ReportPostRequest {
+  reason: ReportPostReason;
+  details?: string;
+}
+
+export interface ReportPostResponseData {
+  message: string;
+}
+

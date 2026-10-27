@@ -5,6 +5,7 @@ import { requireTenantContext } from '../../middleware/tenant.middleware';
 import {
   createPostRateLimiter,
   createCommentRateLimiter,
+  reportPostRateLimiter,
 } from '../../middleware/rate-limiter';
 import { singleImageUpload } from '../../middleware/upload.middleware';
 import {
@@ -16,6 +17,7 @@ import {
   deletePostHandler,
   pinPostHandler,
   unpinPostHandler,
+  reportPostHandler,
   likePostHandler,
   unlikePostHandler,
   getPostLikesHandler,
@@ -55,6 +57,9 @@ postsRouter.post('/:id/pin', pinPostHandler);
 
 // DELETE /api/v1/posts/:id/pin - Unpin a post (Admins and Moderators only)
 postsRouter.delete('/:id/pin', unpinPostHandler);
+
+// POST /api/v1/posts/:id/report - Report a post for community guidelines violation
+postsRouter.post('/:id/report', reportPostRateLimiter, reportPostHandler);
 
 // --------------------------------------------------------
 // LIKES ROUTES

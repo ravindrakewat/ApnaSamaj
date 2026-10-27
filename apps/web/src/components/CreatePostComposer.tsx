@@ -18,9 +18,11 @@ import CampaignIcon from '@mui/icons-material/Campaign';
 import EventIcon from '@mui/icons-material/Event';
 import ForumIcon from '@mui/icons-material/Forum';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
+import YouTubeIcon from '@mui/icons-material/YouTube';
 import CloseIcon from '@mui/icons-material/Close';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import { PostItem, PostType, UserRole } from '@apnasamaj/shared-types';
-import { createPostSchema } from '@apnasamaj/validation';
+import { createPostSchema, parseYouTubeUrl, ParsedYouTubeVideo } from '@apnasamaj/validation';
 import { createPostApi, uploadPostMediaApi } from '../services/posts.service';
 import { useAuth } from '../context/AuthContext';
 
@@ -50,10 +52,38 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // YouTube embedding state
+  const [youtubeInputOpen, setYoutubeInputOpen] = useState(false);
+  const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
+  const [attachedYoutubeVideo, setAttachedYoutubeVideo] = useState<ParsedYouTubeVideo | null>(null);
+  const [youtubeInputError, setYoutubeInputError] = useState<string | null>(null);
+
   const isAdminOrMod =
     user?.role === UserRole.SUPER_ADMIN ||
     user?.role === UserRole.COMMUNITY_ADMIN ||
     user?.role === UserRole.MODERATOR;
+
+  const handleAddYoutubeVideo = () => {
+    const trimmed = youtubeUrlInput.trim();
+    if (!trimmed) {
+      setYoutubeInputError('Please enter a YouTube video URL.');
+      return;
+    }
+    const parsed = parseYouTubeUrl(trimmed);
+    if (!parsed) {
+      setYoutubeInputError('Invalid YouTube URL. Please enter a valid watch, shorts, or youtu.be link.');
+      return;
+    }
+    setAttachedYoutubeVideo(parsed);
+    setYoutubeUrlInput('');
+    setYoutubeInputOpen(false);
+    setYoutubeInputError(null);
+  };
+
+  const handleRemoveYoutubeVideo = () => {
+    setAttachedYoutubeVideo(null);
+    setYoutubeInputError(null);
+  };
 
   const handleSelectFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -141,12 +171,32 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       return;
     }
 
-    const validMedia = mediaList
+    const validMedia: Array<{
+      url: string;
+      order: number;
+      mediaType?: 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+      thumbnail?: string;
+    }> = mediaList
       .filter((m) => m.url && !m.error)
       .map((m, idx) => ({
         url: m.url,
         order: idx,
+        mediaType: 'IMAGE' as const,
       }));
+
+    if (attachedYoutubeVideo) {
+      validMedia.push({
+        url: attachedYoutubeVideo.embedUrl,
+        thumbnail: attachedYoutubeVideo.thumbnailUrl,
+        mediaType: 'VIDEO',
+        order: validMedia.length,
+      });
+    }
+
+    if (validMedia.length > 4) {
+      setErrorMessage('You can attach a maximum of 4 media items per post.');
+      return;
+    }
 
     const validation = createPostSchema.safeParse({
       content: content.trim(),
@@ -156,7 +206,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     });
 
     if (!validation.success) {
-      const issue = validation.error.issues[0]?.message || 'Please enter valid post content or attach an image.';
+      const issue = validation.error.issues[0]?.message || 'Please enter valid post content or attach media.';
       setErrorMessage(issue);
       return;
     }
@@ -169,6 +219,10 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       // Clean up object URLs
       mediaList.forEach((m) => URL.revokeObjectURL(m.previewUrl));
       setMediaList([]);
+      setAttachedYoutubeVideo(null);
+      setYoutubeUrlInput('');
+      setYoutubeInputOpen(false);
+      setYoutubeInputError(null);
       onPostCreated(created);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to publish post.');
@@ -178,7 +232,10 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
   };
 
   const remainingChars = 5000 - content.length;
-  const canSubmit = (content.trim().length > 0 || mediaList.length > 0) && !isAnyMediaUploading && !isSubmitting;
+  const canSubmit =
+    (content.trim().length > 0 || mediaList.length > 0 || !!attachedYoutubeVideo) &&
+    !isAnyMediaUploading &&
+    !isSubmitting;
 
   return (
     <Paper elevation={2} sx={{ p: { xs: 2.5, sm: 3 }, borderRadius: 3, mb: 4 }}>
@@ -214,6 +271,155 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
           disabled={isSubmitting}
           sx={{ mb: 2 }}
         />
+
+        {/* YouTube Video URL Input Box */}
+        {youtubeInputOpen && !attachedYoutubeVideo && (
+          <Box
+            sx={{
+              p: 2,
+              mb: 2,
+              bgcolor: 'action.hover',
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: youtubeInputError ? 'error.main' : 'divider',
+            }}
+          >
+            <Typography variant="subtitle2" fontWeight={600} mb={1} display="flex" alignItems="center" gap={0.75}>
+              <YouTubeIcon sx={{ color: '#FF0000', fontSize: 20 }} />
+              Embed YouTube Video
+            </Typography>
+            <Box display="flex" gap={1} alignItems="flex-start">
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Paste YouTube link (e.g. https://www.youtube.com/watch?v=... or https://youtu.be/...)"
+                value={youtubeUrlInput}
+                onChange={(e) => {
+                  setYoutubeUrlInput(e.target.value);
+                  if (youtubeInputError) setYoutubeInputError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddYoutubeVideo();
+                  }
+                }}
+                disabled={isSubmitting}
+                error={!!youtubeInputError}
+                helperText={youtubeInputError}
+              />
+              <Button
+                variant="contained"
+                color="primary"
+                size="medium"
+                onClick={handleAddYoutubeVideo}
+                disabled={!youtubeUrlInput.trim() || isSubmitting}
+                sx={{ minWidth: 80, height: 40 }}
+              >
+                Add
+              </Button>
+              <Button
+                variant="outlined"
+                color="inherit"
+                size="medium"
+                onClick={() => {
+                  setYoutubeInputOpen(false);
+                  setYoutubeInputError(null);
+                }}
+                sx={{ height: 40 }}
+              >
+                Cancel
+              </Button>
+            </Box>
+          </Box>
+        )}
+
+        {/* YouTube Video Preview Card */}
+        {attachedYoutubeVideo && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              p: 1.5,
+              mb: 2,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+              position: 'relative',
+              boxShadow: 1,
+            }}
+          >
+            <Box
+              sx={{
+                position: 'relative',
+                width: { xs: 120, sm: 160 },
+                height: { xs: 68, sm: 90 },
+                borderRadius: 1.5,
+                overflow: 'hidden',
+                flexShrink: 0,
+                bgcolor: '#000',
+              }}
+            >
+              <img
+                src={attachedYoutubeVideo.thumbnailUrl}
+                alt="YouTube thumbnail preview"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+              <Box
+                sx={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: 'rgba(0,0,0,0.3)',
+                }}
+              >
+                <PlayCircleOutlineIcon sx={{ color: 'white', fontSize: 36 }} />
+              </Box>
+            </Box>
+
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Box display="flex" alignItems="center" gap={0.75} mb={0.5}>
+                <YouTubeIcon sx={{ color: '#FF0000', fontSize: 20 }} />
+                <Typography variant="subtitle2" fontWeight={600} noWrap>
+                  YouTube Video Attached
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" noWrap>
+                ID: <strong>{attachedYoutubeVideo.videoId}</strong>
+              </Typography>
+              {attachedYoutubeVideo.startTimeSeconds !== undefined && (
+                <Typography variant="caption" color="text.secondary" display="block">
+                  Starts at: {attachedYoutubeVideo.startTimeSeconds}s
+                </Typography>
+              )}
+            </Box>
+
+            <Tooltip title="Remove YouTube video">
+              <IconButton
+                size="small"
+                onClick={handleRemoveYoutubeVideo}
+                disabled={isSubmitting}
+                aria-label="Remove YouTube video"
+                sx={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  bgcolor: 'action.hover',
+                  '&:hover': { bgcolor: 'error.light', color: 'white' },
+                }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
 
         {/* Selected Media Preview Grid */}
         {mediaList.length > 0 && (
@@ -323,6 +529,28 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
                   sx={{ borderRadius: 2 }}
                 >
                   Photo ({mediaList.length}/{MAX_IMAGES})
+                </Button>
+              </span>
+            </Tooltip>
+
+            {/* YouTube Video Action Button */}
+            <Tooltip title={attachedYoutubeVideo ? 'Only 1 video allowed per post' : 'Embed YouTube video'}>
+              <span>
+                <Button
+                  variant={attachedYoutubeVideo ? 'contained' : 'outlined'}
+                  color={attachedYoutubeVideo ? 'secondary' : 'error'}
+                  size="small"
+                  startIcon={<YouTubeIcon />}
+                  onClick={() => {
+                    if (!attachedYoutubeVideo) {
+                      setYoutubeInputOpen((prev) => !prev);
+                      setYoutubeInputError(null);
+                    }
+                  }}
+                  disabled={isSubmitting || !!attachedYoutubeVideo}
+                  sx={{ borderRadius: 2 }}
+                >
+                  {attachedYoutubeVideo ? 'YouTube Attached' : 'YouTube Video'}
                 </Button>
               </span>
             </Tooltip>

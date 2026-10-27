@@ -49,7 +49,7 @@ export async function listAuditLogs(
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: {
         id: true,
         actorId: true,
@@ -89,17 +89,24 @@ export async function listAuditLogs(
     ipAddress: log.ipAddress,
     userAgent: log.userAgent,
     createdAt: log.createdAt.toISOString(),
-    actor: {
-      id: log.actor.id,
-      phone: log.actor.phone,
-      role: log.actor.role as unknown as UserRole,
-      profile: log.actor.profile
-        ? {
-            fullName: log.actor.profile.fullName,
-            avatarUrl: log.actor.profile.avatarUrl,
-          }
-        : null,
-    },
+    actor: log.actor
+      ? {
+          id: log.actor.id,
+          phone: log.actor.phone,
+          role: log.actor.role as unknown as UserRole,
+          profile: log.actor.profile
+            ? {
+                fullName: log.actor.profile.fullName,
+                avatarUrl: log.actor.profile.avatarUrl,
+              }
+            : null,
+        }
+      : {
+          id: log.actorId,
+          phone: '',
+          role: UserRole.MEMBER,
+          profile: null,
+        },
   }));
 
   return {

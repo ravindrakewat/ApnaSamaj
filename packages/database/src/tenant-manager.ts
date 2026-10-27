@@ -250,6 +250,7 @@ export class TenantDatabaseManager {
       });
     }
 
+    (client as any)._tenantSlug = normalizedSlug;
     this.clients.set(normalizedSlug, client);
     return client;
   }
@@ -266,7 +267,20 @@ export class TenantDatabaseManager {
         databaseUrl: `postgresql://mock:mock@localhost:5432/${normalizedSlug}`,
       });
     }
+    (client as any)._tenantSlug = normalizedSlug;
     this.clients.set(normalizedSlug, client);
+  }
+
+  /**
+   * Finds the tenant slug associated with an instantiated PrismaClient instance.
+   */
+  public getCommunitySlugForClient(client?: PrismaClient): string | null {
+    if (!client) return null;
+    if ((client as any)._tenantSlug) return (client as any)._tenantSlug;
+    for (const [slug, c] of this.clients.entries()) {
+      if (c === client) return slug;
+    }
+    return null;
   }
 
   /**

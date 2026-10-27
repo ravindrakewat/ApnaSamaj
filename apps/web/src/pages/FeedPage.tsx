@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Container,
   Box,
@@ -14,8 +14,6 @@ import {
 import ForumIcon from '@mui/icons-material/Forum';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import EventIcon from '@mui/icons-material/Event';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
 import { PostItem, PostType, FeedPaginationMeta } from '@apnasamaj/shared-types';
@@ -34,27 +32,89 @@ export const FeedPage: React.FC = () => {
   });
   const [selectedType, setSelectedType] = useState<PostType | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Concurrency and race condition guards
+  const inFlightRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const fetchFeed = useCallback(
-    async (pageToFetch: number = 1, typeFilter?: PostType) => {
-      setIsLoading(true);
+    async (pageToFetch: number = 1, typeFilter?: PostType, append: boolean = false) => {
+      // Concurrency guard: ignore rapid duplicate triggers for append (load more) only
+      if (append && inFlightRef.current) {
+        return;
+      }
+
+      // If replacing feed, abort any previous in-flight request before starting a new one
+      if (!append && abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      inFlightRef.current = true;
+      const currentRequestId = ++requestIdRef.current;
+
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+      }
       setErrorMessage(null);
+
       try {
-        const data = await getFeedApi(pageToFetch, 10, typeFilter);
-        setPosts(data.posts);
+        const data = await getFeedApi(pageToFetch, 10, typeFilter, undefined, {
+          signal: controller.signal,
+        });
+
+        // Stale response guard: ensure this request is still the latest one
+        if (requestIdRef.current !== currentRequestId) {
+          return;
+        }
+
+        if (append) {
+          setPosts((prev) => {
+            const existingIds = new Set(prev.map((p) => p.id));
+            const newPosts = data.posts.filter((p) => !existingIds.has(p.id));
+            return [...prev, ...newPosts];
+          });
+        } else {
+          setPosts(data.posts);
+        }
+
         setPagination(data.pagination);
       } catch (err: unknown) {
-        setErrorMessage(err instanceof Error ? err.message : 'Failed to load community feed.');
+        const isAbort =
+          (err instanceof DOMException && err.name === 'AbortError') ||
+          (err instanceof Error && err.name === 'AbortError') ||
+          (err as any)?.name === 'AbortError';
+
+        if (isAbort) {
+          // Aborted request; do not overwrite state or display error
+          return;
+        }
+        if (requestIdRef.current === currentRequestId) {
+          setErrorMessage(err instanceof Error ? err.message : 'Failed to load community feed.');
+        }
       } finally {
-        setIsLoading(false);
+        if (requestIdRef.current === currentRequestId) {
+          inFlightRef.current = false;
+          setIsLoading(false);
+          setIsLoadingMore(false);
+        }
       }
     },
     []
   );
 
   useEffect(() => {
-    fetchFeed(1, selectedType);
+    fetchFeed(1, selectedType, false);
+    return () => {
+      inFlightRef.current = false;
+      abortControllerRef.current?.abort();
+    };
   }, [fetchFeed, selectedType]);
 
   const handleTypeSelect = (type?: PostType) => {
@@ -64,7 +124,10 @@ export const FeedPage: React.FC = () => {
   const handlePostCreated = (newPost: PostItem) => {
     // If we're on the first page and filter matches, prepend new post
     if (!selectedType || selectedType === newPost.type) {
-      setPosts((prev) => [newPost, ...prev]);
+      setPosts((prev) => {
+        if (prev.some((p) => p.id === newPost.id)) return prev;
+        return [newPost, ...prev];
+      });
       setPagination((prev) => ({
         ...prev,
         totalPosts: prev.totalPosts + 1,
@@ -93,18 +156,14 @@ export const FeedPage: React.FC = () => {
     }));
   };
 
-  const handlePreviousPage = () => {
-    if (pagination.page > 1) {
-      fetchFeed(pagination.page - 1, selectedType);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleLoadMore = () => {
+    if (pagination.hasMore && !isLoadingMore && !isLoading) {
+      fetchFeed(pagination.page + 1, selectedType, true);
     }
   };
 
-  const handleNextPage = () => {
-    if (pagination.hasMore) {
-      fetchFeed(pagination.page + 1, selectedType);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+  const handleRefresh = () => {
+    fetchFeed(1, selectedType, false);
   };
 
   return (
@@ -128,8 +187,8 @@ export const FeedPage: React.FC = () => {
           color="primary"
           size="small"
           startIcon={<RefreshIcon />}
-          onClick={() => fetchFeed(pagination.page, selectedType)}
-          disabled={isLoading}
+          onClick={handleRefresh}
+          disabled={isLoading || isLoadingMore}
           sx={{ borderRadius: 2 }}
         >
           Refresh Feed
@@ -186,7 +245,11 @@ export const FeedPage: React.FC = () => {
           severity="error"
           sx={{ mb: 3 }}
           action={
-            <Button color="inherit" size="small" onClick={() => fetchFeed(pagination.page, selectedType)}>
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => fetchFeed(pagination.page, selectedType, false)}
+            >
               Retry
             </Button>
           }
@@ -251,41 +314,47 @@ export const FeedPage: React.FC = () => {
             />
           ))}
 
-          {/* Pagination Controls */}
-          {pagination.totalPages > 1 && (
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="space-between"
-              sx={{ mt: 4, mb: 2, px: 1 }}
-            >
+          {/* Load More Button */}
+          {pagination.hasMore && (
+            <Box display="flex" justifyContent="center" sx={{ mt: 3, mb: 2 }}>
               <Button
                 variant="outlined"
-                size="small"
-                startIcon={<ArrowBackIcon />}
-                disabled={pagination.page <= 1}
-                onClick={handlePreviousPage}
-                sx={{ borderRadius: 2 }}
+                color="primary"
+                onClick={handleLoadMore}
+                disabled={isLoadingMore || isLoading}
+                startIcon={isLoadingMore ? <CircularProgress size={18} color="inherit" /> : null}
+                sx={{ borderRadius: 3, px: 4, py: 1 }}
               >
-                Previous
-              </Button>
-
-              <Typography variant="body2" color="text.secondary">
-                Page {pagination.page} of {pagination.totalPages}
-              </Typography>
-
-              <Button
-                variant="outlined"
-                size="small"
-                endIcon={<ArrowForwardIcon />}
-                disabled={!pagination.hasMore}
-                onClick={handleNextPage}
-                sx={{ borderRadius: 2 }}
-              >
-                Next
+                {isLoadingMore ? 'Loading Older Posts...' : 'Load More Posts'}
               </Button>
             </Box>
           )}
+
+          {!pagination.hasMore && posts.length > 0 && (
+            <Box textAlign="center" py={3}>
+              <Typography variant="body2" color="text.secondary">
+                You've caught up with all posts in this feed.
+              </Typography>
+            </Box>
+          )}
+
+          {/* Pagination Meta Information */}
+          <Box
+            display="flex"
+            alignItems="center"
+            justifyContent="space-between"
+            sx={{ mt: 2, mb: 2, px: 1 }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              Showing {posts.length} of {pagination.totalPosts} {pagination.totalPosts === 1 ? 'post' : 'posts'}
+            </Typography>
+
+            {pagination.totalPages > 1 && (
+              <Typography variant="caption" color="text.secondary">
+                Page {pagination.page} of {pagination.totalPages}
+              </Typography>
+            )}
+          </Box>
         </Box>
       )}
     </Container>

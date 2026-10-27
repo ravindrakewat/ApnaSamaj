@@ -19,6 +19,7 @@ import {
   updateCommentSchema,
   commentsQuerySchema,
   commentIdParamSchema,
+  reportPostSchema,
 } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
@@ -29,6 +30,7 @@ import {
   deletePost,
   pinPost,
   unpinPost,
+  reportPost,
   likePost,
   unlikePost,
   getPostLikes,
@@ -342,7 +344,14 @@ export async function pinPostHandler(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const updated = await pinPost(parsedParam.data.id, userId, userRole, req.db);
+    const updated = await pinPost(
+      parsedParam.data.id,
+      userId,
+      userRole,
+      req.ip,
+      req.headers['user-agent'],
+      req.db
+    );
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -398,7 +407,14 @@ export async function unpinPostHandler(req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    const updated = await unpinPost(parsedParam.data.id, userId, userRole, req.db);
+    const updated = await unpinPost(
+      parsedParam.data.id,
+      userId,
+      userRole,
+      req.ip,
+      req.headers['user-agent'],
+      req.db
+    );
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -423,6 +439,80 @@ export async function unpinPostHandler(req: AuthenticatedRequest, res: Response)
     const response: ApiResponse = {
       success: false,
       error: 'Failed to unpin post.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
+export async function reportPostHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParam = idParamSchema.safeParse(req.params);
+    if (!parsedParam.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Invalid post ID parameter.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedBody = reportPostSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      const issue = parsedBody.error.issues[0]?.message || 'Invalid report input.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const result = await reportPost(
+      parsedParam.data.id,
+      userId,
+      parsedBody.data,
+      req.ip,
+      req.headers['user-agent'],
+      req.db
+    );
+
+    const response: ApiResponse<{ message: string }> = {
+      success: true,
+      message: result.message,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof PostServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Posts Controller] Report post error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to submit report. Please try again later.',
       timestamp: new Date().toISOString(),
     };
     res.status(500).json(response);
