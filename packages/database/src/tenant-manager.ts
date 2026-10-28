@@ -210,6 +210,20 @@ export class TenantDatabaseManager {
   }
 
   /**
+   * Returns configuration for an individual community tenant.
+   */
+  public getCommunityConfig(slug: string): TenantCommunityConfig | undefined {
+    return this.registry.get(slug.toLowerCase().trim());
+  }
+
+  /**
+   * Returns configurations for all registered communities.
+   */
+  public getAllCommunityConfigs(): TenantCommunityConfig[] {
+    return Array.from(this.registry.values());
+  }
+
+  /**
    * Returns a cached PrismaClient for the specified community slug.
    * If not already connected, lazily instantiates a new client with tuned connection pooling.
    * Never accepts unverified client connection parameters.

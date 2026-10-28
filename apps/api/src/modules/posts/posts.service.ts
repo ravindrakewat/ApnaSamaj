@@ -1,4 +1,4 @@
-import { prisma, PostType as DbPostType, UserStatus as DbUserStatus, MediaType as DbMediaType, PrismaClient } from '@apnasamaj/database';
+import { prisma, PostType as DbPostType, UserStatus as DbUserStatus, MediaType as DbMediaType, PrismaClient, tenantDbManager } from '@apnasamaj/database';
 import {
   PostItem,
   FeedResponseData,
@@ -23,7 +23,8 @@ import {
   deleteStorageObjects,
   extractStoragePathFromUrl,
 } from '../../services/storage.service';
-import { sendNotificationSafely } from '../notifications/notifications.service';
+import { sendNotificationSafely, sendReportResolutionNotification } from '../notifications/notifications.service';
+import { emitModerationQueueUpdate } from '../chat/chat.socket';
 
 export class PostServiceError extends Error {
   public statusCode: number;
@@ -862,6 +863,48 @@ export async function deletePost(
     ).catch((err) =>
       console.warn('[Posts Service] Failed to send moderation notification:', err)
     );
+
+    // 1. Emit moderation queue update in real-time
+    try {
+      const tenantSlug = tenantDbManager.getCommunitySlugForClient(client);
+      if (tenantSlug) {
+        emitModerationQueueUpdate(tenantSlug, {
+          postId,
+          action: 'POST_MODERATED',
+          status: 'ACTIONED',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (queueErr) {
+      console.warn('[Posts Service] Failed to emit moderation queue update:', queueErr);
+    }
+
+    // 2. Notify any members who reported this post that action was taken (with deduplication)
+    try {
+      const reports = await client.auditLog.findMany({
+        where: {
+          action: 'POST_REPORT',
+          targetType: 'Post',
+          targetId: postId,
+        },
+      });
+
+      const tenantSlug = tenantDbManager.getCommunitySlugForClient(client);
+      for (const rep of reports) {
+        if (rep.actorId) {
+          await sendReportResolutionNotification(
+            client,
+            rep.actorId,
+            rep.id,
+            postId,
+            'ACTIONED',
+            tenantSlug
+          );
+        }
+      }
+    } catch (repErr) {
+      console.warn('[Posts Service] Failed to notify reporting members on post deletion:', repErr);
+    }
   }
 }
 

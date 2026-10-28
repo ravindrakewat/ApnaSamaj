@@ -207,20 +207,22 @@ export function authorizeAdminCommunitySwitch(
     ? req.headers['x-community-slug'].toLowerCase().trim()
     : null;
 
-  // 1. COMMUNITY_ADMIN Role: Strictly bound to assigned community database
-  if (req.user.role === UserRole.COMMUNITY_ADMIN) {
+  // 1. COMMUNITY_ADMIN and MODERATOR Roles: Strictly bound to assigned community database
+  if (req.user.role === UserRole.COMMUNITY_ADMIN || req.user.role === UserRole.MODERATOR) {
     const assignedSlug = req.user.communitySlug;
 
-    // Cross-community switch attempt by COMMUNITY_ADMIN is strictly forbidden
+    // Cross-community switch attempt by COMMUNITY_ADMIN or MODERATOR is strictly forbidden
     if (headerSlug && (!assignedSlug || headerSlug !== assignedSlug)) {
+      const roleName = req.user.role === UserRole.MODERATOR ? 'Community Moderator' : 'Community Admin';
       const response: ApiResponse = {
         success: false,
-        error: 'Forbidden: Only SUPER_ADMIN is authorized to switch community context. Community Admin is restricted to their assigned community.',
+        error: `Forbidden: Only SUPER_ADMIN is authorized to switch community context. ${roleName} is restricted to their assigned community.`,
         timestamp: new Date().toISOString(),
       };
       res.status(403).json(response);
       return;
     }
+
 
     if (!assignedSlug || !tenantDbManager.hasCommunity(assignedSlug)) {
       const response: ApiResponse = {

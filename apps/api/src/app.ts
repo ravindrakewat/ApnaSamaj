@@ -10,6 +10,7 @@ import { postsRouter } from './modules/posts';
 import { groupsRouter } from './modules/groups';
 import { notificationsRouter } from './modules/notifications';
 import { matrimonialRouter } from './modules/matrimonial';
+import { appealsRouter } from './modules/appeals';
 
 import { isCorsOriginAllowed } from './config/cors';
 import { resolveTenantContext } from './middleware/tenant.middleware';
@@ -84,5 +85,6 @@ export function createApp(): Express {
   app.use('/api/v1/groups', groupsRouter);
   app.use('/api/v1/notifications', notificationsRouter);
   app.use('/api/v1/matrimonial', matrimonialRouter);
+  app.use('/api/v1/appeals', appealsRouter);
   return app;
 }

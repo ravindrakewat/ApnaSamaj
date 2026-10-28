@@ -33,13 +33,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // 2. Ensure user has administrative privileges and active status
         const isPrivileged =
           userProfile.role === UserRole.SUPER_ADMIN ||
-          userProfile.role === UserRole.COMMUNITY_ADMIN;
+          userProfile.role === UserRole.COMMUNITY_ADMIN ||
+          userProfile.role === UserRole.MODERATOR;
 
         if (!isPrivileged || userProfile.status !== UserStatus.ACTIVE) {
           await logoutApi();
           if (isMounted) {
             setUser(null);
-            setError('Access denied: Active administrative privilege required.');
+            setError('Access denied: Active administrative or moderator privilege required.');
           }
           return;
         }
@@ -73,12 +74,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Verify administrative access
       const isPrivileged =
         result.user.role === UserRole.SUPER_ADMIN ||
-        result.user.role === UserRole.COMMUNITY_ADMIN;
+        result.user.role === UserRole.COMMUNITY_ADMIN ||
+        result.user.role === UserRole.MODERATOR;
 
       if (!isPrivileged || result.user.status !== UserStatus.ACTIVE) {
         await logoutApi();
         setUser(null);
-        throw new Error('Access denied: Admin Control Center requires an active SUPER_ADMIN or COMMUNITY_ADMIN account.');
+        throw new Error('Access denied: Admin Control Center requires an active SUPER_ADMIN, COMMUNITY_ADMIN, or MODERATOR account.');
       }
 
       setUser(result.user);

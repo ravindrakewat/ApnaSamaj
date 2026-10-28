@@ -6,7 +6,7 @@ import { verifyAccessToken } from '../auth/auth.tokens';
 import { tenantDbManager, PrismaClient } from '@apnasamaj/database';
 import { resolveCommunityFromRequest } from '@apnasamaj/validation';
 import { sendChatMessage, verifyGroupChatAccess } from './chat.service';
-import { ChatMessageItem, NewChatMessageEvent, NotificationItem } from '@apnasamaj/shared-types';
+import { ChatMessageItem, NewChatMessageEvent, NotificationItem, ModerationQueueUpdatePayload } from '@apnasamaj/shared-types';
 
 export interface AuthenticatedSocketUser {
   id: string;
@@ -46,6 +46,27 @@ export function getIO(): Server {
     throw new Error('Socket.IO has not been initialized yet.');
   }
   return ioInstance;
+}
+
+export function getCommunityModerationRoomName(tenantSlug: string): string {
+  return `${tenantSlug}:moderation:queue`;
+}
+
+/**
+ * Emits a real-time moderation queue update strictly scoped to privileged moderators of the community.
+ * Minimum required payload is transmitted without exposing personal or reporter data.
+ */
+export function emitModerationQueueUpdate(
+  tenantSlug: string,
+  payload: ModerationQueueUpdatePayload
+): void {
+  if (!ioInstance) return;
+  try {
+    const room = getCommunityModerationRoomName(tenantSlug);
+    ioInstance.to(room).emit('moderation:queue-updated', payload);
+  } catch (err: unknown) {
+    console.warn('[Realtime Moderation] Failed to emit queue update:', err);
+  }
 }
 
 export function getUserNotificationRoomName(tenantSlug: string, userId: string): string {
@@ -315,6 +336,38 @@ export function initChatSocketServer(httpServer: http.Server): Server {
         callback?.({ success: true });
       }
     );
+
+    const moderationRoomName = getCommunityModerationRoomName(tenantSlug);
+    const isModeratorOrAdmin = ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'MODERATOR'].includes(user.role);
+
+    // Automatically join the moderation room for authorized moderators/admins
+    if (isModeratorOrAdmin) {
+      socket.join(moderationRoomName);
+    }
+
+    // Explicit moderation queue subscription listener with server-side authorization check
+    socket.on(
+      'join_moderation_queue',
+      (
+        _payload: unknown,
+        callback?: (res: { success: boolean; error?: string }) => void
+      ) => {
+        if (!['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'MODERATOR'].includes(user.role)) {
+          callback?.({
+            success: false,
+            error: 'Forbidden: Insufficient privileges for moderation queue.',
+          });
+          return;
+        }
+        socket.join(moderationRoomName);
+        callback?.({ success: true });
+      }
+    );
+
+    // Explicit leave_moderation_queue listener
+    socket.on('leave_moderation_queue', () => {
+      socket.leave(moderationRoomName);
+    });
 
     // 1. Join Group Chat Room
     socket.on(

@@ -115,7 +115,7 @@ export function resolveNotificationTarget(item: NotificationItem): string | null
     case 'ACCOUNT_STATUS_UPDATE':
       return '/profile';
     case 'POST_MODERATED':
-      return '/feed';
+      return item.entityId ? `/appeals?postId=${encodeURIComponent(item.entityId)}` : '/feed';
     case 'MATRIMONIAL_INTEREST_RECEIVED':
     case 'MATRIMONIAL_INTEREST_ACCEPTED':
     case 'MATRIMONIAL_PROFILE_APPROVED':

@@ -19,6 +19,16 @@ export const updateUserStatusSchema = z.object({
 
 export type UpdateUserStatusInput = z.infer<typeof updateUserStatusSchema>;
 
+export const updateUserRoleSchema = z.object({
+  role: z.enum(['MEMBER', 'MODERATOR', 'COMMUNITY_ADMIN'], {
+    required_error: 'Role is required and must be MEMBER, MODERATOR, or COMMUNITY_ADMIN',
+  }),
+  reason: z.string().trim().max(500, 'Reason must not exceed 500 characters').optional(),
+});
+
+export type UpdateUserRoleInput = z.infer<typeof updateUserRoleSchema>;
+
+
 const dateStringSchema = z
   .string()
   .trim()
@@ -51,3 +61,9 @@ export const listAuditLogsQuerySchema = z
 
 export type ListAuditLogsQuery = z.infer<typeof listAuditLogsQuerySchema>;
 
+
+export const moderationAnalyticsQuerySchema = z.object({
+  days: z.coerce.number().int().min(7).max(90).default(30),
+});
+
+export type ModerationAnalyticsQuery = z.infer<typeof moderationAnalyticsQuerySchema>;

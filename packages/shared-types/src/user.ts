@@ -75,6 +75,12 @@ export interface UpdateUserStatusRequest {
   reason?: string;
 }
 
+export interface UpdateUserRoleRequest {
+  role: 'MEMBER' | 'MODERATOR' | 'COMMUNITY_ADMIN';
+  reason?: string;
+}
+
+
 export interface AdminMetrics {
   totalUsers: number;
   pendingUsers: number;

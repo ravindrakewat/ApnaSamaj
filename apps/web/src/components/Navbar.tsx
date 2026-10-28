@@ -17,6 +17,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
 import PeopleIcon from '@mui/icons-material/People';
 import FavoriteIcon from '@mui/icons-material/Favorite';
+import GavelIcon from '@mui/icons-material/Gavel';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from './NotificationBell';
 
@@ -105,6 +106,15 @@ export const Navbar: React.FC = () => {
                   sx={{ fontWeight: location.pathname === '/profile' ? 600 : 400 }}
                 >
                   My Profile
+                </Button>
+
+                <Button
+                  color={location.pathname === '/appeals' ? 'primary' : 'inherit'}
+                  onClick={() => navigate('/appeals')}
+                  startIcon={<GavelIcon />}
+                  sx={{ fontWeight: location.pathname === '/appeals' ? 600 : 400 }}
+                >
+                  Appeals
                 </Button>
 
                 <NotificationBell />

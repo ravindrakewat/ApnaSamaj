@@ -59,3 +59,21 @@ export async function updateAdminUserStatus(
 
   return response.data;
 }
+
+export async function updateAdminUserRole(
+  userId: string,
+  role: 'MEMBER' | 'MODERATOR' | 'COMMUNITY_ADMIN',
+  reason?: string
+): Promise<AdminUserDetails> {
+  const response = await apiFetch<AdminUserDetails>(`/api/v1/admin/users/${userId}/role`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role, reason }),
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to update member role.');
+  }
+
+  return response.data;
+}
+

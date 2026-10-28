@@ -41,6 +41,7 @@ import { AuditLogItem, UserRole } from '@apnasamaj/shared-types';
 import { fetchAdminAuditLogs, ListAuditLogsParams } from '../services/admin.audit-logs.service';
 
 const KNOWN_ACTIONS = [
+  { value: 'USER_ROLE_UPDATE', label: 'User Role Update' },
   { value: 'USER_STATUS_UPDATE', label: 'User Status Update' },
   { value: 'MODERATION_DELETE_POST', label: 'Post Moderation Delete' },
   { value: 'MODERATION_DELETE_COMMENT', label: 'Comment Moderation Delete' },
@@ -48,6 +49,7 @@ const KNOWN_ACTIONS = [
   { value: 'MODERATION_UNPIN_POST', label: 'Post Moderation Unpin' },
   { value: 'POST_REPORT', label: 'Post Member Report' },
 ];
+
 
 const KNOWN_TARGET_TYPES = [
   { value: 'USER', label: 'User' },
@@ -147,8 +149,11 @@ export const AuditLogsPage: React.FC = () => {
 
   const getActionChip = (action: string) => {
     switch (action) {
+      case 'USER_ROLE_UPDATE':
+        return <Chip label="Role Update" size="small" color="secondary" variant="filled" sx={{ fontWeight: 'bold' }} />;
       case 'USER_STATUS_UPDATE':
         return <Chip label="Status Update" size="small" color="primary" variant="outlined" sx={{ fontWeight: 'bold' }} />;
+
       case 'MODERATION_DELETE_POST':
         return <Chip label="Delete Post" size="small" color="error" variant="filled" sx={{ fontWeight: 'bold' }} />;
       case 'MODERATION_DELETE_COMMENT':

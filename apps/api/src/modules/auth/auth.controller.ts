@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { prisma } from '@apnasamaj/database';
+import { prisma, tenantDbManager } from '@apnasamaj/database';
 import { loginSchema, registerSchema, refreshTokenSchema } from '@apnasamaj/validation';
 import {
   ApiResponse,
@@ -28,6 +28,12 @@ import {
 } from './auth.tokens';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import { TenantRequest } from '../../middleware/tenant.middleware';
+
+const ALLOWED_ADMIN_APP_ROLES: UserRole[] = [
+  UserRole.SUPER_ADMIN,
+  UserRole.COMMUNITY_ADMIN,
+  UserRole.MODERATOR,
+];
 
 /**
  * Extracts the refresh token from either HttpOnly cookie or request body.
@@ -94,12 +100,12 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       req.headers['user-agent'],
       req.ip,
       db,
-      tenant?.slug
+      tenant?.slug || (typeof req.headers['x-community-slug'] === 'string' && tenantDbManager.hasCommunity(req.headers['x-community-slug'].toLowerCase().trim()) ? req.headers['x-community-slug'].toLowerCase().trim() : undefined)
     );
 
     // 3. Central Admin Role Enforcement:
     // Access to central admin console strictly requires the SUPER_ADMIN role in the central database.
-    if (isCentralAdmin && result.user.role !== UserRole.SUPER_ADMIN) {
+    if (isCentralAdmin && !ALLOWED_ADMIN_APP_ROLES.includes(result.user.role)) {
       const response: ApiResponse = {
         success: false,
         error: 'Forbidden: Access to central admin console requires SUPER_ADMIN role.',
@@ -306,11 +312,11 @@ export async function refreshHandler(req: Request, res: Response): Promise<void>
       req.headers['user-agent'],
       req.ip,
       db,
-      tenant?.slug
+      tenant?.slug || (typeof req.headers['x-community-slug'] === 'string' && tenantDbManager.hasCommunity(req.headers['x-community-slug'].toLowerCase().trim()) ? req.headers['x-community-slug'].toLowerCase().trim() : undefined)
     );
 
     // If Central Admin session, enforce that user is SUPER_ADMIN
-    if (isCentralAdmin && result.user.role !== UserRole.SUPER_ADMIN) {
+    if (isCentralAdmin && !ALLOWED_ADMIN_APP_ROLES.includes(result.user.role)) {
       res.clearCookie(REFRESH_COOKIE_NAME, getClearRefreshCookieOptions());
       const response: ApiResponse = {
         success: false,

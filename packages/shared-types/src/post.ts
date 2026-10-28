@@ -44,7 +44,7 @@ export interface PostMediaInput {
 
 export interface PostItem {
   id: string;
-  authorId: string;
+  authorId: string | null;
   author: PostAuthor;
   groupId?: string | null;
   group?: { id: string; name: string; slug: string; privacy?: 'PUBLIC' | 'PRIVATE' } | null;
@@ -173,3 +173,138 @@ export interface ReportPostResponseData {
   message: string;
 }
 
+// --------------------------------------------------------
+// MODERATION QUEUE & REVIEW WORKFLOW TYPES
+// --------------------------------------------------------
+
+export type ReportReviewDecision = 'DISMISSED' | 'ACTIONED';
+export type ReportReviewStatus = 'PENDING' | 'DISMISSED' | 'ACTIONED';
+
+export interface ReportReviewOutcome {
+  id: string;
+  decision: ReportReviewDecision;
+  notes?: string | null;
+  moderatorId: string;
+  moderatorRole: UserRole;
+  reviewedAt: string;
+}
+
+export interface ModerationQueueItem {
+  id: string;
+  postId: string;
+  reason: ReportPostReason;
+  details?: string | null;
+  createdAt: string;
+  status: ReportReviewStatus;
+  advisoryFlags?: string[];
+  reporter: {
+    id: string;
+    phone: string;
+    fullName?: string | null;
+  };
+  post: {
+    id: string;
+    content: string;
+    type: PostType;
+    createdAt: string;
+    isDeleted: boolean;
+    author: {
+      id: string;
+      fullName: string;
+      avatarUrl?: string | null;
+    } | null;
+    group?: {
+      id: string;
+      name: string;
+      privacy?: 'PUBLIC' | 'PRIVATE';
+    } | null;
+  } | null;
+  latestReview: ReportReviewOutcome | null;
+}
+
+export interface ModerationQueueResponseData {
+  reports: ModerationQueueItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalReports: number;
+    totalPages: number;
+  };
+}
+
+export interface ReviewReportRequest {
+  decision: ReportReviewDecision;
+  notes?: string;
+}
+
+export interface ReviewReportResponseData {
+  message: string;
+  reportId: string;
+  status: ReportReviewStatus;
+  review: ReportReviewOutcome;
+}
+
+export interface ModerationQueueUpdatePayload {
+  reportId?: string;
+  postId?: string;
+  action: 'REPORT_REVIEWED' | 'POST_MODERATED';
+  status?: ReportReviewDecision | 'ACTIONED';
+  timestamp: string;
+}
+
+
+
+export interface DailyModerationTrend {
+  date: string;
+  received: number;
+  resolved: number;
+  actioned: number;
+  dismissed: number;
+}
+
+export interface ModerationAnalyticsResponseData {
+  totalReports: number;
+  pendingReports: number;
+  actionedReports: number;
+  dismissedReports: number;
+  reportsLast7Days: number;
+  reportsLast30Days: number;
+  averageResolutionTimeMinutes: number | null;
+  averageResolutionTimeHours: number | null;
+  reportsByReason: Record<ReportPostReason, number>;
+  dailyTrends: DailyModerationTrend[];
+  postsRemovedCount: number;
+}
+
+export type PostAppealStatus = 'PENDING' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED';
+
+export interface SubmitPostAppealRequest {
+  postId: string;
+  reason: string;
+  details?: string;
+}
+
+export interface ReviewPostAppealRequest {
+  status: 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED';
+  reviewNotes?: string;
+}
+
+export interface PostAppealItem {
+  id: string;
+  postId: string;
+  authorId: string;
+  authorName?: string;
+  reason: string;
+  details?: string | null;
+  status: PostAppealStatus;
+  moderatorId?: string | null;
+  reviewNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string | null;
+}
+
+export interface PostAppealsListResponseData {
+  appeals: PostAppealItem[];
+  total: number;
+}

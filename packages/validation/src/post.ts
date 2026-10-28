@@ -333,3 +333,64 @@ export const reportPostSchema = z.object({
 
 export type ReportPostInput = z.infer<typeof reportPostSchema>;
 
+// --------------------------------------------------------
+// MODERATION QUEUE & REVIEW WORKFLOW SCHEMAS
+// --------------------------------------------------------
+
+export const reportReviewDecisionEnum = z.enum(['DISMISSED', 'ACTIONED']);
+export type ReportReviewDecision = z.infer<typeof reportReviewDecisionEnum>;
+
+export const reviewReportSchema = z.object({
+  decision: reportReviewDecisionEnum,
+  notes: z
+    .string()
+    .trim()
+    .max(500, 'Review notes cannot exceed 500 characters')
+    .optional(),
+});
+
+export type ReviewReportInput = z.infer<typeof reviewReportSchema>;
+
+export const moderationQueueQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+  status: z.enum(['ALL', 'PENDING', 'DISMISSED', 'ACTIONED']).default('ALL'),
+  reason: reportPostReasonEnum.optional(),
+});
+
+export type ModerationQueueQueryInput = z.infer<typeof moderationQueueQuerySchema>;
+
+
+
+export const submitPostAppealSchema = z.object({
+  postId: z.string().uuid('Invalid post ID format'),
+  reason: z.string().trim().min(3, 'Appeal reason is required').max(100, 'Reason must not exceed 100 characters'),
+  details: z.string().trim().max(1000, 'Details must not exceed 1000 characters').optional(),
+});
+
+export type SubmitPostAppealInput = z.infer<typeof submitPostAppealSchema>;
+
+export const reviewPostAppealSchema = z.object({
+  status: z.enum(['UNDER_REVIEW', 'APPROVED', 'REJECTED'], {
+    required_error: 'Status must be UNDER_REVIEW, APPROVED, or REJECTED',
+  }),
+  reviewNotes: z.string().trim().max(1000, 'Review notes must not exceed 1000 characters').optional(),
+});
+
+export type ReviewPostAppealInput = z.infer<typeof reviewPostAppealSchema>;
+
+export const listMemberPostAppealsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(50).default(10),
+});
+
+export type ListMemberPostAppealsQueryInput = z.infer<typeof listMemberPostAppealsQuerySchema>;
+
+export const listAdminPostAppealsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+  status: z.enum(['ALL', 'PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED']).default('ALL'),
+});
+
+export type ListAdminPostAppealsQueryInput = z.infer<typeof listAdminPostAppealsQuerySchema>;
+

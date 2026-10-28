@@ -7,6 +7,7 @@ import {
   getUsersHandler,
   getUserDetailsHandler,
   updateUserStatusHandler,
+  updateUserRoleHandler,
 } from './admin.users.controller';
 
 export const adminUsersRouter = Router();
@@ -28,4 +29,8 @@ adminUsersRouter.get('/:id', getUserDetailsHandler);
 // PATCH /api/v1/admin/users/:id/status - Activate or Suspend a user
 adminUsersRouter.patch('/:id/status', updateUserStatusHandler);
 
+// PATCH /api/v1/admin/users/:id/role - Update a user's role (promote/demote moderator)
+adminUsersRouter.patch('/:id/role', updateUserRoleHandler);
+
 export default adminUsersRouter;
+

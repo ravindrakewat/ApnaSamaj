@@ -26,6 +26,7 @@ const MatrimonialProfileDetailPage = lazy(() =>
   import('./pages/MatrimonialProfileDetailPage').then((m) => ({ default: m.MatrimonialProfileDetailPage }))
 );
 const PostDetailPage = lazy(() => import('./pages/PostDetailPage').then((m) => ({ default: m.PostDetailPage })));
+const MyAppealsPage = lazy(() => import('./pages/MyAppealsPage').then((m) => ({ default: m.MyAppealsPage })));
 
 const PageFallback: React.FC = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -68,6 +69,14 @@ export const App: React.FC = () => {
                     element={
                       <ProtectedRoute>
                         <PostDetailPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/appeals"
+                    element={
+                      <ProtectedRoute>
+                        <MyAppealsPage />
                       </ProtectedRoute>
                     }
                   />

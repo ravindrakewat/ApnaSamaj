@@ -49,6 +49,13 @@ enum PostType {
   EVENT
 }
 
+enum PostAppealStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
 enum MediaType {
   IMAGE
   VIDEO
@@ -161,6 +168,8 @@ model User {
   sentMatrimonialInterests     MatrimonialInterest[] @relation("SentMatrimonialInterests")
   receivedMatrimonialInterests MatrimonialInterest[] @relation("ReceivedMatrimonialInterests")
   approvedMatrimonialProfiles  MatrimonialProfile[]  @relation("MatrimonialProfileApprover")
+  authoredPostAppeals          PostAppeal[]          @relation("PostAppealAuthor")
+  reviewedPostAppeals          PostAppeal[]          @relation("PostAppealReviewer")
 
   @@index([role])
   @@index([status])
@@ -525,4 +534,28 @@ model MatrimonialInterest {
   @@unique([senderId, receiverId])
   @@index([senderId, status])
   @@index([receiverId, status])
+}
+
+// --------------------------------------------------------
+// MEMBER MODERATION APPEALS
+// --------------------------------------------------------
+
+model PostAppeal {
+  id          String           @id @default(uuid())
+  postId      String           // Historical post UUID identifier; post is physically deleted upon moderation takedown
+  authorId    String?
+  author      User?            @relation("PostAppealAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  reason      String
+  details     String?
+  status      PostAppealStatus @default(PENDING)
+  moderatorId String?
+  moderator   User?            @relation("PostAppealReviewer", fields: [moderatorId], references: [id], onDelete: SetNull)
+  reviewNotes String?
+  reviewedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([authorId])
+  @@index([postId])
+  @@index([status, createdAt(sort: Desc)])
 }

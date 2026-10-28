@@ -40,7 +40,7 @@ export interface CreateNotificationParams {
   message: string;
   entityType?: string | null;
   entityId?: string | null;
-  tenantSlug?: string;
+  tenantSlug?: string | null;
 }
 
 const notificationInclude = {
@@ -362,5 +362,72 @@ export async function sendNotificationSafely(
       recipientId: params.recipientId,
       error: err instanceof Error ? err.message : err,
     });
+  }
+}
+
+/**
+ * Safe side-effect to record and dispatch a member-facing report resolution notification.
+ * Includes deduplication against repeated review requests or retries.
+ * Suppresses moderator personal identity and safely delivers real-time notifications via Socket.IO.
+ */
+export async function sendReportResolutionNotification(
+  client: PrismaClient,
+  recipientId: string,
+  reportId: string,
+  postId: string,
+  decision: 'ACTIONED' | 'DISMISSED',
+  tenantSlug?: string | null
+): Promise<void> {
+  if (!recipientId || !client || !client.notification) return;
+
+  try {
+    let existing: any = null;
+    if (typeof client.notification.findFirst === 'function') {
+      existing = await client.notification.findFirst({
+        where: {
+          recipientId,
+          type: 'POST_MODERATED' as unknown as DbNotificationType,
+          OR: [{ entityId: reportId }, { entityId: postId }],
+        },
+      });
+    } else if (typeof client.notification.findMany === 'function') {
+      const matches = await client.notification.findMany({
+        where: {
+          recipientId,
+          type: 'POST_MODERATED' as unknown as DbNotificationType,
+          OR: [{ entityId: reportId }, { entityId: postId }],
+        },
+        take: 1,
+      });
+      existing = matches[0] || null;
+    }
+
+    if (existing) {
+      return; // Deduplication: Already notified reporter about this report resolution
+    }
+
+    const title = 'Report Resolution';
+    const message =
+      decision === 'ACTIONED'
+        ? 'Your report has been reviewed, and action has been taken on the reported content.'
+        : 'Your report has been reviewed and dismissed.';
+
+    const resolvedSlug = (tenantSlug || tenantDbManager.getCommunitySlugForClient(client)) || undefined;
+
+    await sendNotificationSafely(
+      {
+        recipientId,
+        actorId: null, // Keeps moderator identity strictly confidential
+        type: 'POST_MODERATED',
+        title,
+        message,
+        entityType: 'POST',
+        entityId: postId,
+        tenantSlug: resolvedSlug,
+      },
+      client
+    );
+  } catch (err: unknown) {
+    console.warn('[Notification Service] Failed to send report resolution notification:', err);
   }
 }

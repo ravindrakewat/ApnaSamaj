@@ -1,9 +1,15 @@
 import React from 'react';
 import { Navigate, useLocation, Outlet } from 'react-router-dom';
 import { Box, CircularProgress, Typography } from '@mui/material';
+import { UserRole } from '@apnasamaj/shared-types';
 import { useAuth } from '../context/AuthContext';
 
-export const ProtectedRoute: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
+export interface ProtectedRouteProps {
+  children?: React.ReactNode;
+  allowedRoles?: UserRole[];
+}
+
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
@@ -28,6 +34,15 @@ export const ProtectedRoute: React.FC<{ children?: React.ReactNode }> = ({ child
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    // If a MODERATOR accesses an unauthorized admin route, redirect to /moderation
+    if (user.role === UserRole.MODERATOR) {
+      return <Navigate to="/moderation" replace />;
+    }
+    // Otherwise redirect to dashboard
+    return <Navigate to="/" replace />;
   }
 
   return children ? <>{children}</> : <Outlet />;

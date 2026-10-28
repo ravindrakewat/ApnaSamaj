@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx src/tenant-manager.test.ts",
     "build": "tsc",
-    "seed": "tsx src/seed.ts"
+    "seed": "tsx src/seed.ts",
+    "migrate:all": "tsx src/migrate-all-tenants.ts"
   },
   "dependencies": {
     "@apnasamaj/validation": "*",

@@ -31,6 +31,9 @@ import {
   HistoryEdu as HistoryEduIcon,
   Favorite as FavoriteIcon,
   AccountBalance as CommunityIcon,
+  Shield as ShieldIcon,
+  Assessment as AssessmentIcon,
+  Gavel as GavelIcon,
 } from '@mui/icons-material';
 import { UserRole } from '@apnasamaj/shared-types';
 import { useAuth } from '../context/AuthContext';
@@ -79,12 +82,21 @@ export const AdminLayout: React.FC = () => {
     }
   };
 
-  const navItems = [
-    { text: 'Dashboard', path: '/', icon: <DashboardIcon /> },
-    { text: 'Member Management', path: '/members', icon: <PeopleIcon /> },
-    { text: 'Matrimonial Moderation', path: '/matrimonial', icon: <FavoriteIcon /> },
-    { text: 'Audit Logs', path: '/audit-logs', icon: <HistoryEduIcon /> },
+  const allNavItems = [
+    { text: 'Dashboard', path: '/', icon: <DashboardIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
+    { text: 'Member Management', path: '/members', icon: <PeopleIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
+    { text: 'Moderator Management', path: '/moderators', icon: <AdminPanelSettings />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
+    { text: 'Moderation Queue', path: '/moderation', icon: <ShieldIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN, UserRole.MODERATOR] },
+    { text: 'Moderation Analytics', path: '/moderation/analytics', icon: <AssessmentIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
+    { text: 'Member Appeals', path: '/moderation/appeals', icon: <GavelIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN, UserRole.MODERATOR] },
+    { text: 'Matrimonial Moderation', path: '/matrimonial', icon: <FavoriteIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
+    { text: 'Audit Logs', path: '/audit-logs', icon: <HistoryEduIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
   ];
+
+  const navItems = user
+    ? allNavItems.filter((item) => item.roles.includes(user.role))
+    : [];
+
 
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -208,6 +220,10 @@ export const AdminLayout: React.FC = () => {
               ? 'Matrimonial Moderation'
               : location.pathname === '/audit-logs'
               ? 'System Audit Logs'
+              : location.pathname === '/moderators'
+              ? 'Moderator Management'
+              : location.pathname === '/moderation'
+              ? 'Moderation Queue'
               : 'Admin Overview'}
           </Typography>
 

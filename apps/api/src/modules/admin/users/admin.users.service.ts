@@ -326,3 +326,133 @@ export async function updateAdminUserStatus(
 
   return getAdminUserDetails(targetUserId, client);
 }
+
+/**
+ * Updates a user's role (MEMBER, MODERATOR, COMMUNITY_ADMIN) with strict privilege checks,
+ * atomic audit logging, and tenant isolation.
+ */
+export async function updateAdminUserRole(
+  targetUserId: string,
+  newRole: 'MEMBER' | 'MODERATOR' | 'COMMUNITY_ADMIN',
+  actor: AuthUser,
+  reason?: string,
+  ipAddress?: string,
+  userAgent?: string,
+  db?: PrismaClient
+): Promise<AdminUserDetails> {
+  if (!db) {
+    throw new AdminServiceError('Tenant database client is required for user administration.', 400);
+  }
+  const client = db;
+
+  // 1. Prevent self-modification of role (prevents self-demotion lockout or self-escalation)
+  if (targetUserId === actor.id) {
+    throw new AdminServiceError('Administrators cannot modify their own role.', 400);
+  }
+
+  // 2. Fetch target user
+  const targetUser = await client.user.findUnique({
+    where: { id: targetUserId },
+    select: {
+      id: true,
+      role: true,
+      status: true,
+    },
+  });
+
+  if (!targetUser) {
+    throw new UserNotFoundError();
+  }
+
+  // 3. Strict Privilege & Escalation Checks
+  if (actor.role === UserRole.COMMUNITY_ADMIN) {
+    // A Community Admin CANNOT promote anyone to SUPER_ADMIN or COMMUNITY_ADMIN
+    if (newRole === 'COMMUNITY_ADMIN' || (newRole as string) === 'SUPER_ADMIN') {
+      throw new PrivilegeError('Community Admins can only assign or revoke MODERATOR privileges.');
+    }
+    // A Community Admin CANNOT alter accounts with role SUPER_ADMIN or COMMUNITY_ADMIN
+    if (
+      targetUser.role === DbRole.SUPER_ADMIN ||
+      targetUser.role === DbRole.COMMUNITY_ADMIN
+    ) {
+      throw new PrivilegeError('Community Admins cannot modify the roles of other administrators or super administrators.');
+    }
+    // A Community Admin can only assign MODERATOR or MEMBER
+    if (newRole !== 'MODERATOR' && newRole !== 'MEMBER') {
+      throw new PrivilegeError('Community Admins can only assign or revoke MODERATOR privileges.');
+    }
+  }
+
+  // If target user is SUPER_ADMIN, only another SUPER_ADMIN can modify them
+  if (
+    targetUser.role === DbRole.SUPER_ADMIN &&
+    actor.role !== UserRole.SUPER_ADMIN
+  ) {
+    throw new PrivilegeError('Only Super Admins can alter accounts with the Super Admin role.');
+  }
+
+  // Super Admin safety check: Demoting the last remaining Super Admin is blocked
+  if (targetUser.role === DbRole.SUPER_ADMIN && (newRole as string) !== 'SUPER_ADMIN') {
+    const superAdminCount = await client.user.count({
+      where: { role: DbRole.SUPER_ADMIN },
+    });
+    if (superAdminCount <= 1) {
+      throw new AdminServiceError('Cannot demote the last remaining Super Admin.', 400);
+    }
+  }
+
+  // 4. Repeated or conflicting request safety (Idempotency)
+  if (targetUser.role === (newRole as DbRole)) {
+    return getAdminUserDetails(targetUserId, client);
+  }
+
+  const previousRole = targetUser.role;
+
+  // 5. Atomic role update and audit log creation
+  // If audit log creation fails, the transaction aborts and role is not updated
+  await client.$transaction(async (tx) => {
+    // A. Update user role
+    await tx.user.update({
+      where: { id: targetUserId },
+      data: {
+        role: newRole as DbRole,
+      },
+    });
+
+    // B. Create immutable audit log entry
+    await tx.auditLog.create({
+      data: {
+        actorId: actor.id,
+        action: 'USER_ROLE_UPDATE',
+        targetType: 'USER',
+        targetId: targetUserId,
+        details: {
+          previousRole,
+          newRole,
+          reason: reason || null,
+        },
+        ipAddress: ipAddress || null,
+        userAgent: userAgent || null,
+      },
+    });
+  });
+
+  // 6. Safe notification side-effect post transaction
+  sendNotificationSafely(
+    {
+      recipientId: targetUserId,
+      actorId: actor.id,
+      type: 'ACCOUNT_STATUS_UPDATE',
+      title: 'Role Updated',
+      message: `Your community role has been updated to ${newRole}.${reason ? ` Reason: ${reason}` : ''}`,
+      entityType: 'User',
+      entityId: targetUserId,
+    },
+    client
+  ).catch((err) =>
+    console.warn('[Admin Users Service] Failed to send role update notification:', err)
+  );
+
+  return getAdminUserDetails(targetUserId, client);
+}
+
