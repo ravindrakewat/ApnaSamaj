@@ -18,6 +18,9 @@ import {
   CircularProgress,
   useTheme,
   useMediaQuery,
+  Select,
+  MenuItem,
+  FormControl,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -27,10 +30,18 @@ import {
   AdminPanelSettings,
   HistoryEdu as HistoryEduIcon,
   Favorite as FavoriteIcon,
+  AccountBalance as CommunityIcon,
 } from '@mui/icons-material';
+import { UserRole } from '@apnasamaj/shared-types';
 import { useAuth } from '../context/AuthContext';
+import { getActiveCommunitySlug, setActiveCommunitySlug } from '../services/api.client';
 
 const DRAWER_WIDTH = 260;
+
+const COMMUNITIES = [
+  { slug: 'kewat', name: 'Kewat Samaj' },
+  { slug: 'gupta', name: 'Gupta Samaj' },
+];
 
 export const AdminLayout: React.FC = () => {
   const { user, logout } = useAuth();
@@ -41,6 +52,16 @@ export const AdminLayout: React.FC = () => {
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [selectedCommunity, setSelectedCommunity] = useState<string>(
+    () => getActiveCommunitySlug() || 'kewat'
+  );
+
+  const handleCommunityChange = (newSlug: string) => {
+    setSelectedCommunity(newSlug);
+    setActiveCommunitySlug(newSlug);
+    // Reload page to refresh all active queries, caches, and tenant context
+    window.location.reload();
+  };
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -191,7 +212,45 @@ export const AdminLayout: React.FC = () => {
           </Typography>
 
           {user && (
-            <Box display="flex" alignItems="center" gap={2}>
+            <Box display="flex" alignItems="center" gap={1.5}>
+              {user.role === UserRole.SUPER_ADMIN ? (
+                <FormControl size="small" sx={{ minWidth: 160 }}>
+                  <Select
+                    value={selectedCommunity}
+                    onChange={(e) => handleCommunityChange(e.target.value as string)}
+                    size="small"
+                    sx={{
+                      height: 34,
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      bgcolor: 'background.default',
+                      borderRadius: 1.5,
+                      '& .MuiSelect-select': {
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        py: 0.5,
+                      },
+                    }}
+                  >
+                    {COMMUNITIES.map((c) => (
+                      <MenuItem key={c.slug} value={c.slug} sx={{ fontSize: '0.85rem', fontWeight: 500 }}>
+                        🏛️ {c.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              ) : (
+                <Chip
+                  icon={<CommunityIcon fontSize="small" />}
+                  label={user.communitySlug ? `${user.communitySlug.toUpperCase()} Samaj` : 'Community'}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ fontWeight: 'bold' }}
+                />
+              )}
+
               <Chip
                 label={user.role}
                 size="small"

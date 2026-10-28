@@ -20,9 +20,38 @@ export function clearAuthSession(): void {
 
 export function setActiveCommunitySlug(slug: string | null): void {
   activeCommunitySlug = slug ? slug.toLowerCase().trim() : null;
+  if (typeof window !== 'undefined') {
+    try {
+      if (activeCommunitySlug) {
+        localStorage.setItem('apnasamaj_admin_community_slug', activeCommunitySlug);
+      } else {
+        localStorage.removeItem('apnasamaj_admin_community_slug');
+      }
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
+  }
 }
 
 export function getActiveCommunitySlug(): string | null {
+  if (activeCommunitySlug) {
+    return activeCommunitySlug;
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('apnasamaj_admin_community_slug');
+      if (stored && stored.trim().length > 0) {
+        activeCommunitySlug = stored.toLowerCase().trim();
+        return activeCommunitySlug;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  // Default to Kewat Samaj for local/central administration
+  activeCommunitySlug = 'kewat';
   return activeCommunitySlug;
 }
 
