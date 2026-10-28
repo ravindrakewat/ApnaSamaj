@@ -17,7 +17,15 @@ import { resolveTenantContext } from './middleware/tenant.middleware';
 export function createApp(): Express {
   const app = express();
 
+  // Yahan apna Vercel domain explicitly add kar dein taaki env variable miss hone par bhi CORS fail na ho
+  const hardcodedOrigins = [
+    'https://apna-samaj.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173',
+  ];
+
   const extraAllowed = [
+    ...hardcodedOrigins,
     config.clientUrl,
     config.adminUrl,
     process.env.CLIENT_URL,
@@ -27,19 +35,42 @@ export function createApp(): Express {
     .map((o) => o.trim().replace(/\/+$/, ''))
     .filter(Boolean);
 
-  app.use(
-    cors({
-      origin: (origin, callback) => {
-        if (isCorsOriginAllowed(origin, { extraAllowed })) {
-          return callback(null, true);
-        }
-        return callback(null, false);
-      },
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Community-Slug'],
-    })
-  );
+  const corsOptions = {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Check hardcoded/extraAllowed list first, then isCorsOriginAllowed fallback
+      const isAllowed =
+        extraAllowed.includes(origin) ||
+        isCorsOriginAllowed(origin, { extraAllowed });
+
+      if (isAllowed) {
+        return callback(null, true);
+      }
+
+      console.warn(`[CORS Blocked] Origin not allowed: ${origin}`);
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'x-community-slug',   // Lowercase (Browser yahi bhejta hai)
+      'X-Community-Slug',   // Uppercase
+      'Accept',
+    ],
+  };
+
+  // CORS middleware apply karein
+  app.use(cors(corsOptions));
+
+  // Preflight requests (OPTIONS) ko handle karein
+  app.options('*', cors(corsOptions));
 
   app.use(cookieParser());
   app.use(express.json());
@@ -55,4 +86,3 @@ export function createApp(): Express {
   app.use('/api/v1/matrimonial', matrimonialRouter);
   return app;
 }
-
