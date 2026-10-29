@@ -5,13 +5,15 @@
   "type": "commonjs",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:staging": "tsx --env-file=../../.env.staging watch src/server.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "build:api": "tsc",
     "db:generate": "npx prisma generate --schema=../../packages/database/prisma/schema.prisma",
     "db:migrate": "npx prisma migrate deploy --schema=../../packages/database/prisma/schema.prisma",
     "start": "npx tsx src/server.ts",
-    "start:api": "npx tsx src/server.ts"
+    "start:api": "npx tsx src/server.ts",
+    "start:staging": "tsx --env-file=../../.env.staging src/server.ts"
   },
   "dependencies": {
     "@apnasamaj/database": "*",

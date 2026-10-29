@@ -9,7 +9,9 @@
     "test": "tsx src/tenant-manager.test.ts",
     "build": "tsc",
     "seed": "tsx src/seed.ts",
-    "migrate:all": "tsx src/migrate-all-tenants.ts"
+    "migrate:all": "tsx src/migrate-all-tenants.ts",
+    "migrate:staging": "tsx src/migrate-staging.ts",
+    "seed:staging": "tsx src/seed-staging.ts"
   },
   "dependencies": {
     "@apnasamaj/validation": "*",
