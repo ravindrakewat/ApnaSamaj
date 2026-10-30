@@ -14,11 +14,11 @@ import {
   createPostSchema,
   updatePostSchema,
   feedQuerySchema,
-  idParamSchema,
+  postIdSchema,
+  postCommentIdSchema,
   createCommentSchema,
   updateCommentSchema,
   commentsQuerySchema,
-  commentIdParamSchema,
   reportPostSchema,
 } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
@@ -147,18 +147,19 @@ export async function getFeedHandler(req: AuthenticatedRequest, res: Response): 
 
 export async function getPostHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
       return;
     }
 
-    const post = await getPostById(parsedParam.data.id, req.user?.id, req.db);
+    const post = await getPostById(parsedPostId.data, req.user?.id, req.db);
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -202,11 +203,12 @@ export async function updatePostHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -225,7 +227,7 @@ export async function updatePostHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const updated = await updatePost(parsedParam.data.id, userId, userRole, parsedBody.data, req.db);
+    const updated = await updatePost(parsedPostId.data, userId, userRole, parsedBody.data, req.db);
 
     const response: ApiResponse<PostItem> = {
       success: true,
@@ -270,11 +272,12 @@ export async function deletePostHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -282,7 +285,7 @@ export async function deletePostHandler(req: AuthenticatedRequest, res: Response
     }
 
     await deletePost(
-      parsedParam.data.id,
+      parsedPostId.data,
       userId,
       userRole,
       req.ip,
@@ -333,11 +336,12 @@ export async function pinPostHandler(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -345,7 +349,7 @@ export async function pinPostHandler(req: AuthenticatedRequest, res: Response): 
     }
 
     const updated = await pinPost(
-      parsedParam.data.id,
+      parsedPostId.data,
       userId,
       userRole,
       req.ip,
@@ -396,11 +400,12 @@ export async function unpinPostHandler(req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -408,7 +413,7 @@ export async function unpinPostHandler(req: AuthenticatedRequest, res: Response)
     }
 
     const updated = await unpinPost(
-      parsedParam.data.id,
+      parsedPostId.data,
       userId,
       userRole,
       req.ip,
@@ -458,11 +463,12 @@ export async function reportPostHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -482,7 +488,7 @@ export async function reportPostHandler(req: AuthenticatedRequest, res: Response
     }
 
     const result = await reportPost(
-      parsedParam.data.id,
+      parsedPostId.data,
       userId,
       parsedBody.data,
       req.ip,
@@ -536,18 +542,19 @@ export async function likePostHandler(req: AuthenticatedRequest, res: Response):
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
       return;
     }
 
-    const result = await likePost(parsedParam.data.id, userId, req.db);
+    const result = await likePost(parsedPostId.data, userId, req.db);
 
     const response: ApiResponse<PostLikesResponseData> = {
       success: true,
@@ -591,18 +598,19 @@ export async function unlikePostHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
       return;
     }
 
-    const result = await unlikePost(parsedParam.data.id, userId, req.db);
+    const result = await unlikePost(parsedPostId.data, userId, req.db);
 
     const response: ApiResponse<PostLikesResponseData> = {
       success: true,
@@ -635,18 +643,19 @@ export async function unlikePostHandler(req: AuthenticatedRequest, res: Response
 
 export async function getPostLikesHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
       return;
     }
 
-    const result = await getPostLikes(parsedParam.data.id, req.user?.id, req.db);
+    const result = await getPostLikes(parsedPostId.data, req.user?.id, req.db);
 
     const response: ApiResponse<PostLikesResponseData> = {
       success: true,
@@ -693,18 +702,19 @@ export async function recordPostViewHandler(req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
       return;
     }
 
-    const result = await recordPostView(parsedParam.data.id, userId, req.db);
+    const result = await recordPostView(parsedPostId.data, userId, req.db);
 
     const response: ApiResponse<PostViewsResponseData> = {
       success: true,
@@ -748,18 +758,19 @@ export async function getPostViewsHandler(req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
       return;
     }
 
-    const result = await getPostViews(parsedParam.data.id, userId, req.db);
+    const result = await getPostViews(parsedPostId.data, userId, req.db);
 
     const response: ApiResponse<PostViewsResponseData> = {
       success: true,
@@ -795,11 +806,12 @@ export async function getPostViewsHandler(req: AuthenticatedRequest, res: Respon
 
 export async function getCommentsHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -819,7 +831,7 @@ export async function getCommentsHandler(req: AuthenticatedRequest, res: Respons
     }
 
     const comments = await getPostComments(
-      parsedParam.data.id,
+      parsedPostId.data,
       parsedQuery.data.page,
       parsedQuery.data.limit,
       req.user?.id,
@@ -867,11 +879,12 @@ export async function createCommentHandler(req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    const parsedParam = idParamSchema.safeParse(req.params);
-    if (!parsedParam.success) {
+    const parsedPostId = postIdSchema.safeParse(req.params.id);
+    if (!parsedPostId.success) {
+      const issue = parsedPostId.error.issues[0]?.message || 'Invalid post ID parameter. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -891,7 +904,7 @@ export async function createCommentHandler(req: AuthenticatedRequest, res: Respo
     }
 
     const comment = await createComment(
-      parsedParam.data.id,
+      parsedPostId.data,
       userId,
       parsedBody.data.content,
       req.db
@@ -939,11 +952,14 @@ export async function updateCommentHandler(req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    const parsedParam = commentIdParamSchema.safeParse(req.params);
+    const parsedParam = postCommentIdSchema.safeParse(req.params);
     if (!parsedParam.success) {
+      const issue =
+        parsedParam.error.issues[0]?.message ||
+        'Invalid post or comment ID parameter. Expected valid UUIDs.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post or comment ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -1013,11 +1029,14 @@ export async function deleteCommentHandler(req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    const parsedParam = commentIdParamSchema.safeParse(req.params);
+    const parsedParam = postCommentIdSchema.safeParse(req.params);
     if (!parsedParam.success) {
+      const issue =
+        parsedParam.error.issues[0]?.message ||
+        'Invalid post or comment ID parameter. Expected valid UUIDs.';
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid post or comment ID parameter.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);

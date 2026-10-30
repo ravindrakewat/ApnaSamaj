@@ -37,6 +37,7 @@ export async function getFeedApi(
   limit: number = 10,
   type?: PostType,
   authorId?: string,
+  searchOrOptions?: string | { signal?: AbortSignal; search?: string },
   options?: { signal?: AbortSignal }
 ): Promise<FeedResponseData> {
   const params = new URLSearchParams();
@@ -45,9 +46,24 @@ export async function getFeedApi(
   if (type) params.set('type', type);
   if (authorId) params.set('authorId', authorId);
 
+  let searchStr: string | undefined;
+  let signal: AbortSignal | undefined;
+
+  if (typeof searchOrOptions === 'string') {
+    searchStr = searchOrOptions;
+    signal = options?.signal;
+  } else if (searchOrOptions && typeof searchOrOptions === 'object') {
+    searchStr = searchOrOptions.search;
+    signal = searchOrOptions.signal || options?.signal;
+  }
+
+  if (searchStr && searchStr.trim()) {
+    params.set('search', searchStr.trim().slice(0, 100));
+  }
+
   const response = await apiFetch<FeedResponseData>(`/api/v1/posts?${params.toString()}`, {
     method: 'GET',
-    signal: options?.signal,
+    signal,
   });
 
   if (!response.success || !response.data) {

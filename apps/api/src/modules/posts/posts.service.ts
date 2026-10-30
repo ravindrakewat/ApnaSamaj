@@ -113,8 +113,8 @@ function mapToPostItem(
     post.likes && post.likes.length > 0
       ? true
       : currentUserId
-      ? false
-      : false;
+        ? false
+        : false;
 
   return {
     id: post.id,
@@ -122,11 +122,11 @@ function mapToPostItem(
     groupId: post.groupId,
     group: post.group
       ? {
-          id: post.group.id,
-          name: post.group.name,
-          slug: post.group.slug,
-          privacy: (post.group as any).privacy || undefined,
-        }
+        id: post.group.id,
+        name: post.group.name,
+        slug: post.group.slug,
+        privacy: (post.group as any).privacy || undefined,
+      }
       : null,
     type: post.type as unknown as PostType,
     content: post.content,
@@ -524,14 +524,25 @@ export async function getCommunityFeed(
   db?: PrismaClient
 ): Promise<FeedResponseData> {
   const client = assertDb(db);
-  const { page, limit, type, authorId } = query;
+  const { page, limit, type, authorId, search } = query;
   const skip = (page - 1) * limit;
 
   const where: Record<string, unknown> = {
     author: {
       status: DbUserStatus.ACTIVE,
     },
-    // Exclude posts from PRIVATE groups unless caller is an active member
+  };
+
+  if (type) {
+    where.type = type as unknown as DbPostType;
+  }
+
+  if (authorId) {
+    where.authorId = authorId;
+  }
+
+  // Exclude posts from PRIVATE groups unless caller is an active member
+  const privacyFilter = {
     OR: [
       { groupId: null },
       { group: { privacy: 'PUBLIC' } },
@@ -541,12 +552,17 @@ export async function getCommunityFeed(
     ],
   };
 
-  if (type) {
-    where.type = type as unknown as DbPostType;
-  }
-
-  if (authorId) {
-    where.authorId = authorId;
+  const trimmedSearch = search?.trim();
+  if (trimmedSearch && trimmedSearch.length > 0) {
+    const searchFilter = {
+      OR: [
+        { content: { contains: trimmedSearch, mode: 'insensitive' } },
+        { author: { profile: { fullName: { contains: trimmedSearch, mode: 'insensitive' } } } },
+      ],
+    };
+    where.AND = [privacyFilter, searchFilter];
+  } else {
+    where.OR = privacyFilter.OR;
   }
 
   const postInclude = {
@@ -560,9 +576,9 @@ export async function getCommunityFeed(
     },
     likes: currentUserId
       ? {
-          where: { userId: currentUserId },
-          select: { id: true },
-        }
+        where: { userId: currentUserId },
+        select: { id: true },
+      }
       : false,
   };
 
@@ -641,9 +657,9 @@ export async function getPostById(
       },
       likes: currentUserId
         ? {
-            where: { userId: currentUserId },
-            select: { id: true },
-          }
+          where: { userId: currentUserId },
+          select: { id: true },
+        }
         : false,
     },
   });
@@ -1209,8 +1225,8 @@ export async function getPostLikes(
     client.postLike.count({ where: { postId } }),
     currentUserId
       ? client.postLike.findUnique({
-          where: { postId_userId: { postId, userId: currentUserId } },
-        })
+        where: { postId_userId: { postId, userId: currentUserId } },
+      })
       : null,
   ]);
 

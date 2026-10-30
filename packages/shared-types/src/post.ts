@@ -90,6 +90,14 @@ export interface FeedPaginationMeta {
   hasMore: boolean;
 }
 
+export interface FeedQueryParams {
+  page?: number;
+  limit?: number;
+  type?: PostType;
+  authorId?: string;
+  search?: string;
+}
+
 export interface FeedResponseData {
   posts: PostItem[];
   pagination: FeedPaginationMeta;

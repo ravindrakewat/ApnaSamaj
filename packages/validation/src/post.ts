@@ -3,6 +3,17 @@ import { z } from 'zod';
 export const postTypeEnum = z.enum(['GENERAL', 'ANNOUNCEMENT', 'EVENT']);
 export const postMediaTypeEnum = z.enum(['IMAGE', 'VIDEO', 'DOCUMENT']);
 
+export const postIdSchema = z.string().uuid('Invalid post ID format. Expected a valid UUID.');
+export const commentIdSchema = z.string().uuid('Invalid comment ID format. Expected a valid UUID.');
+export const postCommentIdSchema = z.object({
+  id: z.string().uuid('Invalid post ID format. Expected a valid UUID.'),
+  commentId: z.string().uuid('Invalid comment ID format. Expected a valid UUID.'),
+});
+
+export type PostIdParam = z.infer<typeof postIdSchema>;
+export type SingleCommentIdParam = z.infer<typeof commentIdSchema>;
+export type PostCommentIdParam = z.infer<typeof postCommentIdSchema>;
+
 export interface ParsedYouTubeVideo {
   videoId: string;
   embedUrl: string;
@@ -265,6 +276,7 @@ export const feedQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(50).default(10),
   type: postTypeEnum.optional(),
   authorId: z.string().uuid('Invalid author ID').optional(),
+  search: z.string().trim().max(100, 'Search query cannot exceed 100 characters.').optional(),
 });
 
 export type FeedQueryInput = z.infer<typeof feedQuerySchema>;
@@ -300,10 +312,7 @@ export const commentsQuerySchema = z.object({
 
 export type CommentsQueryInput = z.infer<typeof commentsQuerySchema>;
 
-export const commentIdParamSchema = z.object({
-  id: z.string().min(1, 'Post ID is required'),
-  commentId: z.string().min(1, 'Comment ID is required'),
-});
+export const commentIdParamSchema = postCommentIdSchema;
 
 export type CommentIdParam = z.infer<typeof commentIdParamSchema>;
 
