@@ -67,6 +67,21 @@ export function generateOpaqueRefreshToken(): string {
 }
 
 /**
+ * Generates a cryptographically secure, high-entropy password reset token.
+ * Uses 32 random bytes (256 bits of entropy), hex-encoded (64 chars).
+ */
+export function generatePasswordResetToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/**
+ * Computes the expiration date for a password reset token (15 minutes).
+ */
+export function calculatePasswordResetTokenExpiry(): Date {
+  return new Date(Date.now() + 15 * 60 * 1000);
+}
+
+/**
  * Computes the SHA-256 hash of a refresh token for safe database storage.
  * The raw token is never stored or logged.
  */

@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import { ApiResponse } from '@apnasamaj/shared-types';
+import { normalizeIndianPhone } from '@apnasamaj/validation';
 
 export const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -91,4 +92,75 @@ export const reportPostRateLimiter = rateLimit({
   },
 });
 
+export const forgotPasswordIpRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 forgot-password requests per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many password reset requests from this network. Please try again after 15 minutes.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});
 
+export const forgotPasswordPhoneRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // Limit each phone number to 3 requests per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req) => {
+    const rawPhone = req.body?.phone;
+    if (typeof rawPhone === 'string' && rawPhone.trim()) {
+      try {
+        const normalized = normalizeIndianPhone(rawPhone);
+        if (normalized) return `phone:${normalized}`;
+      } catch {
+        // fallback
+      }
+    }
+    return `ip:${req.ip || 'unknown'}`;
+  },
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many password reset requests for this phone number. Please try again after 15 minutes.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});
+
+export const verifyResetTokenRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // Limit each IP to 15 token verifications per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many reset token verification attempts. Please try again after 15 minutes.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});
+
+export const resetPasswordRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 reset submissions per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many password reset submissions. Please try again after 15 minutes.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});

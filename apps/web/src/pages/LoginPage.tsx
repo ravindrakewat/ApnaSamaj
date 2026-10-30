@@ -174,7 +174,7 @@ export const LoginPage: React.FC = () => {
             error={!!fieldErrors.password}
             helperText={fieldErrors.password}
             disabled={isSubmitting}
-            sx={{ mb: 3 }}
+            sx={{ mb: 1 }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
@@ -190,6 +190,15 @@ export const LoginPage: React.FC = () => {
               ),
             }}
           />
+
+          <Box display="flex" justifyContent="flex-end" sx={{ mb: 2.5 }}>
+            <RouterLink
+              to="/forgot-password"
+              style={{ textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500, color: '#1976d2' }}
+            >
+              Forgot Password?
+            </RouterLink>
+          </Box>
 
           <Button
             type="submit"

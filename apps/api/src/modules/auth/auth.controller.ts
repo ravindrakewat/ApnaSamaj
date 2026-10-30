@@ -1,6 +1,13 @@
 import { Request, Response } from 'express';
 import { prisma, tenantDbManager } from '@apnasamaj/database';
-import { loginSchema, registerSchema, refreshTokenSchema } from '@apnasamaj/validation';
+import {
+  loginSchema,
+  registerSchema,
+  refreshTokenSchema,
+  forgotPasswordSchema,
+  verifyResetTokenSchema,
+  resetPasswordSchema,
+} from '@apnasamaj/validation';
 import {
   ApiResponse,
   LoginResponseData,
@@ -8,6 +15,7 @@ import {
   RefreshResponseData,
   AuthUser,
   UserRole,
+  VerifyResetTokenResponseData,
 } from '@apnasamaj/shared-types';
 import {
   loginWithPhonePassword,
@@ -20,6 +28,10 @@ import {
   AccountSuspendedError,
   InvalidRefreshTokenError,
   ReplayAttackError,
+  InvalidResetTokenError,
+  requestPasswordReset,
+  verifyResetToken,
+  resetPassword,
 } from './auth.service';
 import {
   REFRESH_COOKIE_NAME,
@@ -448,4 +460,214 @@ export async function getMeHandler(req: AuthenticatedRequest, res: Response): Pr
   };
 
   res.status(200).json(response);
+}
+
+/**
+ * Handles member forgot-password requests:
+ * Validates phone, enforces tenant resolution, triggers non-enumerating token generation,
+ * and always returns the same generic HTTP 200 response.
+ */
+export async function forgotPasswordHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const tenantReq = req as TenantRequest;
+    const isCentralAdmin = Boolean(tenantReq.isCentralAdmin);
+    const tenant = tenantReq.tenant;
+    const db = tenantReq.db;
+
+    if (isCentralAdmin) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Password reset is disabled on the central admin console. Please reset through your community portal.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!tenant || !tenant.isResolved || !db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for password reset. Please access via a valid community subdomain or specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message || 'Invalid phone number format.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    await requestPasswordReset(parsed.data.phone, db, tenant.slug);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'If an account is associated with this phone number, password reset instructions have been sent.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    console.error('[Auth Controller] Error during forgot-password request:', err);
+    // Anti-enumeration: Ensure unexpected failures do not disclose account information
+    const response: ApiResponse = {
+      success: true,
+      message: 'If an account is associated with this phone number, password reset instructions have been sent.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  }
+}
+
+/**
+ * Validates a reset token as a preflight usability check:
+ * Returns { valid: true } if valid, or HTTP 400 error if expired/used.
+ * Never returns internal hashes, user identifiers, or phones.
+ */
+export async function verifyResetTokenHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const tenantReq = req as TenantRequest;
+    const isCentralAdmin = Boolean(tenantReq.isCentralAdmin);
+    const tenant = tenantReq.tenant;
+    const db = tenantReq.db;
+
+    if (isCentralAdmin) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Password reset is disabled on the central admin console. Please reset through your community portal.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!tenant || !tenant.isResolved || !db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for token verification. Please access via a valid community subdomain or specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsed = verifyResetTokenSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message || 'Reset token is required.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    await verifyResetToken(parsed.data.token, db);
+
+    const response: ApiResponse<VerifyResetTokenResponseData> = {
+      success: true,
+      data: { valid: true },
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof InvalidResetTokenError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Auth Controller] Unexpected verify-reset-token error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Invalid or expired reset token.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(400).json(response);
+  }
+}
+
+/**
+ * Handles final password reset redemption:
+ * Atomically verifies token, updates user's Argon2id password hash, marks token used,
+ * revokes active refresh tokens, and retires other outstanding reset tokens.
+ */
+export async function resetPasswordHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const tenantReq = req as TenantRequest;
+    const isCentralAdmin = Boolean(tenantReq.isCentralAdmin);
+    const tenant = tenantReq.tenant;
+    const db = tenantReq.db;
+
+    if (isCentralAdmin) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Password reset is disabled on the central admin console. Please reset through your community portal.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!tenant || !tenant.isResolved || !db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for password reset. Please access via a valid community subdomain or specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message || 'Invalid password reset input.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    await resetPassword(parsed.data.token, parsed.data.newPassword, db);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Password has been reset successfully. Please log in with your new password.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof InvalidResetTokenError || err instanceof AccountSuspendedError || err instanceof AuthError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Auth Controller] Unexpected reset-password error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'An unexpected error occurred while resetting your password. Please try again later.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
 }

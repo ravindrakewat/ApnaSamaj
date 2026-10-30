@@ -48,3 +48,24 @@ export const refreshTokenSchema = z.object({
 });
 
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+
+export const forgotPasswordSchema = z.object({
+  phone: phoneSchema,
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const verifyResetTokenSchema = z.object({
+  token: z.string({ required_error: 'Reset token is required' }).min(1, 'Reset token is required').trim(),
+});
+
+export type VerifyResetTokenInput = z.infer<typeof verifyResetTokenSchema>;
+
+export const resetPasswordSchema = z.object({
+  token: z.string({ required_error: 'Reset token is required' }).min(1, 'Reset token is required').trim(),
+  newPassword: z
+    .string({ required_error: 'Password is required' })
+    .min(8, 'Password must be at least 8 characters long'),
+});
+
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

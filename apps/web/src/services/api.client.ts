@@ -159,7 +159,10 @@ export async function apiFetch<T = unknown>(
     response.status === 401 &&
     !endpoint.includes('/auth/login') &&
     !endpoint.includes('/auth/register') &&
-    !endpoint.includes('/auth/refresh')
+    !endpoint.includes('/auth/refresh') &&
+    !endpoint.includes('/auth/forgot-password') &&
+    !endpoint.includes('/auth/verify-reset-token') &&
+    !endpoint.includes('/auth/reset-password')
   ) {
     try {
       const refreshData = await executeTokenRefresh();

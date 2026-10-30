@@ -3,13 +3,16 @@ import * as argon2 from 'argon2';
 import { PrismaClient, Role as DbRole, UserStatus as DbUserStatus, Gender } from '@apnasamaj/database';
 import { AuthUser, LoginResponseData, RefreshResponseData, UserRole, UserStatus } from '@apnasamaj/shared-types';
 import { RegisterInput } from '@apnasamaj/validation';
-import { verifyPassword } from './auth.password';
+import { verifyPassword, hashPassword } from './auth.password';
 import {
   generateAccessToken,
   generateOpaqueRefreshToken,
   hashToken,
   calculateRefreshTokenExpiry,
+  generatePasswordResetToken,
+  calculatePasswordResetTokenExpiry,
 } from './auth.tokens';
+import { getResetDeliveryService, IResetDeliveryService } from './auth.delivery';
 
 export class AuthError extends Error {
   public statusCode: number;
@@ -43,6 +46,12 @@ export class AccountSuspendedError extends AuthError {
 export class InvalidRefreshTokenError extends AuthError {
   constructor(message: string = 'Invalid or expired refresh token') {
     super(message, 401);
+  }
+}
+
+export class InvalidResetTokenError extends AuthError {
+  constructor(message: string = 'Invalid, expired, or already used reset token.') {
+    super(message, 400);
   }
 }
 
@@ -435,6 +444,246 @@ export async function refreshSession(
  * Revokes the server-side refresh session for the provided token.
  * Safe and idempotent.
  */
+/**
+ * Initiates the password reset workflow:
+ * 1. Checks if member exists with the given phone in target tenant database.
+ * 2. Anti-enumeration: Returns generic success if user does not exist or is not ACTIVE.
+ * 3. Fail-Closed Production Guard: If in production without configured SMS provider, fails closed.
+ * 4. In a transaction, invalidates any existing unused reset tokens for this user.
+ * 5. Generates high-entropy 256-bit token, hashes with SHA-256, and stores with 15-minute expiry.
+ * 6. Dispatches reset link via delivery service (console in dev, SMS in prod).
+ */
+export async function requestPasswordReset(
+  phone: string,
+  db?: PrismaClient,
+  communitySlug?: string,
+  clientUrl?: string,
+  deliveryService?: IResetDeliveryService
+): Promise<{ success: boolean; delivered: boolean }> {
+  const activeDb = assertDb(db);
+  const delivery = deliveryService || getResetDeliveryService();
+
+  // 1. Look up user by normalized phone number
+  const user = await activeDb.user.findUnique({
+    where: { phone },
+    select: {
+      id: true,
+      phone: true,
+      status: true,
+    },
+  });
+
+  // 2. Anti-enumeration: If user does not exist or is suspended/inactive, silently return
+  if (!user || user.status !== DbUserStatus.ACTIVE) {
+    return { success: true, delivered: false };
+  }
+
+  // 3. Fail-closed production guard:
+  // If in production and no SMS delivery provider is configured, do NOT create a usable token.
+  const isProduction = process.env.NODE_ENV === 'production';
+  const hasSmsConfig = Boolean(
+    process.env.SMS_API_KEY || process.env.FAST2SMS_API_KEY || process.env.MSG91_AUTH_KEY
+  );
+  if (isProduction && !hasSmsConfig) {
+    console.error(
+      '[Auth Service] Operational error: In production, no SMS delivery provider is configured. Reset token delivery failed closed.'
+    );
+    return { success: true, delivered: false };
+  }
+
+  // 4. Generate cryptographically secure token & 15-minute expiry
+  const rawToken = generatePasswordResetToken();
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = calculatePasswordResetTokenExpiry();
+
+  // 5. In a transaction, retire prior unused tokens and create the new record
+  await activeDb.$transaction(async (tx) => {
+    // Retire all previous active/unused reset tokens for this user
+    await tx.passwordResetToken.updateMany({
+      where: {
+        userId: user.id,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
+
+    // Create new reset token
+    await tx.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      },
+    });
+  });
+
+  // 6. Deliver the token
+  const deliveryResult = await delivery.deliverResetLink({
+    phone: user.phone,
+    rawToken,
+    communitySlug,
+    clientUrl,
+  });
+
+  return { success: true, delivered: deliveryResult.success };
+}
+
+/**
+ * Validates a reset token as a preflight usability check:
+ * Checks whether token exists, is unexpired, is unused, and belongs to an ACTIVE user.
+ * Never returns user identifiers or hashes.
+ */
+export async function verifyResetToken(
+  rawToken: string,
+  db?: PrismaClient
+): Promise<boolean> {
+  const activeDb = assertDb(db);
+
+  if (!rawToken || typeof rawToken !== 'string' || !rawToken.trim()) {
+    throw new InvalidResetTokenError('Reset token is required.');
+  }
+
+  const tokenHash = hashToken(rawToken);
+
+  const tokenRecord = await activeDb.passwordResetToken.findUnique({
+    where: { tokenHash },
+    select: {
+      id: true,
+      expiresAt: true,
+      usedAt: true,
+      user: {
+        select: {
+          status: true,
+        },
+      },
+    },
+  });
+
+  if (!tokenRecord) {
+    throw new InvalidResetTokenError('Invalid or expired reset token.');
+  }
+
+  if (tokenRecord.usedAt !== null) {
+    throw new InvalidResetTokenError('This reset token has already been used.');
+  }
+
+  if (tokenRecord.expiresAt < new Date()) {
+    throw new InvalidResetTokenError('This reset token has expired. Please request a new one.');
+  }
+
+  if (!tokenRecord.user || tokenRecord.user.status !== DbUserStatus.ACTIVE) {
+    throw new InvalidResetTokenError('Invalid or expired reset token.');
+  }
+
+  return true;
+}
+
+/**
+ * Atomically redeems a reset token and updates the user password:
+ * 1. Checks that the token is still valid, unused, and unexpired using a conditional update.
+ * 2. Handles concurrent requests safely (atomic single-use).
+ * 3. Hashes the new password with Argon2id.
+ * 4. Updates User.passwordHash.
+ * 5. Revokes all active refresh-token sessions for this user.
+ * 6. Retires all other outstanding reset tokens for this user.
+ */
+export async function resetPassword(
+  rawToken: string,
+  newPassword: string,
+  db?: PrismaClient
+): Promise<void> {
+  const activeDb = assertDb(db);
+
+  if (!rawToken || typeof rawToken !== 'string' || !rawToken.trim()) {
+    throw new InvalidResetTokenError('Reset token is required.');
+  }
+
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+    throw new AuthError('Password must be at least 8 characters long.', 400);
+  }
+
+  const tokenHash = hashToken(rawToken);
+
+  // Hash new password using Argon2id helper
+  const passwordHash = await hashPassword(newPassword);
+
+  // Execute atomic single-use conditional update and password reset transaction
+  await activeDb.$transaction(async (tx) => {
+    // 1. Atomically consume token only if it is unused and unexpired
+    const updateTokenResult = await tx.passwordResetToken.updateMany({
+      where: {
+        tokenHash,
+        usedAt: null,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
+
+    if (updateTokenResult.count !== 1) {
+      // Either token does not exist, was already used, has expired, or lost a race condition
+      throw new InvalidResetTokenError('Invalid, expired, or already used reset token.');
+    }
+
+    // 2. Fetch userId of this token
+    const tokenRecord = await tx.passwordResetToken.findUnique({
+      where: { tokenHash },
+      select: {
+        userId: true,
+        user: {
+          select: {
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!tokenRecord) {
+      throw new InvalidResetTokenError('Invalid, expired, or already used reset token.');
+    }
+
+    if (tokenRecord.user?.status === DbUserStatus.SUSPENDED) {
+      throw new AccountSuspendedError();
+    }
+
+    const userId = tokenRecord.userId;
+
+    // 3. Update User passwordHash
+    await tx.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    // 4. Revoke all active refresh tokens for this user
+    await tx.refreshToken.updateMany({
+      where: {
+        userId,
+        isRevoked: false,
+      },
+      data: {
+        isRevoked: true,
+        revokedAt: new Date(),
+      },
+    });
+
+    // 5. Retire any other outstanding password reset tokens for this user
+    await tx.passwordResetToken.updateMany({
+      where: {
+        userId,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
+  });
+}
+
 export async function logoutSession(rawRefreshToken?: string, db?: PrismaClient): Promise<void> {
   if (!rawRefreshToken || typeof rawRefreshToken !== 'string' || !rawRefreshToken.trim()) {
     return;

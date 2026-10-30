@@ -54,3 +54,20 @@ export interface AccessTokenPayload {
   iat?: number;
   exp?: number;
 }
+
+export interface ForgotPasswordRequest {
+  phone: string;
+}
+
+export interface VerifyResetTokenRequest {
+  token: string;
+}
+
+export interface VerifyResetTokenResponseData {
+  valid: boolean;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
