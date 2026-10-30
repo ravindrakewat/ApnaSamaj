@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { ApiResponse, ChatMessagesResponseData, ChatMessageItem } from '@apnasamaj/shared-types';
-import { idParamSchema, listGroupMessagesQuerySchema, sendChatMessageSchema } from '@apnasamaj/validation';
+import { idParamSchema, listGroupMessagesQuerySchema, sendChatMessageSchema, groupIdSchema } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
   getGroupChatHistory,
@@ -31,8 +31,8 @@ export async function getGroupMessagesHandler(
       return;
     }
 
-    const parsedParams = idParamSchema.safeParse(req.params);
-    if (!parsedParams.success) {
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
       const response: ApiResponse = {
         success: false,
         error: 'Invalid group ID.',
@@ -53,7 +53,7 @@ export async function getGroupMessagesHandler(
       return;
     }
 
-    const data = await getGroupChatHistory(parsedParams.data.id, userId, parsedQuery.data, req.db);
+    const data = await getGroupChatHistory(parsedGroupId.data, userId, parsedQuery.data, req.db);
 
     const response: ApiResponse<ChatMessagesResponseData> = {
       success: true,
@@ -122,8 +122,8 @@ export async function sendGroupMessageHandler(
       return;
     }
 
-    const parsedParams = idParamSchema.safeParse(req.params);
-    if (!parsedParams.success) {
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
       const response: ApiResponse = {
         success: false,
         error: 'Invalid group ID.',
@@ -135,7 +135,7 @@ export async function sendGroupMessageHandler(
 
     const parsedBody = sendChatMessageSchema.safeParse({
       ...req.body,
-      groupId: parsedParams.data.id,
+      groupId: parsedGroupId.data,
     });
 
     if (!parsedBody.success) {
@@ -150,7 +150,7 @@ export async function sendGroupMessageHandler(
     }
 
     const message = await sendChatMessage(
-      parsedParams.data.id,
+      parsedGroupId.data,
       userId,
       parsedBody.data.content,
       parsedBody.data.tempId,

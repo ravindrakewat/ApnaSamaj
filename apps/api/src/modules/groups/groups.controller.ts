@@ -1,6 +1,23 @@
 import { Response } from 'express';
-import { ApiResponse, ListGroupsResponseData, GroupDetails, FeedResponseData, GroupMemberActionResult, GroupMemberRole } from '@apnasamaj/shared-types';
-import { createGroupSchema, listGroupsQuerySchema, updateGroupSchema, updateMemberRoleSchema } from '@apnasamaj/validation';
+import {
+  ApiResponse,
+  ListGroupsResponseData,
+  GroupDetails,
+  FeedResponseData,
+  GroupMemberActionResult,
+  GroupMemberRole,
+  ListGroupMembersResponseData,
+} from '@apnasamaj/shared-types';
+import {
+  createGroupSchema,
+  listGroupsQuerySchema,
+  updateGroupSchema,
+  updateMemberRoleSchema,
+  groupIdSchema,
+  groupUserIdSchema,
+  addGroupMemberSchema,
+  listGroupMembersQuerySchema,
+} from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
   listGroups,
@@ -13,6 +30,9 @@ import {
   uploadGroupCover,
   updateGroupMemberRole,
   removeGroupMember,
+  deleteGroup,
+  addGroupMember,
+  listGroupMembers,
   GroupServiceError,
 } from './groups.service';
 
@@ -178,18 +198,19 @@ export async function joinGroupHandler(req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    const { id } = req.params;
-    if (!id) {
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const issue = parsedGroupId.error.issues[0]?.message || 'Invalid group ID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Group ID is required.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
       return;
     }
 
-    const data = await joinGroup(id, currentUserId, req.db);
+    const data = await joinGroup(parsedGroupId.data, currentUserId, req.db);
     const response: ApiResponse = {
       success: true,
       message: data.message,
@@ -231,18 +252,19 @@ export async function leaveGroupHandler(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const { id } = req.params;
-    if (!id) {
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const issue = parsedGroupId.error.issues[0]?.message || 'Invalid group ID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Group ID is required.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
       return;
     }
 
-    const data = await leaveGroup(id, currentUserId, req.db);
+    const data = await leaveGroup(parsedGroupId.data, currentUserId, req.db);
     const response: ApiResponse = {
       success: true,
       message: data.message,
@@ -339,11 +361,12 @@ export async function updateGroupHandler(req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    const { id } = req.params;
-    if (!id) {
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const issue = parsedGroupId.error.issues[0]?.message || 'Invalid group ID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Group ID is required.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -365,7 +388,15 @@ export async function updateGroupHandler(req: AuthenticatedRequest, res: Respons
     const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
 
-    const data = await updateGroup(id, currentUserId, currentUserRole, parsed.data, ipAddress, userAgent, req.db);
+    const data = await updateGroup(
+      parsedGroupId.data,
+      currentUserId,
+      currentUserRole,
+      parsed.data,
+      ipAddress,
+      userAgent,
+      req.db
+    );
     const response: ApiResponse<GroupDetails> = {
       success: true,
       message: 'Group settings updated successfully.',
@@ -408,11 +439,12 @@ export async function uploadGroupCoverHandler(req: AuthenticatedRequest, res: Re
       return;
     }
 
-    const { id } = req.params;
-    if (!id) {
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const issue = parsedGroupId.error.issues[0]?.message || 'Invalid group ID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Group ID is required.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -433,7 +465,7 @@ export async function uploadGroupCoverHandler(req: AuthenticatedRequest, res: Re
     const userAgent = req.headers['user-agent'];
 
     const result = await uploadGroupCover(
-      id,
+      parsedGroupId.data,
       currentUserId,
       currentUserRole,
       req.file.buffer,
@@ -472,6 +504,224 @@ export async function uploadGroupCoverHandler(req: AuthenticatedRequest, res: Re
   }
 }
 
+export async function deleteGroupHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role;
+    if (!currentUserId || !currentUserRole) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const issue = parsedGroupId.error.issues[0]?.message || 'Invalid group ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    const result = await deleteGroup(
+      parsedGroupId.data,
+      currentUserId,
+      currentUserRole,
+      ipAddress,
+      userAgent,
+      req.db
+    );
+
+    const response: ApiResponse<{ message: string }> = {
+      success: true,
+      message: result.message,
+      data: { message: result.message },
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof GroupServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Groups Controller] Delete group error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to delete group.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
+export async function addGroupMemberHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role;
+    if (!currentUserId || !currentUserRole) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const issue = parsedGroupId.error.issues[0]?.message || 'Invalid group ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedBody = addGroupMemberSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      const issue = parsedBody.error.issues[0]?.message || 'Invalid member data.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    const data = await addGroupMember(
+      parsedGroupId.data,
+      parsedBody.data.userId,
+      currentUserId,
+      currentUserRole,
+      ipAddress,
+      userAgent,
+      req.db
+    );
+
+    const response: ApiResponse<typeof data> = {
+      success: true,
+      message: 'Member added to group successfully.',
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(201).json(response);
+  } catch (err: unknown) {
+    if (err instanceof GroupServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Groups Controller] Add group member error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to add group member.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
+export async function listGroupMembersHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role;
+    if (!currentUserId || !currentUserRole) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const issue = parsedGroupId.error.issues[0]?.message || 'Invalid group ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedQuery = listGroupMembersQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      const issue = parsedQuery.error.issues[0]?.message || 'Invalid query parameters.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const data = await listGroupMembers(
+      parsedGroupId.data,
+      currentUserId,
+      currentUserRole,
+      parsedQuery.data,
+      req.db
+    );
+
+    const response: ApiResponse<ListGroupMembersResponseData> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof GroupServiceError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Groups Controller] List group members error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to retrieve group members.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+
 export async function updateGroupMemberRoleHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const currentUserId = req.user?.id;
@@ -486,11 +736,24 @@ export async function updateGroupMemberRoleHandler(req: AuthenticatedRequest, re
       return;
     }
 
-    const { id, userId } = req.params;
-    if (!id || !userId) {
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const issue = parsedGroupId.error.issues[0]?.message || 'Invalid group ID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Group ID and Member ID are required.',
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedUserId = groupUserIdSchema.safeParse(req.params.userId);
+    if (!parsedUserId.success) {
+      const issue = parsedUserId.error.issues[0]?.message || 'Invalid member user ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -513,8 +776,8 @@ export async function updateGroupMemberRoleHandler(req: AuthenticatedRequest, re
     const userAgent = req.headers['user-agent'];
 
     const data = await updateGroupMemberRole(
-      id,
-      userId,
+      parsedGroupId.data,
+      parsedUserId.data,
       parsed.data.role as GroupMemberRole,
       currentUserId,
       currentUserRole,
@@ -565,11 +828,24 @@ export async function removeGroupMemberHandler(req: AuthenticatedRequest, res: R
       return;
     }
 
-    const { id, userId } = req.params;
-    if (!id || !userId) {
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const issue = parsedGroupId.error.issues[0]?.message || 'Invalid group ID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Group ID and Member ID are required.',
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedUserId = groupUserIdSchema.safeParse(req.params.userId);
+    if (!parsedUserId.success) {
+      const issue = parsedUserId.error.issues[0]?.message || 'Invalid member user ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -580,8 +856,8 @@ export async function removeGroupMemberHandler(req: AuthenticatedRequest, res: R
     const userAgent = req.headers['user-agent'];
 
     const data = await removeGroupMember(
-      id,
-      userId,
+      parsedGroupId.data,
+      parsedUserId.data,
       currentUserId,
       currentUserRole,
       ipAddress,

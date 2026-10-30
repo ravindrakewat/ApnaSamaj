@@ -6,6 +6,7 @@ import {
   GroupDetails,
   GroupMemberItem,
   ListGroupsResponseData,
+  ListGroupMembersResponseData,
   CreateGroupInput,
   UpdateGroupInput,
   GroupMemberActionResult,
@@ -14,7 +15,7 @@ import {
   UserRole,
   PostType,
 } from '@apnasamaj/shared-types';
-import { ListGroupsQuery } from '@apnasamaj/validation';
+import { ListGroupsQuery, ListGroupMembersQuery } from '@apnasamaj/validation';
 import { uploadPostMedia, deleteStorageObjects, extractStoragePathFromUrl } from '../../services/storage.service';
 import { sendNotificationSafely } from '../notifications/notifications.service';
 
@@ -36,6 +37,12 @@ export class GroupNotFoundError extends GroupServiceError {
 export class ForbiddenGroupActionError extends GroupServiceError {
   constructor(message: string = 'Forbidden: Access to this group or action is restricted.') {
     super(message, 403);
+  }
+}
+
+export class GroupConflictError extends GroupServiceError {
+  constructor(message: string = 'Conflict: Group resource conflict.') {
+    super(message, 409);
   }
 }
 
@@ -1097,3 +1104,389 @@ export async function uploadGroupCover(
   };
 }
 
+
+
+/**
+ * Deletes a community group.
+ * Only the group creator, an active group ADMIN, or platform SUPER_ADMIN can delete the group.
+ * Foreign keys handle cascading memberships and chat messages, and nullify post groupId references.
+ * Automatically records an immutable audit log entry and cleans up application-managed cover images.
+ */
+export async function deleteGroup(
+  groupId: string,
+  userId: string,
+  userRole: UserRole,
+  ipAddress?: string,
+  userAgent?: string,
+  db?: PrismaClient
+): Promise<{ success: boolean; message: string }> {
+  const client = assertDb(db);
+  const group = await client.group.findUnique({
+    where: { id: groupId },
+    select: { id: true, name: true, slug: true, createdById: true, coverUrl: true },
+  });
+
+  if (!group) {
+    throw new GroupNotFoundError();
+  }
+
+  const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+  const isCreator = group.createdById === userId;
+
+  if (!isSuperAdmin && !isCreator) {
+    const membership = await client.groupMember.findUnique({
+      where: {
+        groupId_userId: {
+          groupId,
+          userId,
+        },
+      },
+      select: { role: true },
+    });
+
+    if (!membership || membership.role !== 'ADMIN') {
+      throw new ForbiddenGroupActionError('Only group administrators or creators can delete the group.');
+    }
+  }
+
+  const previousCoverUrl = group.coverUrl;
+
+  await client.$transaction(async (tx) => {
+    // Record immutable audit log before deletion
+    await tx.auditLog.create({
+      data: {
+        actorId: userId,
+        action: 'GROUP_DELETED',
+        targetType: 'Group',
+        targetId: groupId,
+        details: {
+          name: group.name,
+          slug: group.slug,
+          deletedBy: userId,
+        },
+        ipAddress: ipAddress || null,
+        userAgent: userAgent || null,
+      },
+    });
+
+    await tx.group.delete({
+      where: { id: groupId },
+    });
+  });
+
+  // Clean up previous cover image if application-managed
+  if (previousCoverUrl) {
+    const oldStoragePath = extractStoragePathFromUrl(previousCoverUrl);
+    if (oldStoragePath) {
+      deleteStorageObjects([oldStoragePath]).catch((err: unknown) => {
+        console.warn(
+          '[Groups Service] Failed to clean up deleted group cover image:',
+          err instanceof Error ? err.message : err
+        );
+      });
+    }
+  }
+
+  return {
+    success: true,
+    message: 'Group deleted successfully.',
+  };
+}
+
+/**
+ * Directly onboards a community member into a group.
+ * Only group administrators (ADMIN) or platform SUPER_ADMIN can add members.
+ * Requires the target user to be an active verified member within the same tenant.
+ * Uses atomic row-level locking on the Group row to serialize concurrent member additions.
+ * Always assigns the default role MEMBER.
+ */
+export async function addGroupMember(
+  groupId: string,
+  targetUserId: string,
+  actorId: string,
+  actorRole: UserRole,
+  ipAddress?: string,
+  userAgent?: string,
+  db?: PrismaClient
+): Promise<GroupMemberActionResult> {
+  const client = assertDb(db);
+  const group = await client.group.findUnique({
+    where: { id: groupId },
+    select: { id: true, name: true, privacy: true, createdById: true },
+  });
+
+  if (!group) {
+    throw new GroupNotFoundError();
+  }
+
+  const isSuperAdmin = actorRole === UserRole.SUPER_ADMIN;
+  const isCreator = group.createdById === actorId;
+
+  if (!isSuperAdmin && !isCreator) {
+    const actorMembership = await client.groupMember.findUnique({
+      where: {
+        groupId_userId: {
+          groupId,
+          userId: actorId,
+        },
+      },
+      select: { role: true },
+    });
+
+    if (!actorMembership || actorMembership.role !== 'ADMIN') {
+      throw new ForbiddenGroupActionError('Only group creators, administrators, or system admins can add members directly.');
+    }
+  }
+
+  // Validate target user in this tenant database
+  const targetUser = await client.user.findUnique({
+    where: { id: targetUserId },
+    select: {
+      id: true,
+      status: true,
+      profile: {
+        select: {
+          fullName: true,
+          avatarUrl: true,
+          city: true,
+          state: true,
+        },
+      },
+    },
+  });
+
+  if (!targetUser) {
+    throw new GroupServiceError('User not found in this community.', 404);
+  }
+
+  if (targetUser.status !== DbUserStatus.ACTIVE) {
+    throw new GroupServiceError(
+      `Cannot add user with status ${targetUser.status} to the group. User must be an active verified member.`,
+      400
+    );
+  }
+
+  const result = await client.$transaction(async (tx) => {
+    // Acquire row-level lock on the Group record to prevent race conditions
+    const groups = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "Group" WHERE id = ${groupId} FOR UPDATE
+    `;
+
+    if (!groups || groups.length === 0) {
+      throw new GroupNotFoundError();
+    }
+
+    // Check for existing membership under the lock
+    const existingMembership = await tx.groupMember.findUnique({
+      where: {
+        groupId_userId: {
+          groupId,
+          userId: targetUserId,
+        },
+      },
+    });
+
+    if (existingMembership) {
+      throw new GroupConflictError('User is already a member of this group.');
+    }
+
+    const newMember = await tx.groupMember.create({
+      data: {
+        groupId,
+        userId: targetUserId,
+        role: 'MEMBER', // Callers can never assign elevated roles via ordinary add-member
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                fullName: true,
+                avatarUrl: true,
+                city: true,
+                state: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Record immutable audit log
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        action: 'GROUP_MEMBER_ADD',
+        targetType: 'GroupMember',
+        targetId: newMember.id,
+        details: {
+          groupId,
+          targetUserId,
+          assignedRole: 'MEMBER',
+        },
+        ipAddress: ipAddress || null,
+        userAgent: userAgent || null,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Member added to group successfully.',
+      member: {
+        id: newMember.id,
+        groupId: newMember.groupId,
+        userId: newMember.userId,
+        role: newMember.role as unknown as GroupMemberRole,
+        joinedAt: newMember.joinedAt.toISOString(),
+        user: {
+          id: newMember.user.id,
+          fullName: newMember.user.profile?.fullName || 'Community Member',
+          avatarUrl: newMember.user.profile?.avatarUrl || null,
+          city: newMember.user.profile?.city || null,
+          state: newMember.user.profile?.state || null,
+        },
+      },
+    };
+  });
+
+  // Safe notification side-effect after successful transaction
+  if (actorId !== targetUserId) {
+    sendNotificationSafely(
+      {
+        recipientId: targetUserId,
+        actorId,
+        type: 'GROUP_ROLE_UPDATE',
+        title: 'Added to Group',
+        message: `You have been added to the group "${group.name}".`,
+        entityType: 'Group',
+        entityId: groupId,
+      },
+      client
+    ).catch((err) =>
+      console.warn('[Groups Service] Failed to send member added notification:', err)
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Retrieves a dedicated paginated list of members for a group.
+ * Private groups enforce that the caller must be a member or platform SUPER_ADMIN.
+ * Uses bounded pagination (limit capped at 50) and returns only safe UI roster fields.
+ */
+export async function listGroupMembers(
+  groupId: string,
+  currentUserId: string,
+  currentUserRole: UserRole,
+  query: ListGroupMembersQuery,
+  db?: PrismaClient
+): Promise<ListGroupMembersResponseData> {
+  const client = assertDb(db);
+  const group = await client.group.findUnique({
+    where: { id: groupId },
+    select: { id: true, privacy: true },
+  });
+
+  if (!group) {
+    throw new GroupNotFoundError();
+  }
+
+  const isSuperAdmin = currentUserRole === UserRole.SUPER_ADMIN;
+
+  // Enforce private group member roster access rule
+  if (group.privacy === 'PRIVATE' && !isSuperAdmin) {
+    const callerMembership = await client.groupMember.findUnique({
+      where: {
+        groupId_userId: {
+          groupId,
+          userId: currentUserId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!callerMembership) {
+      throw new ForbiddenGroupActionError(
+        'You must be a member of this private group to view its member roster.'
+      );
+    }
+  }
+
+  const { page = 1, limit = 12, search, role } = query;
+  const skip = (page - 1) * limit;
+
+  const where: Prisma.GroupMemberWhereInput = {
+    groupId,
+  };
+
+  if (role) {
+    where.role = role as GroupMemberRole;
+  }
+
+  if (search && search.trim().length > 0) {
+    where.user = {
+      profile: {
+        fullName: { contains: search.trim(), mode: 'insensitive' },
+      },
+    };
+  }
+
+  const memberSelect = {
+    id: true,
+    groupId: true,
+    userId: true,
+    role: true,
+    joinedAt: true,
+    user: {
+      select: {
+        id: true,
+        profile: {
+          select: {
+            fullName: true,
+            avatarUrl: true,
+            city: true,
+            state: true,
+          },
+        },
+      },
+    },
+  } as const;
+
+  const [totalMembers, rawMembers] = await Promise.all([
+    client.groupMember.count({ where }),
+    client.groupMember.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { joinedAt: 'asc' },
+      select: memberSelect,
+    }),
+  ]);
+
+  const members: GroupMemberItem[] = rawMembers.map((m) => ({
+    id: m.id,
+    groupId: m.groupId,
+    userId: m.userId,
+    role: m.role as unknown as GroupMemberRole,
+    joinedAt: m.joinedAt.toISOString(),
+    user: {
+      id: m.user.id,
+      fullName: m.user.profile?.fullName || 'Community Member',
+      avatarUrl: m.user.profile?.avatarUrl || null,
+      city: m.user.profile?.city || null,
+      state: m.user.profile?.state || null,
+    },
+  }));
+
+  return {
+    members,
+    pagination: {
+      page,
+      limit,
+      totalMembers,
+      totalPages: Math.ceil(totalMembers / limit) || 1,
+    },
+  };
+}

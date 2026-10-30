@@ -14,6 +14,9 @@ import {
   uploadGroupCoverHandler,
   updateGroupMemberRoleHandler,
   removeGroupMemberHandler,
+  deleteGroupHandler,
+  addGroupMemberHandler,
+  listGroupMembersHandler,
 } from './groups.controller';
 import { getGroupMessagesHandler, sendGroupMessageHandler } from '../chat/chat.controller';
 
@@ -27,6 +30,12 @@ groupsRouter.get('/', listGroupsHandler);
 
 // POST /api/v1/groups - Create a new community group
 groupsRouter.post('/', createGroupHandler);
+
+// GET /api/v1/groups/:id/members - Retrieve paginated group member roster
+groupsRouter.get('/:id/members', listGroupMembersHandler);
+
+// POST /api/v1/groups/:id/members - Direct member onboarding by admin
+groupsRouter.post('/:id/members', addGroupMemberHandler);
 
 // GET /api/v1/groups/:slug - Retrieve group details & roster
 groupsRouter.get('/:slug', getGroupBySlugHandler);
@@ -42,6 +51,9 @@ groupsRouter.post('/:id/leave', leaveGroupHandler);
 
 // PATCH /api/v1/groups/:id - Update group settings (name, description, privacy, coverUrl)
 groupsRouter.patch('/:id', updateGroupHandler);
+
+// DELETE /api/v1/groups/:id - Delete a group
+groupsRouter.delete('/:id', deleteGroupHandler);
 
 // POST /api/v1/groups/:id/cover - Upload and update group cover image
 groupsRouter.post('/:id/cover', singleImageUpload, uploadGroupCoverHandler);
@@ -59,4 +71,3 @@ groupsRouter.get('/:id/messages', getGroupMessagesHandler);
 groupsRouter.post('/:id/messages', sendGroupMessageHandler);
 
 export default groupsRouter;
-

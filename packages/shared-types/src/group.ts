@@ -92,9 +92,22 @@ export interface UpdateGroupMemberRoleInput {
   role: GroupMemberRole | 'ADMIN' | 'MODERATOR' | 'MEMBER';
 }
 
+export interface AddGroupMemberInput {
+  userId: string;
+}
+
+export interface ListGroupMembersResponseData {
+  members: GroupMemberItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalMembers: number;
+    totalPages: number;
+  };
+}
+
 export interface GroupMemberActionResult {
   success: boolean;
   message: string;
   member?: GroupMemberItem;
 }
-

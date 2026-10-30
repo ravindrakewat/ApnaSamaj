@@ -6,6 +6,7 @@ import {
   GroupMemberRole,
   GroupMemberActionResult,
   FeedResponseData,
+  ListGroupMembersResponseData,
 } from '@apnasamaj/shared-types';
 import { apiFetch } from './api.client';
 
@@ -82,6 +83,16 @@ export async function leaveGroupApi(groupId: string): Promise<void> {
   }
 }
 
+export async function deleteGroupApi(groupId: string): Promise<void> {
+  const response = await apiFetch(`/api/v1/groups/${groupId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.success) {
+    throw new Error(response.error || 'Failed to delete group.');
+  }
+}
+
 export async function fetchGroupPosts(slug: string, page: number = 1): Promise<FeedResponseData> {
   const response = await apiFetch<FeedResponseData>(`/api/v1/groups/${slug}/posts?page=${page}`, {
     method: 'GET',
@@ -123,6 +134,53 @@ export async function uploadGroupCoverApi(groupId: string, file: File): Promise<
   return response.data.coverUrl;
 }
 
+export interface ListGroupMembersParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  role?: 'ADMIN' | 'MODERATOR' | 'MEMBER';
+}
+
+export async function fetchGroupMembers(
+  groupId: string,
+  params: ListGroupMembersParams = {}
+): Promise<ListGroupMembersResponseData> {
+  const queryParams = new URLSearchParams();
+  if (params.page) queryParams.set('page', params.page.toString());
+  if (params.limit) queryParams.set('limit', params.limit.toString());
+  if (params.search && params.search.trim()) queryParams.set('search', params.search.trim());
+  if (params.role) queryParams.set('role', params.role);
+
+  const queryString = queryParams.toString();
+  const endpoint = `/api/v1/groups/${groupId}/members${queryString ? `?${queryString}` : ''}`;
+
+  const response = await apiFetch<ListGroupMembersResponseData>(endpoint, {
+    method: 'GET',
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to fetch group members.');
+  }
+
+  return response.data;
+}
+
+export async function addGroupMemberApi(
+  groupId: string,
+  userId: string
+): Promise<GroupMemberActionResult> {
+  const response = await apiFetch<GroupMemberActionResult>(`/api/v1/groups/${groupId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to add member to group.');
+  }
+
+  return response.data;
+}
+
 export async function updateMemberRoleApi(
   groupId: string,
   userId: string,
@@ -149,4 +207,3 @@ export async function removeMemberApi(groupId: string, userId: string): Promise<
     throw new Error(response.error || 'Failed to remove member.');
   }
 }
-
