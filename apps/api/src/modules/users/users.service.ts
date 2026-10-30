@@ -211,7 +211,7 @@ export async function getDirectoryMembers(
   if (!db) {
     throw new UserServiceError('Tenant database client is required for directory operations.', 400);
   }
-  const { page = 1, limit = 12, search, city, state, gotra } = query;
+  const { page = 1, limit = 12, search, city, state, gotra, subCaste } = query;
   const skip = (page - 1) * limit;
 
   const where: Prisma.UserWhereInput = {
@@ -232,6 +232,14 @@ export async function getDirectoryMembers(
     andConditions.push({
       profile: {
         state: { contains: state.trim(), mode: 'insensitive' },
+      },
+    });
+  }
+
+  if (subCaste && subCaste.trim().length > 0) {
+    andConditions.push({
+      profile: {
+        subCaste: { contains: subCaste.trim(), mode: 'insensitive' },
       },
     });
   }

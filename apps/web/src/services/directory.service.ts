@@ -8,6 +8,7 @@ export interface DirectoryFilterParams {
   city?: string;
   state?: string;
   gotra?: string;
+  subCaste?: string;
 }
 
 export async function fetchDirectory(params: DirectoryFilterParams = {}): Promise<DirectoryResponseData> {
@@ -18,6 +19,7 @@ export async function fetchDirectory(params: DirectoryFilterParams = {}): Promis
   if (params.city && params.city.trim()) queryParams.set('city', params.city.trim());
   if (params.state && params.state.trim()) queryParams.set('state', params.state.trim());
   if (params.gotra && params.gotra.trim()) queryParams.set('gotra', params.gotra.trim());
+  if (params.subCaste && params.subCaste.trim()) queryParams.set('subCaste', params.subCaste.trim());
 
   const queryString = queryParams.toString();
   const endpoint = `/api/v1/users${queryString ? `?${queryString}` : ''}`;

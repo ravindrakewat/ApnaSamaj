@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { ApiResponse, DirectoryResponseData, PublicMemberProfile } from '@apnasamaj/shared-types';
-import { updateProfileSchema, directoryQuerySchema } from '@apnasamaj/validation';
+import { updateProfileSchema, directoryQuerySchema, memberIdSchema } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
   getMyProfile,
@@ -256,11 +256,12 @@ export async function uploadMyAvatarHandler(req: AuthenticatedRequest, res: Resp
 
 export async function getPublicProfileHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
-    if (!id) {
+    const parsedId = memberIdSchema.safeParse(req.params.id);
+    if (!parsedId.success) {
+      const issue = parsedId.error.issues[0]?.message || 'Invalid member ID format. Expected a valid UUID.';
       const response: ApiResponse = {
         success: false,
-        error: 'Member ID is required.',
+        error: issue,
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -277,7 +278,7 @@ export async function getPublicProfileHandler(req: AuthenticatedRequest, res: Re
       return;
     }
 
-    const data = await getPublicMemberProfile(id, req.db);
+    const data = await getPublicMemberProfile(parsedId.data, req.db);
 
     const response: ApiResponse<PublicMemberProfile> = {
       success: true,
