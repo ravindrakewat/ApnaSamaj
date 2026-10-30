@@ -9,7 +9,6 @@ import {
   Chip,
   Button,
   CircularProgress,
-  Alert,
   Divider,
   Avatar,
   Card,
@@ -24,6 +23,8 @@ import {
   AccountTree as GotraIcon,
   Wc as GenderIcon,
   Verified as VerifiedIcon,
+  Refresh as RefreshIcon,
+  PersonOff as PersonOffIcon,
 } from '@mui/icons-material';
 import { PublicMemberProfile, UserRole } from '@apnasamaj/shared-types';
 import { getPublicProfileApi } from '../services/users.service';
@@ -37,14 +38,20 @@ export const MemberProfilePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const loadMemberProfile = useCallback(async () => {
-    if (!id) return;
+    if (!id || !id.trim()) {
+      setError('Member ID is required to view a profile.');
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      const data = await getPublicProfileApi(id);
+      const data = await getPublicProfileApi(id.trim());
       setMember(data);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to retrieve member profile.');
+      const msg = err instanceof Error ? err.message : 'Member profile not found or unavailable.';
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -68,17 +75,46 @@ export const MemberProfilePage: React.FC = () => {
   if (error || !member) {
     return (
       <Container maxWidth="md" sx={{ py: 6 }}>
-        <Alert
-          severity="error"
-          action={
-            <Button color="inherit" size="small" onClick={() => navigate('/directory')}>
+        <Paper
+          elevation={1}
+          sx={{
+            py: 6,
+            px: 4,
+            textAlign: 'center',
+            borderRadius: 3,
+            border: '1px dashed rgba(0, 0, 0, 0.15)',
+          }}
+        >
+          <PersonOffIcon sx={{ fontSize: 56, color: 'text.secondary', mb: 2, opacity: 0.6 }} />
+          <Typography variant="h5" component="h1" fontWeight="bold" gutterBottom>
+            Member Profile Unavailable
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 480, mx: 'auto', mb: 3 }}>
+            {error || 'This member profile could not be found or is not currently available in this community.'}
+          </Typography>
+          <Box display="flex" justifyContent="center" gap={2} flexWrap="wrap">
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => navigate('/directory')}
+              startIcon={<ArrowBackIcon />}
+              sx={{ textTransform: 'none', px: 3 }}
+              aria-label="Return to community directory"
+            >
               Back to Directory
             </Button>
-          }
-          sx={{ borderRadius: 2 }}
-        >
-          {error || 'Member profile not found or unavailable.'}
-        </Alert>
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={loadMemberProfile}
+              startIcon={<RefreshIcon />}
+              sx={{ textTransform: 'none', px: 2.5 }}
+              aria-label="Retry loading member profile"
+            >
+              Retry
+            </Button>
+          </Box>
+        </Paper>
       </Container>
     );
   }
@@ -96,6 +132,7 @@ export const MemberProfilePage: React.FC = () => {
         onClick={() => navigate(-1)}
         sx={{ mb: 2.5, textTransform: 'none' }}
         color="inherit"
+        aria-label="Go back to previous page"
       >
         Back
       </Button>
@@ -203,7 +240,7 @@ export const MemberProfilePage: React.FC = () => {
           <Divider sx={{ my: 3 }} />
 
           {/* Details Section */}
-          <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ mb: 2 }}>
+          <Typography variant="h6" component="h2" fontWeight="bold" gutterBottom sx={{ mb: 2 }}>
             Community Information
           </Typography>
 

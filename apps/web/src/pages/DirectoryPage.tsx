@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -33,74 +33,223 @@ import {
 import { PublicDirectoryMember } from '@apnasamaj/shared-types';
 import { fetchDirectory } from '../services/directory.service';
 
+interface FilterState {
+  search: string;
+  city: string;
+  state: string;
+  gotra: string;
+  subCaste: string;
+}
+
+const DEFAULT_FILTERS: FilterState = {
+  search: '',
+  city: '',
+  state: '',
+  gotra: '',
+  subCaste: '',
+};
+
+function getFiltersFromParams(params: URLSearchParams): FilterState {
+  return {
+    search: (params.get('search') || '').slice(0, 100),
+    city: (params.get('city') || '').slice(0, 100),
+    state: (params.get('state') || '').slice(0, 100),
+    gotra: (params.get('gotra') || '').slice(0, 100),
+    subCaste: (params.get('subCaste') || '').slice(0, 100),
+  };
+}
+
+function getPageFromParams(params: URLSearchParams): number {
+  const p = parseInt(params.get('page') || '1', 10);
+  return Number.isFinite(p) && p > 0 ? p : 1;
+}
+
 export const DirectoryPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Query parameters state
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [cityFilter, setCityFilter] = useState<string>('');
-  const [stateFilter, setStateFilter] = useState<string>('');
-  const [gotraFilter, setGotraFilter] = useState<string>('');
-  const [page, setPage] = useState<number>(1);
+  // 1. Initial State from URL Parameters
+  const [inputs, setInputs] = useState<FilterState>(() => getFiltersFromParams(searchParams));
+  const [debouncedFilters, setDebouncedFilters] = useState<FilterState>(() => getFiltersFromParams(searchParams));
+  const [page, setPage] = useState<number>(() => getPageFromParams(searchParams));
   const limit = 12;
 
-  // Data fetching state
+  // 2. Data fetching state
   const [members, setMembers] = useState<PublicDirectoryMember[]>([]);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [totalMembers, setTotalMembers] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Debounced search trigger
-  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  // References for synchronization and stale request cancellation
+  const lastSyncedParamsRef = useRef<string>(searchParams.toString());
+  const isInitialMount = useRef<boolean>(true);
+  const requestIdRef = useRef<number>(0);
+  const isMountedRef = useRef<boolean>(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      setPage(1); // Reset to page 1 on new search
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
+  // 3. Unified 400ms Debounce across all five text filters
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const hasChanged =
+        inputs.search !== debouncedFilters.search ||
+        inputs.city !== debouncedFilters.city ||
+        inputs.state !== debouncedFilters.state ||
+        inputs.gotra !== debouncedFilters.gotra ||
+        inputs.subCaste !== debouncedFilters.subCaste;
+
+      if (hasChanged) {
+        setDebouncedFilters(inputs);
+        setPage(1); // Changing any filter resets pagination to page 1
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [inputs, debouncedFilters]);
+
+  // 4. URL Synchronization: push debounced filter and page state into searchParams
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams);
+
+    // Synchronize each filter parameter (omitting empty values)
+    if (debouncedFilters.search.trim()) {
+      nextParams.set('search', debouncedFilters.search.trim());
+    } else {
+      nextParams.delete('search');
+    }
+
+    if (debouncedFilters.city.trim()) {
+      nextParams.set('city', debouncedFilters.city.trim());
+    } else {
+      nextParams.delete('city');
+    }
+
+    if (debouncedFilters.state.trim()) {
+      nextParams.set('state', debouncedFilters.state.trim());
+    } else {
+      nextParams.delete('state');
+    }
+
+    if (debouncedFilters.gotra.trim()) {
+      nextParams.set('gotra', debouncedFilters.gotra.trim());
+    } else {
+      nextParams.delete('gotra');
+    }
+
+    if (debouncedFilters.subCaste.trim()) {
+      nextParams.set('subCaste', debouncedFilters.subCaste.trim());
+    } else {
+      nextParams.delete('subCaste');
+    }
+
+    if (page > 1) {
+      nextParams.set('page', page.toString());
+    } else {
+      nextParams.delete('page');
+    }
+
+    const nextStr = nextParams.toString();
+    if (nextStr !== searchParams.toString()) {
+      lastSyncedParamsRef.current = nextStr;
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [debouncedFilters, page, searchParams, setSearchParams]);
+
+  // 5. Browser Back / Forward Synchronization: restore state when URL changes externally
+  useEffect(() => {
+    const currentStr = searchParams.toString();
+    if (currentStr === lastSyncedParamsRef.current) {
+      return; // Change originated from internal state sync
+    }
+
+    lastSyncedParamsRef.current = currentStr;
+    const newFilters = getFiltersFromParams(searchParams);
+    const newPage = getPageFromParams(searchParams);
+
+    setInputs(newFilters);
+    setDebouncedFilters(newFilters);
+    setPage(newPage);
+  }, [searchParams]);
+
+  // 6. Data Loading with Request Sequencing (Anti-Race & Stale Protection)
   const loadMembers = useCallback(async () => {
+    const currentRequestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
+
     try {
       const data = await fetchDirectory({
         page,
         limit,
-        search: debouncedSearch.trim() || undefined,
-        city: cityFilter.trim() || undefined,
-        state: stateFilter.trim() || undefined,
-        gotra: gotraFilter.trim() || undefined,
+        search: debouncedFilters.search.trim() || undefined,
+        city: debouncedFilters.city.trim() || undefined,
+        state: debouncedFilters.state.trim() || undefined,
+        gotra: debouncedFilters.gotra.trim() || undefined,
+        subCaste: debouncedFilters.subCaste.trim() || undefined,
       });
+
+      if (!isMountedRef.current || currentRequestId !== requestIdRef.current) {
+        return; // Discard stale response
+      }
 
       setMembers(data.members);
       setTotalPages(data.pagination.totalPages);
       setTotalMembers(data.pagination.totalMembers);
     } catch (err: unknown) {
+      if (!isMountedRef.current || currentRequestId !== requestIdRef.current) {
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Failed to load community directory.';
       setError(msg);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && currentRequestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [page, limit, debouncedSearch, cityFilter, stateFilter, gotraFilter]);
+  }, [page, limit, debouncedFilters]);
 
   useEffect(() => {
     loadMembers();
   }, [loadMembers]);
 
+  // 7. Input Handlers
+  const handleInputChange = (field: keyof FilterState) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.slice(0, 100);
+    setInputs((prev) => ({ ...prev, [field]: val }));
+  };
+
+  const handleInputClear = (field: keyof FilterState) => () => {
+    setInputs((prev) => ({ ...prev, [field]: '' }));
+    setDebouncedFilters((prev) => ({ ...prev, [field]: '' }));
+    setPage(1);
+  };
+
   const handleClearFilters = () => {
-    setSearchTerm('');
-    setCityFilter('');
-    setStateFilter('');
-    setGotraFilter('');
+    setInputs(DEFAULT_FILTERS);
+    setDebouncedFilters(DEFAULT_FILTERS);
     setPage(1);
   };
 
   const hasActiveFilters = useMemo(() => {
-    return Boolean(searchTerm || cityFilter || stateFilter || gotraFilter);
-  }, [searchTerm, cityFilter, stateFilter, gotraFilter]);
+    return Boolean(
+      inputs.search.trim() ||
+      inputs.city.trim() ||
+      inputs.state.trim() ||
+      inputs.gotra.trim() ||
+      inputs.subCaste.trim()
+    );
+  }, [inputs]);
 
   const formatDate = (isoString: string) => {
     try {
@@ -140,7 +289,7 @@ export const DirectoryPage: React.FC = () => {
             </Typography>
           </Box>
           <Typography variant="body1" sx={{ opacity: 0.9, maxWidth: 650 }}>
-            Connect with verified Apna Samaj community members. Discover families, locate local mandals, and explore roots across cities and gotras.
+            Connect with verified Apna Samaj community members. Discover families, locate local mandals, and explore roots across cities, gotras, and sub-castes.
           </Typography>
         </Box>
 
@@ -160,26 +309,83 @@ export const DirectoryPage: React.FC = () => {
         </Box>
       </Paper>
 
-      {/* Search and Filters Section */}
+      {/* Two-Tier Search and Filters Section */}
       <Paper elevation={1} sx={{ p: 3, mb: 4, borderRadius: 2.5 }}>
-        <Grid container spacing={2} alignItems="center">
-          {/* Text Search Field */}
-          <Grid item xs={12} md={5}>
+        {/* Tier 1: Search Text & Reset Action */}
+        <Box
+          display="flex"
+          flexDirection={{ xs: 'column', sm: 'row' }}
+          alignItems={{ xs: 'stretch', sm: 'center' }}
+          gap={2}
+          mb={2.5}
+        >
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search by name, gotra, city, or sub-caste..."
+            aria-label="Search members by name, gotra, city, or sub-caste"
+            value={inputs.search}
+            onChange={handleInputChange('search')}
+            inputProps={{ maxLength: 100 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon color="action" />
+                </InputAdornment>
+              ),
+              endAdornment: inputs.search ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    aria-label="Clear search text"
+                    onClick={handleInputClear('search')}
+                  >
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
+            }}
+          />
+
+          {hasActiveFilters && (
+            <Button
+              size="small"
+              color="primary"
+              variant="outlined"
+              onClick={handleClearFilters}
+              startIcon={<ClearIcon />}
+              sx={{ textTransform: 'none', whiteSpace: 'nowrap', height: 40, minWidth: 130 }}
+            >
+              Reset Filters
+            </Button>
+          )}
+        </Box>
+
+        {/* Tier 2: 4-Column Location & Lineage Filters */}
+        <Grid container spacing={2}>
+          {/* City Filter */}
+          <Grid item xs={12} sm={6} md={3}>
             <TextField
               fullWidth
               size="small"
-              placeholder="Search by name, gotra, city, or sub-caste..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Filter by city..."
+              aria-label="Filter by city"
+              value={inputs.city}
+              onChange={handleInputChange('city')}
+              inputProps={{ maxLength: 100 }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon color="action" />
+                    <LocationIcon color="action" fontSize="small" />
                   </InputAdornment>
                 ),
-                endAdornment: searchTerm ? (
+                endAdornment: inputs.city ? (
                   <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setSearchTerm('')}>
+                    <IconButton
+                      size="small"
+                      aria-label="Clear city filter"
+                      onClick={handleInputClear('city')}
+                    >
                       <ClearIcon fontSize="small" />
                     </IconButton>
                   </InputAdornment>
@@ -188,65 +394,104 @@ export const DirectoryPage: React.FC = () => {
             />
           </Grid>
 
-          {/* City Filter */}
-          <Grid item xs={12} sm={4} md={2.5}>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Filter by city..."
-              value={cityFilter}
-              onChange={(e) => {
-                setCityFilter(e.target.value);
-                setPage(1);
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <LocationIcon color="action" fontSize="small" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Grid>
-
           {/* State Filter */}
-          <Grid item xs={12} sm={4} md={2.5}>
+          <Grid item xs={12} sm={6} md={3}>
             <TextField
               fullWidth
               size="small"
               placeholder="Filter by state..."
-              value={stateFilter}
-              onChange={(e) => {
-                setStateFilter(e.target.value);
-                setPage(1);
+              aria-label="Filter by state"
+              value={inputs.state}
+              onChange={handleInputChange('state')}
+              inputProps={{ maxLength: 100 }}
+              InputProps={{
+                endAdornment: inputs.state ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      aria-label="Clear state filter"
+                      onClick={handleInputClear('state')}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              }}
+            />
+          </Grid>
+
+          {/* Sub-Caste Filter */}
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Filter by sub-caste..."
+              aria-label="Filter by sub-caste"
+              value={inputs.subCaste}
+              onChange={handleInputChange('subCaste')}
+              inputProps={{ maxLength: 100 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PeopleIcon color="action" fontSize="small" />
+                  </InputAdornment>
+                ),
+                endAdornment: inputs.subCaste ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      aria-label="Clear sub-caste filter"
+                      onClick={handleInputClear('subCaste')}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
               }}
             />
           </Grid>
 
           {/* Gotra Filter */}
-          <Grid item xs={12} sm={4} md={2}>
+          <Grid item xs={12} sm={6} md={3}>
             <TextField
               fullWidth
               size="small"
               placeholder="Filter by gotra..."
-              value={gotraFilter}
-              onChange={(e) => {
-                setGotraFilter(e.target.value);
-                setPage(1);
-              }}
+              aria-label="Filter by gotra"
+              value={inputs.gotra}
+              onChange={handleInputChange('gotra')}
+              inputProps={{ maxLength: 100 }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
                     <GotraIcon color="action" fontSize="small" />
                   </InputAdornment>
                 ),
+                endAdornment: inputs.gotra ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      aria-label="Clear gotra filter"
+                      onClick={handleInputClear('gotra')}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
               }}
             />
           </Grid>
         </Grid>
 
         {hasActiveFilters && (
-          <Box display="flex" alignItems="center" justifyContent="space-between" mt={2} pt={1.5} borderTop="1px solid rgba(0, 0, 0, 0.08)">
+          <Box
+            display="flex"
+            alignItems="center"
+            justifyContent="space-between"
+            mt={2.5}
+            pt={1.5}
+            borderTop="1px solid rgba(0, 0, 0, 0.08)"
+          >
             <Typography variant="body2" color="text.secondary">
               Active filters applied. Showing matching community members.
             </Typography>
@@ -268,7 +513,13 @@ export const DirectoryPage: React.FC = () => {
         <Alert
           severity="error"
           action={
-            <Button color="inherit" size="small" onClick={loadMembers} startIcon={<RefreshIcon />}>
+            <Button
+              color="inherit"
+              size="small"
+              onClick={loadMembers}
+              startIcon={<RefreshIcon />}
+              aria-label="Retry loading directory"
+            >
               Retry
             </Button>
           }
@@ -322,7 +573,13 @@ export const DirectoryPage: React.FC = () => {
               : 'There are currently no verified active members registered in the community directory.'}
           </Typography>
           {hasActiveFilters && (
-            <Button variant="outlined" color="primary" onClick={handleClearFilters} sx={{ textTransform: 'none' }}>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleClearFilters}
+              sx={{ textTransform: 'none' }}
+              aria-label="Clear all directory filters"
+            >
               Clear All Filters
             </Button>
           )}
@@ -488,6 +745,7 @@ export const DirectoryPage: React.FC = () => {
                 shape="rounded"
                 showFirstButton
                 showLastButton
+                aria-label="Community directory member pagination"
               />
             </Box>
           )}
