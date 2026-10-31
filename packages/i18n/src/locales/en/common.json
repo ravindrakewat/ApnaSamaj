@@ -1,0 +1,18 @@
+{
+  "appName": "Apna Samaj",
+  "loading": "Loading...",
+  "save": "Save",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "delete": "Delete",
+  "edit": "Edit",
+  "back": "Back",
+  "search": "Search",
+  "refresh": "Refresh",
+  "retry": "Retry",
+  "close": "Close",
+  "errorGeneric": "Something went wrong. Please try again.",
+  "noData": "No data available.",
+  "hindi": "हिन्दी",
+  "english": "English"
+}

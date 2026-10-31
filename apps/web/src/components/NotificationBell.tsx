@@ -33,6 +33,7 @@ import VolunteerActivismIcon from '@mui/icons-material/VolunteerActivism';
 import GavelIcon from '@mui/icons-material/Gavel';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { NotificationItem } from '@apnasamaj/shared-types';
+import { useTranslation } from '@apnasamaj/i18n';
 import { useAuth } from '../context/AuthContext';
 import {
   fetchUnreadCount,
@@ -102,6 +103,7 @@ function NotificationTypeBadgeIcon({ type }: { type: string }) {
 export const NotificationBell: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation('notifications');
 
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -249,7 +251,7 @@ export const NotificationBell: React.FC = () => {
       setHasMore(data.pagination.hasMore);
     } catch (err: unknown) {
       if (isMountedRef.current) {
-        const msg = err instanceof Error ? err.message : 'Unable to load notifications.';
+        const msg = err instanceof Error ? err.message : t('errorLoad');
         setError(msg);
       }
     } finally {
@@ -361,15 +363,16 @@ export const NotificationBell: React.FC = () => {
   }
 
   const isOpen = Boolean(anchorEl);
+  const bellLabel = unreadCount > 0 ? t('unreadBadge', { count: unreadCount }) : t('title');
 
   return (
     <>
-      <Tooltip title="Notifications">
+      <Tooltip title={t('title')}>
         <IconButton
           id="notification-bell-button"
           color="inherit"
           onClick={handleOpen}
-          aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
+          aria-label={bellLabel}
           aria-haspopup="true"
           aria-expanded={isOpen}
           size="medium"
@@ -405,14 +408,15 @@ export const NotificationBell: React.FC = () => {
         }}
         PaperProps={{
           sx: {
-            width: { xs: 'calc(100vw - 24px)', sm: 380 },
-            maxWidth: 400,
-            maxHeight: { xs: '80vh', sm: 520 },
+            width: { xs: 'calc(100vw - 20px)', sm: 380 },
+            maxWidth: 420,
+            maxHeight: { xs: 'calc(100vh - 80px)', sm: 540 },
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: 4,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
             borderRadius: 2,
             mt: 1,
+            overflow: 'hidden',
           },
         }}
       >
@@ -431,7 +435,7 @@ export const NotificationBell: React.FC = () => {
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="subtitle1" fontWeight={700}>
-              Notifications
+              {t('title')}
             </Typography>
             {unreadCount > 0 && (
               <Badge
@@ -449,9 +453,9 @@ export const NotificationBell: React.FC = () => {
             onClick={handleMarkAllAsRead}
             disabled={unreadCount === 0 || isMarkingAll}
             startIcon={isMarkingAll ? <CircularProgress size={14} /> : <DoneAllIcon fontSize="small" />}
-            sx={{ fontSize: '0.75rem', textTransform: 'none' }}
+            sx={{ fontSize: '0.75rem', textTransform: 'none', fontWeight: 600 }}
           >
-            Mark all read
+            {t('markAllRead')}
           </Button>
         </Box>
 
@@ -464,19 +468,19 @@ export const NotificationBell: React.FC = () => {
             textColor="primary"
             indicatorColor="primary"
             sx={{
-              minHeight: 38,
+              minHeight: { xs: 44, sm: 38 },
               '& .MuiTab-root': {
-                minHeight: 38,
-                py: 0.5,
-                fontSize: '0.8rem',
+                minHeight: { xs: 44, sm: 38 },
+                py: { xs: 1, sm: 0.5 },
+                fontSize: '0.825rem',
                 textTransform: 'none',
                 fontWeight: 600,
               },
             }}
           >
-            <Tab label="All" value="all" id="notification-tab-all" />
+            <Tab label={t('all')} value="all" id="notification-tab-all" />
             <Tab
-              label={unreadCount > 0 ? `Unread (${unreadCount})` : 'Unread'}
+              label={unreadCount > 0 ? t('unreadWithCount', { count: unreadCount }) : t('unread')}
               value="unread"
               id="notification-tab-unread"
             />
@@ -502,7 +506,7 @@ export const NotificationBell: React.FC = () => {
                     onClick={() => loadNotifications(1, false, activeTab)}
                     sx={{ textTransform: 'none', fontWeight: 600 }}
                   >
-                    Retry
+                    {t('retry')}
                   </Button>
                 }
               >
@@ -513,12 +517,10 @@ export const NotificationBell: React.FC = () => {
             <Box sx={{ py: 6, px: 2, textAlign: 'center' }}>
               <NotificationsNoneIcon sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
               <Typography variant="body2" color="text.secondary" fontWeight={600}>
-                {activeTab === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+                {activeTab === 'unread' ? t('emptyUnread') : t('emptyAll')}
               </Typography>
-              <Typography variant="caption" color="text.disabled">
-                {activeTab === 'unread'
-                  ? "You're all caught up! Switch to 'All' to view past activity."
-                  : 'When you get likes, comments, or community updates, they will appear here.'}
+              <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
+                {activeTab === 'unread' ? t('allCaughtUp') : t('emptyDescription')}
               </Typography>
             </Box>
           ) : (
@@ -549,32 +551,32 @@ export const NotificationBell: React.FC = () => {
                             ? 'action.hover'
                             : (theme) =>
                                 theme.palette.mode === 'dark'
-                                    ? 'rgba(25, 118, 210, 0.14)'
-                                    : 'rgba(25, 118, 210, 0.08)',
+                                  ? 'rgba(25, 118, 210, 0.14)'
+                                  : 'rgba(25, 118, 210, 0.08)',
                         },
                       }}
                       secondaryAction={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
                           {!item.isRead && (
-                            <Tooltip title="Mark as read">
+                            <Tooltip title={t('markRead')}>
                               <IconButton
                                 size="small"
                                 edge="end"
                                 onClick={(e) => handleMarkAsRead(item, e)}
-                                aria-label="Mark as read"
-                                sx={{ color: 'text.secondary' }}
+                                aria-label={t('markRead')}
+                                sx={{ color: 'text.secondary', p: { xs: 1, sm: 0.75 } }}
                               >
                                 <CheckCircleOutlineIcon fontSize="inherit" />
                               </IconButton>
                             </Tooltip>
                           )}
-                          <Tooltip title="Delete">
+                          <Tooltip title={t('delete')}>
                             <IconButton
                               size="small"
                               edge="end"
                               onClick={(e) => handleDelete(item.id, !item.isRead, e)}
-                              aria-label="Delete notification"
-                              sx={{ color: 'text.secondary' }}
+                              aria-label={t('delete')}
+                              sx={{ color: 'text.secondary', p: { xs: 1, sm: 0.75 } }}
                             >
                               <DeleteOutlineIcon fontSize="inherit" />
                             </IconButton>
@@ -606,7 +608,7 @@ export const NotificationBell: React.FC = () => {
                       </ListItemAvatar>
 
                       <ListItemText
-                        sx={{ my: 0, pr: 5 }}
+                        sx={{ my: 0, pr: 5, overflow: 'hidden' }}
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
                             {!item.isRead && (
@@ -620,7 +622,7 @@ export const NotificationBell: React.FC = () => {
                               fontWeight={item.isRead ? 500 : 700}
                               color="text.primary"
                               noWrap
-                              sx={{ fontSize: '0.85rem' }}
+                              sx={{ fontSize: '0.85rem', wordBreak: 'break-word' }}
                             >
                               {item.title}
                             </Typography>
@@ -640,6 +642,7 @@ export const NotificationBell: React.FC = () => {
                                 fontSize: '0.8rem',
                                 lineHeight: 1.35,
                                 mb: 0.5,
+                                wordBreak: 'break-word',
                               }}
                             >
                               {item.message}
@@ -650,7 +653,7 @@ export const NotificationBell: React.FC = () => {
                               color="text.disabled"
                               sx={{ fontSize: '0.7rem' }}
                             >
-                              {formatRelativeTime(item.createdAt)}
+                              {formatRelativeTime(item.createdAt, i18n.language)}
                             </Typography>
                           </Box>
                         }
@@ -670,9 +673,9 @@ export const NotificationBell: React.FC = () => {
                 onClick={() => loadNotifications(page + 1, true, activeTab)}
                 disabled={isLoadingMore}
                 startIcon={isLoadingMore ? <CircularProgress size={14} /> : undefined}
-                sx={{ fontSize: '0.75rem', textTransform: 'none' }}
+                sx={{ fontSize: '0.75rem', textTransform: 'none', fontWeight: 600 }}
               >
-                {isLoadingMore ? 'Loading...' : 'Load older notifications'}
+                {isLoadingMore ? t('loading') : t('loadOlder')}
               </Button>
             </Box>
           )}

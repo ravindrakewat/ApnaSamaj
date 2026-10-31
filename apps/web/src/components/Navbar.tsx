@@ -18,13 +18,16 @@ import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
 import PeopleIcon from '@mui/icons-material/People';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import GavelIcon from '@mui/icons-material/Gavel';
+import { useTranslation } from '@apnasamaj/i18n';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from './NotificationBell';
+import { LanguageSelector } from './LanguageSelector';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation('nav');
 
   const handleLogout = async () => {
     await logout();
@@ -46,7 +49,7 @@ export const Navbar: React.FC = () => {
                 Apna Samaj
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Member Community
+                {t('brandSubtitle')}
               </Typography>
             </Box>
           </Box>
@@ -58,7 +61,7 @@ export const Navbar: React.FC = () => {
               onClick={() => navigate('/')}
               sx={{ fontWeight: location.pathname === '/' ? 600 : 400 }}
             >
-              होम
+              {t('home')}
             </Button>
 
             {user ? (
@@ -69,7 +72,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<DynamicFeedIcon />}
                   sx={{ fontWeight: location.pathname === '/feed' ? 600 : 400 }}
                 >
-                  समाज अपडेट्स
+                  {t('feed')}
                 </Button>
 
                 <Button
@@ -78,7 +81,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<GroupsIcon />}
                   sx={{ fontWeight: location.pathname.startsWith('/groups') ? 600 : 400 }}
                 >
-                  समूह
+                  {t('groups')}
                 </Button>
 
                 <Button
@@ -87,7 +90,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<PeopleIcon />}
                   sx={{ fontWeight: location.pathname === '/directory' ? 600 : 400 }}
                 >
-                  सदस्य
+                  {t('directory')}
                 </Button>
 
                 <Button
@@ -96,7 +99,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<FavoriteIcon />}
                   sx={{ fontWeight: location.pathname.startsWith('/matrimonial') ? 600 : 400 }}
                 >
-                  विवाह परिचय
+                  {t('matrimonial')}
                 </Button>
 
                 <Button
@@ -105,7 +108,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<AccountCircleIcon />}
                   sx={{ fontWeight: location.pathname === '/profile' ? 600 : 400 }}
                 >
-                  मेरी प्रोफ़ाइल
+                  {t('profile')}
                 </Button>
 
                 <Button
@@ -114,8 +117,10 @@ export const Navbar: React.FC = () => {
                   startIcon={<GavelIcon />}
                   sx={{ fontWeight: location.pathname === '/appeals' ? 600 : 400 }}
                 >
-                  अपील
+                  {t('appeals')}
                 </Button>
+
+                <LanguageSelector />
 
                 <NotificationBell />
 
@@ -127,7 +132,7 @@ export const Navbar: React.FC = () => {
                   sx={{ ml: 0.5, display: { xs: 'none', sm: 'inline-flex' } }}
                 />
 
-                <Tooltip title="Log out">
+                <Tooltip title={t('logout')}>
                   <IconButton color="default" onClick={handleLogout} size="small" sx={{ ml: 0.5 }}>
                     <LogoutIcon fontSize="small" />
                   </IconButton>
@@ -135,13 +140,15 @@ export const Navbar: React.FC = () => {
               </>
             ) : (
               <>
+                <LanguageSelector />
+
                 <Button
                   variant={location.pathname === '/login' ? 'contained' : 'text'}
                   color="primary"
                   onClick={() => navigate('/login')}
                   size="small"
                 >
-                  Login
+                  {t('login')}
                 </Button>
                 <Button
                   variant={location.pathname === '/register' ? 'contained' : 'outlined'}
@@ -149,7 +156,7 @@ export const Navbar: React.FC = () => {
                   onClick={() => navigate('/register')}
                   size="small"
                 >
-                  Register
+                  {t('register')}
                 </Button>
               </>
             )}

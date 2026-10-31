@@ -75,24 +75,76 @@ export function getNotificationTypeMeta(type: NotificationType | string): Notifi
 }
 
 /**
- * Computes human-friendly relative time strings for notifications.
+ * Computes human-friendly relative time strings for notifications in Hindi and English.
+ *
+ * Supported formats:
+ * - Hindi ('hi'): "अभी", "1 मिनट पहले", "5 मिनट पहले", "1 घंटा पहले", "2 घंटे पहले", "कल", "4 दिन पहले"
+ * - English ('en'): "Just now", "1 minute ago", "5 minutes ago", "1 hour ago", "2 hours ago", "Yesterday", "4 days ago"
+ * - Compact fallback (omitted lang or compact mode): "Just now", "5m ago", "3h ago", "4d ago"
  */
-export function formatRelativeTime(dateString: string): string {
+export function formatRelativeTime(
+  dateString: string | null | undefined,
+  lang?: string,
+  options?: { compact?: boolean }
+): string {
+  if (!dateString) return '';
   try {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return '';
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    if (diffMs < 0) return 'Just now';
+    if (diffMs < 0) {
+      return lang?.startsWith('hi') ? 'अभी' : 'Just now';
+    }
+
     const diffSec = Math.floor(diffMs / 1000);
-    if (diffSec < 60) return 'Just now';
+    if (diffSec < 60) {
+      return lang?.startsWith('hi') ? 'अभी' : 'Just now';
+    }
+
     const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin}m ago`;
     const diffHour = Math.floor(diffMin / 60);
-    if (diffHour < 24) return `${diffHour}h ago`;
     const diffDay = Math.floor(diffHour / 24);
-    if (diffDay < 7) return `${diffDay}d ago`;
-    return date.toLocaleDateString();
+
+    // If no language specified and not explicitly set to full, preserve legacy compact format
+    if (lang === undefined && !options?.compact) {
+      if (diffMin < 60) return `${diffMin}m ago`;
+      if (diffHour < 24) return `${diffHour}h ago`;
+      if (diffDay < 7) return `${diffDay}d ago`;
+      return date.toLocaleDateString();
+    }
+
+    const isHindi = lang?.startsWith('hi');
+
+    if (diffMin < 60) {
+      if (isHindi) {
+        return diffMin === 1 ? '1 मिनट पहले' : `${diffMin} मिनट पहले`;
+      }
+      if (options?.compact) return `${diffMin}m ago`;
+      return diffMin === 1 ? '1 minute ago' : `${diffMin} minutes ago`;
+    }
+
+    if (diffHour < 24) {
+      if (isHindi) {
+        return diffHour === 1 ? '1 घंटा पहले' : `${diffHour} घंटे पहले`;
+      }
+      if (options?.compact) return `${diffHour}h ago`;
+      return diffHour === 1 ? '1 hour ago' : `${diffHour} hours ago`;
+    }
+
+    if (diffDay === 1) {
+      return isHindi ? 'कल' : 'Yesterday';
+    }
+
+    if (diffDay < 7) {
+      if (isHindi) {
+        return `${diffDay} दिन पहले`;
+      }
+      if (options?.compact) return `${diffDay}d ago`;
+      return `${diffDay} days ago`;
+    }
+
+    return date.toLocaleDateString(isHindi ? 'hi-IN' : 'en-US');
   } catch {
     return '';
   }

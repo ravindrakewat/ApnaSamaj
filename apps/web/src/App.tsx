@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { defaultTheme } from '@apnasamaj/ui-config';
+import { i18n, I18nextProvider } from '@apnasamaj/i18n';
 import { AuthProvider } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -38,7 +39,8 @@ const PageFallback: React.FC = () => (
 
 export const App: React.FC = () => {
   return (
-    <ThemeProvider theme={defaultTheme}>
+    <I18nextProvider i18n={i18n}>
+      <ThemeProvider theme={defaultTheme}>
       <CssBaseline />
       <BrowserRouter>
         <AuthProvider>
@@ -148,6 +150,7 @@ export const App: React.FC = () => {
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
+    </I18nextProvider>
   );
 };
 
