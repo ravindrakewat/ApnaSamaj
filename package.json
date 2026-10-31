@@ -15,7 +15,7 @@
     "dev:admin": "npm run dev -w @apnasamaj/admin",
     "dev:api": "npm run dev -w @apnasamaj/api",
     "dev:api:staging": "npm run dev:staging -w @apnasamaj/api",
-    "build:api": "npm run build -w @apnasamaj/api",
+    "build:api": "npm run db:generate && npm run build -w @apnasamaj/api",
     "start:api": "npm run start -w @apnasamaj/api",
     "start:api:staging": "npm run start:staging -w @apnasamaj/api",
     "db:generate": "npx prisma generate --schema=packages/database/prisma/schema.prisma",
@@ -23,12 +23,13 @@
     "db:migrate:staging": "npx tsx packages/database/src/migrate-staging.ts",
     "db:seed": "npm run seed -w @apnasamaj/database",
     "db:seed:staging": "npx tsx packages/database/src/seed-staging.ts",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run db:generate && npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present"
   },
   "dependencies": {
-    "tsx": "^4.19.1"
+    "tsx": "^4.19.1",
+    "typescript": "^5.5.4"
   },
   "devDependencies": {
     "typescript": "^5.5.4"

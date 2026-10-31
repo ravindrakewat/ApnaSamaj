@@ -21,6 +21,7 @@ export function createApp(): Express {
   // Yahan apna Vercel domain explicitly add kar dein taaki env variable miss hone par bhi CORS fail na ho
   const hardcodedOrigins = [
     'https://apna-samaj.vercel.app',
+    'https://apna-samaj-admin.vercel.app',
     'http://localhost:3000',
     'http://localhost:5173',
   ];
@@ -64,6 +65,7 @@ export function createApp(): Express {
       'x-community-slug',   // Lowercase (Browser yahi bhejta hai)
       'X-Community-Slug',   // Uppercase
       'Accept',
+      'Origin',
     ],
   };
 
