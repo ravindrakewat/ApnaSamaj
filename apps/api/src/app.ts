@@ -22,6 +22,9 @@ export function createApp(): Express {
   const hardcodedOrigins = [
     'https://apna-samaj.vercel.app',
     'https://apna-samaj-admin.vercel.app',
+    'https://bharatro.net',
+    'https://www.bharatro.net',
+    'https://main.bharatro.net',
     'http://localhost:3000',
     'http://localhost:5173',
   ];
@@ -66,6 +69,9 @@ export function createApp(): Express {
       'X-Community-Slug',   // Uppercase
       'Accept',
       'Origin',
+      'Accept-Language',
+      'Cache-Control',
+      'Pragma',
     ],
   };
 

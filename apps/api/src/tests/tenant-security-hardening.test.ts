@@ -460,6 +460,22 @@ assertTest(
   isCorsOriginAllowed('https://admin.samaz.in', { isProduction: true }),
   'Allows Admin subdomain: admin.samaz.in'
 );
+assertTest(
+  isCorsOriginAllowed('https://bharatro.net', { isProduction: true }),
+  'Allows apex domain: bharatro.net'
+);
+assertTest(
+  isCorsOriginAllowed('https://main.bharatro.net', { isProduction: true }),
+  'Allows subdomain: main.bharatro.net'
+);
+assertTest(
+  isCorsOriginAllowed('https://apna-samaj-git-main-bharat-ro.vercel.app', { isProduction: true }),
+  'Allows project branch Vercel deployment: apna-samaj-git-main-bharat-ro.vercel.app'
+);
+assertTest(
+  isCorsOriginAllowed('https://apna-samaj-mwi8tn2bu-bharat-ro.vercel.app', { isProduction: true }),
+  'Allows project preview Vercel deployment: apna-samaj-mwi8tn2bu-bharat-ro.vercel.app'
+);
 
 // Arbitrary *.vercel.app REJECTION in production
 assertTest(
