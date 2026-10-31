@@ -49,12 +49,16 @@ The following milestone checkpoint commits have been independently inspected in 
 | `ac336d4` | `ac336d45b2cb3201216fb473d9c4cf5640c59189` | `feat(directory): member directory query bounds, sub-caste filter, uuid validation, and staging e2e verification` | Batch 15B.4 | **Confirmed** | **Confirmed** |
 | `5db254b` | `5db254bb8de727e542f58908f0fb18092f7fa881` | `feat(directory): member directory frontend sub-caste filter, url sync, debouncing, and ux verification` | Batch 15B.8 | **Confirmed** | **Confirmed** |
 | `85c0570` | `85c0570a33b3fc23a1b848fd7f2d66e0752d313b` | `feat(groups): complete community groups module with security hardening and frontend UX` | Batch 15C.7 | **Confirmed** | **Confirmed** |
+| `ea0629c` | `ea0629cf3f2bd65cdace1d5f5d302fcd2cfb5e67` | `feat(feed): harden post route parameter validation, add keyword search, and establish persistent project memory` | Batch 15D.4 | **Confirmed** | **Confirmed** |
+| `2af6d8f` | `2af6d8ff04e57e9306b83f3e1bf24933a39e763b` | `fix(build): ensure types, prisma generation, and test exclusion for render production build` | Batch 15E.1 | **Confirmed** | **Confirmed** |
+| `fd6fb0e` | `fd6fb0ef0d19f5a770020bf051c2017c6b986b45` | `fix(deps): promote typescript type definitions to root production dependencies and update lockfile` | Batch 15E.2 | **Confirmed** | **Confirmed** |
+| `20eba1c` | `20eba1c7e2c54ab80dd300508811670dd1177f9d` | `feat(web): localize navbar navigation labels to Hindi` | Navbar i18n | **Confirmed** | **Confirmed** |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current HEAD:** `85c0570a33b3fc23a1b848fd7f2d66e0752d313b` (`85c0570`)
+- **Current HEAD:** `20eba1c7e2c54ab80dd300508811670dd1177f9d` (`20eba1c`)
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
-- **Upstream Sync Status:** Synchronized. `main` is directly at `origin/main` (0 commits ahead, 0 commits behind). Commit `85c0570` and all prior checkpoints are verified present on the GitHub remote.
+- **Upstream Sync Status:** Synchronized. `main` is directly at `origin/main` (0 commits ahead, 0 commits behind). Commit `20eba1c` and all prior checkpoints are verified present on the GitHub remote.
 
 ---
 
@@ -100,22 +104,28 @@ The following milestone checkpoint commits have been independently inspected in 
   - Admin appeal review workflow with status transitions (`PENDING`, `APPROVED`, `REJECTED`).
   - Controlled staging environment testing with isolated local PostgreSQL database.
 
-### 5. Social Feed & Posts Module (In Progress: Batches 15D.1 – 15D.4)
-- **Status:** **Backend Hardened (Batch 15D.2); Frontend Refinements Planned (Batch 15D.4)**
-- **Implemented Architecture:**
+### 5. Social Feed & Posts Module (Committed: `ea0629c`; Frontend Refined: Batch 15D.5)
+- **Status:** **Backend Hardened & Frontend Refined**
+- **Implemented Architecture & Backend Hardening (`ea0629c`):**
   - Post models supporting multiple types: `GENERAL`, `ANNOUNCEMENT`, `EVENT`, `ACHIEVEMENT`, `MATRIMONIAL`.
   - Rich media attachments (`PostMedia`): images, direct video, YouTube embeds.
   - Social interactions: likes, views with deduplication, comments, post pins, post reporting.
   - Multi-tenant physical scoping on all feed queries.
   - Group post scoping: posts in private groups are strictly hidden from non-members.
-- **Batch 15D.2 Backend Refinements (Present in Working Tree, Uncommitted):**
-  - Enforced RFC 4122 UUID parameter validation (`postIdSchema`, `postCommentIdSchema`) across all 15 post routes in `posts.controller.ts`, eliminating unhandled Prisma 500 errors on invalid IDs.
-  - Added bounded keyword search query parameter (`search` max 100 chars) to `feedQuerySchema` and `getCommunityFeed`.
-  - Preserved private group privacy invariants under `where.AND = [privacyFilter, searchFilter]`.
-  - Added 40 automated test assertions in `posts-refinements.test.ts` (100% passing).
-- **Planned Refinements:**
-  - Batch 15D.3: Git Safety Audit for 15D.2 changes.
-  - Batch 15D.4: Frontend search bar, 300ms debouncing, URL parameter synchronization (`useSearchParams`), optimistic like toggle.
+  - RFC 4122 UUID parameter validation (`postIdSchema`, `postCommentIdSchema`) across all 15 post routes in `posts.controller.ts`.
+  - Bounded keyword search parameter (`search` max 100 chars) in `feedQuerySchema` and `getCommunityFeed`.
+  - Private group privacy invariants under `where.AND = [privacyFilter, searchFilter]`.
+- **Batch 15D.5 Frontend Refinements (Working Tree):**
+  - Search input bar at top of `FeedPage.tsx` with placeholder `समाज की पोस्ट खोजें...`.
+  - 100-character input clamping and whitespace trimming.
+  - 300ms debounced execution preventing excessive API invocations.
+  - Clear-search button with immediate state reset.
+  - Two-way URL synchronization (`useSearchParams`) for `search`, `type`, and `page` parameters.
+  - Robust browser back/forward navigation support avoiding re-render loops.
+  - Pagination reset to page 1 upon search query or post-type filter change.
+  - Friendly Hindi empty state messages and clear/reset actions.
+  - Request cancellation (`AbortController`) and stale response protection (`requestIdRef`).
+  - 27 automated tests passing in `apps/web/src/tests/social-feed-frontend-ux.test.ts`.
 
 ---
 
@@ -154,26 +164,35 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **15C.1–6** | Community Groups Module | Full backend hardening, UUID guards, membership lifecycle, frontend tabs, roster management. | `BATCH_15C_1_GROUPS_ARCHITECTURE_AUDIT.md`, `BATCH_15C_6_GROUPS_CHECKPOINT_SAFETY_REPORT.md` | Verified Pass (45/45) | `85c0570` | Pushed | 17 files staged via explicit allowlist in 15C.7. |
 | **15C.7** | Groups Checkpoint Commit | Created checkpoint commit `85c0570` for 17 approved files and pushed to `origin/main`. | `BATCH_15C_6_GROUPS_CHECKPOINT_SAFETY_REPORT.md` | Verified Pass | `85c0570` | Pushed | Pushed to GitHub in turn 5. |
 | **15D.1** | Social Feed Architecture Audit | Comprehensive read-only audit of post models, route parameters, feeds, and test suites. | `BATCH_15D_1_SOCIAL_FEED_ARCHITECTURE_AUDIT.md` | Verified Pass (169/169) | Untracked report | Not committed | Identified UUID parameter gap and lack of feed search. |
-| **15D.2** | Social Feed Backend Hardening | Enforced UUID schemas across 15 post routes, added feed keyword search, bounded inputs. | `BATCH_15D_2_SOCIAL_FEED_BACKEND_HARDENING_REPORT.md` | Verified Pass (209/209) | Working tree modified | Not committed | 5 files modified, 1 test file created, 0 typecheck/build errors. |
-| **15D.3** | Git Safety Audit & Checkpoint Prep | Audited working tree, verified zero secrets, 209 test assertions, typecheck, build, and prepared staging allowlist. | `BATCH_15D_3_GIT_SAFETY_AUDIT_REPORT.md` | Verified Pass (209/209) | Working tree modified | Not committed | Staging allowlist prepared for checkpoint. |
+| **15D.2** | Social Feed Backend Hardening | Enforced UUID schemas across 15 post routes, added feed keyword search, bounded inputs. | `BATCH_15D_2_SOCIAL_FEED_BACKEND_HARDENING_REPORT.md` | Verified Pass (209/209) | `ea0629c` | Pushed | 5 files modified, 1 test file created, 0 typecheck/build errors. |
+| **15D.3** | Git Safety Audit & Checkpoint Prep | Audited working tree, verified zero secrets, 209 test assertions, typecheck, build, and prepared staging allowlist. | `BATCH_15D_3_GIT_SAFETY_AUDIT_REPORT.md` | Verified Pass (209/209) | `ea0629c` | Pushed | Staging allowlist prepared for checkpoint. |
 | **15D.4** | Social Feed Checkpoint Commit | Committed UUID schemas, feed keyword search, project memory, and reports. | `BATCH_15D_3_GIT_SAFETY_AUDIT_REPORT.md` | Verified Pass (209/209) | `ea0629c` | Pushed | Pushed to GitHub origin/main. |
 | **15E.1** | Render Build & CORS Hardening | Promoted types, added auto-prisma generation, excluded tests from API build, updated CORS. | `Render Deploy Log` | Verified Pass | `2af6d8f` | Pushed | Pushed to GitHub origin/main. |
 | **15E.2** | Render Lockfile & Production Deployment | Promoted type definitions to root dependencies, regenerated package-lock.json, verified live deployment. | `Render Deploy Log` | Verified Pass | `fd6fb0e` | Pushed | Live verified: Render 200 OK & preflight CORS headers confirmed. |
+| **15D.5** | Social Feed Frontend Refinements | Added feed search bar (100 char limit), 300ms debouncing, two-way URL sync, Hindi empty states, and UX tests. | `BATCH_15D_5_SOCIAL_FEED_FRONTEND_REFINEMENTS_REPORT.md` | Verified Pass (27/27) | Working tree modified | Not committed | Monorepo typecheck & build verified clean. |
+| **15D.6** | Social Feed Frontend Git Safety Audit | Audited working tree, verified zero secrets, 180 test assertions, typecheck, build, and prepared staging allowlist. | `BATCH_15D_6_GIT_SAFETY_AUDIT_REPORT.md` | Verified Pass (180/180) | Audit only (Working tree modified) | Not committed | Staging allowlist of 5 files prepared for 15D.7. |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `fd6fb0ef0d19f5a770020bf051c2017c6b986b45` (`fd6fb0e`)
+- **Current HEAD:** `20eba1c7e2c54ab80dd300508811670dd1177f9d` (`20eba1c`)
 - **Upstream Tracking:** Synchronized with `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`).
-- **Actual `git status --short`:** Clean (working tree clean, zero uncommitted files).
-- **Latest Completed Batch:** Batch 15E.2 (Render Production Deployment & Live CORS Resolution).
-- **Current In-Progress Batch:** Completed & Verified.
-- **Exact Next Recommended Batch:** **Batch 15D.5 — Social Feed Frontend Refinements**:
-  - Implement frontend search bar in `apps/web`.
-  - Add 300ms input debouncing and two-way URL query synchronization (`useSearchParams`).
-  - Implement optimistic like/unlike toggle on post cards.
+- **Actual `git status --short`:**
+  ```text
+   M apps/web/src/pages/FeedPage.tsx
+   M docs/PROJECT_HISTORY.md
+  ?? BATCH_15B_8_CHECKPOINT_REPORT.md
+  ?? BATCH_15B_9_MEMBER_DIRECTORY_INTEGRATION_REVIEW.md
+  ?? BATCH_15D_4_CHECKPOINT_REPORT.md
+  ?? BATCH_15D_5_SOCIAL_FEED_FRONTEND_REFINEMENTS_REPORT.md
+  ?? BATCH_15D_6_GIT_SAFETY_AUDIT_REPORT.md
+  ?? apps/web/src/tests/social-feed-frontend-ux.test.ts
+  ```
+- **Latest Completed Batch:** Batch 15D.6 (Social Feed Frontend Git Safety Audit).
+- **Current In-Progress Batch:** Checkpoint Preparation.
+- **Exact Next Recommended Batch:** **Batch 15D.7 — Social Feed Frontend Checkpoint Commit (Local Staging & Commit of 5 Approved Files)**
 
 ---
 
@@ -209,9 +228,9 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
    git status --short
    git log -n 5 --oneline
    ```
-3. **Read the latest batch report** corresponding to the current state (e.g. `BATCH_15D_2_SOCIAL_FEED_BACKEND_HARDENING_REPORT.md`).
+3. **Read the latest batch report** corresponding to the current state (e.g. `BATCH_15D_5_SOCIAL_FEED_FRONTEND_REFINEMENTS_REPORT.md`).
 4. **Compare actual repository state with recorded history.** Verify whether uncommitted files match Section F.
-5. **Identify the next planned batch** (e.g. Batch 15D.3).
+5. **Identify the next planned batch** (e.g. Batch 15D.6).
 6. **Ask for clarification** if the recorded history conflicts with actual repository files or if an unresolved safety issue exists.
 
 ### At the End of Every Batch:
@@ -220,4 +239,3 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 3. **Record test commands and actual results** (clearly indicating whether assertions were independently run or reported).
 4. **Record commit and push status separately.** Never state a commit was pushed without verifying upstream status via `git status` or `git rev-parse origin/main`.
 5. **Record the next recommended batch** to ensure seamless continuation in subsequent sessions.
-
