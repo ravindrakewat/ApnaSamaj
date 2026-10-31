@@ -427,10 +427,10 @@ export async function moderateMatrimonialProfile(
       sendNotificationSafely(
         {
           recipientId: profile.userId,
-          actorId: actor.id,
+          actorId: null, // Keep reviewer identity confidential
           type: 'MATRIMONIAL_PROFILE_APPROVED',
-          title: 'Matrimonial Profile Approved',
-          message: 'Congratulations! Your matrimonial profile has been approved and is now visible in community discovery.',
+          title: 'वैवाहिक प्रोफ़ाइल स्वीकृत (Profile Approved)',
+          message: 'बधाई हो! आपकी वैवाहिक प्रोफ़ाइल स्वीकृत कर दी गई है और अब समुदाय में दिखाई दे रही है।',
           entityType: 'MatrimonialProfile',
           entityId: profileId,
         },
@@ -442,10 +442,10 @@ export async function moderateMatrimonialProfile(
       sendNotificationSafely(
         {
           recipientId: profile.userId,
-          actorId: actor.id,
+          actorId: null, // Keep reviewer identity confidential
           type: 'MATRIMONIAL_PROFILE_REJECTED',
-          title: 'Matrimonial Profile Changes Requested',
-          message: `Your matrimonial profile requires changes: ${rejectionReason}`,
+          title: 'वैवाहिक प्रोफ़ाइल समीक्षा (Changes Requested)',
+          message: `आपकी वैवाहिक प्रोफ़ाइल में सुधार की आवश्यकता है: ${rejectionReason}`,
           entityType: 'MatrimonialProfile',
           entityId: profileId,
         },

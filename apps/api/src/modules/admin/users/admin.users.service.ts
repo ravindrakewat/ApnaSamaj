@@ -264,6 +264,11 @@ export async function updateAdminUserStatus(
     throw new PrivilegeError('Only Super Admins can alter accounts with the Super Admin role.');
   }
 
+  // 3b. Prevent duplicate processing / notifications if already at target status
+  if (targetUser.status === newStatus) {
+    return getAdminUserDetails(targetUserId, client);
+  }
+
   const previousStatus = targetUser.status;
 
   // 4. Atomic status update, refresh token revocation (if suspended), and audit log creation
@@ -312,10 +317,16 @@ export async function updateAdminUserStatus(
   sendNotificationSafely(
     {
       recipientId: targetUserId,
-      actorId: actor.id,
+      actorId: null, // Keep administrator identity confidential
       type: 'ACCOUNT_STATUS_UPDATE',
-      title: 'Account Status Updated',
-      message: `Your account status has been updated to ${newStatus}.${reason ? ` Reason: ${reason}` : ''}`,
+      title:
+        newStatus === 'SUSPENDED'
+          ? 'खाता स्थिति अपडेट (Account Suspended)'
+          : 'खाता स्थिति अपडेट (Account Activated)',
+      message:
+        newStatus === 'SUSPENDED'
+          ? `आपका खाता प्रशासक द्वारा निलंबित (Suspended) कर दिया गया है।${reason ? ` कारण: ${reason}` : ''}`
+          : 'आपका खाता सफलतापूर्वक सक्रिय (Active) कर दिया गया है।',
       entityType: 'User',
       entityId: targetUserId,
     },
@@ -441,7 +452,7 @@ export async function updateAdminUserRole(
   sendNotificationSafely(
     {
       recipientId: targetUserId,
-      actorId: actor.id,
+      actorId: null, // Keep administrator identity confidential
       type: 'ACCOUNT_STATUS_UPDATE',
       title: 'Role Updated',
       message: `Your community role has been updated to ${newRole}.${reason ? ` Reason: ${reason}` : ''}`,

@@ -6,7 +6,7 @@ import {
   MarkNotificationReadResponse,
   MarkAllNotificationsReadResponse,
 } from '@apnasamaj/shared-types';
-import { idParamSchema, notificationsQuerySchema } from '@apnasamaj/validation';
+import { notificationIdParamSchema, notificationsQuerySchema } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
   getUnreadCount,
@@ -143,11 +143,11 @@ export async function markAsReadHandler(
       return;
     }
 
-    const parsedParams = idParamSchema.safeParse(req.params);
+    const parsedParams = notificationIdParamSchema.safeParse(req.params);
     if (!parsedParams.success) {
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid notification ID.',
+        error: parsedParams.error.issues[0]?.message || 'Invalid notification ID format. Expected a valid UUID.',
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);
@@ -260,11 +260,11 @@ export async function deleteNotificationHandler(
       return;
     }
 
-    const parsedParams = idParamSchema.safeParse(req.params);
+    const parsedParams = notificationIdParamSchema.safeParse(req.params);
     if (!parsedParams.success) {
       const response: ApiResponse = {
         success: false,
-        error: 'Invalid notification ID.',
+        error: parsedParams.error.issues[0]?.message || 'Invalid notification ID format. Expected a valid UUID.',
         timestamp: new Date().toISOString(),
       };
       res.status(400).json(response);

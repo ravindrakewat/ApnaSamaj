@@ -169,30 +169,37 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **15D.4** | Social Feed Checkpoint Commit | Committed UUID schemas, feed keyword search, project memory, and reports. | `BATCH_15D_3_GIT_SAFETY_AUDIT_REPORT.md` | Verified Pass (209/209) | `ea0629c` | Pushed | Pushed to GitHub origin/main. |
 | **15E.1** | Render Build & CORS Hardening | Promoted types, added auto-prisma generation, excluded tests from API build, updated CORS. | `Render Deploy Log` | Verified Pass | `2af6d8f` | Pushed | Pushed to GitHub origin/main. |
 | **15E.2** | Render Lockfile & Production Deployment | Promoted type definitions to root dependencies, regenerated package-lock.json, verified live deployment. | `Render Deploy Log` | Verified Pass | `fd6fb0e` | Pushed | Live verified: Render 200 OK & preflight CORS headers confirmed. |
-| **15D.5** | Social Feed Frontend Refinements | Added feed search bar (100 char limit), 300ms debouncing, two-way URL sync, Hindi empty states, and UX tests. | `BATCH_15D_5_SOCIAL_FEED_FRONTEND_REFINEMENTS_REPORT.md` | Verified Pass (27/27) | Working tree modified | Not committed | Monorepo typecheck & build verified clean. |
-| **15D.6** | Social Feed Frontend Git Safety Audit | Audited working tree, verified zero secrets, 180 test assertions, typecheck, build, and prepared staging allowlist. | `BATCH_15D_6_GIT_SAFETY_AUDIT_REPORT.md` | Verified Pass (180/180) | Audit only (Working tree modified) | Not committed | Staging allowlist of 5 files prepared for 15D.7. |
+| **15D.5** | Social Feed Frontend Refinements | Added feed search bar (100 char limit), 300ms debouncing, two-way URL sync, Hindi empty states, and UX tests. | `BATCH_15D_5_SOCIAL_FEED_FRONTEND_REFINEMENTS_REPORT.md` | Verified Pass (27/27) | `4e7e615` | Pushed | Monorepo typecheck & build verified clean. |
+| **15D.6** | Social Feed Frontend Git Safety Audit | Audited working tree, verified zero secrets, 180 test assertions, typecheck, build, and prepared staging allowlist. | `BATCH_15D_6_GIT_SAFETY_AUDIT_REPORT.md` | Verified Pass (180/180) | `4e7e615` | Pushed | Staging allowlist of 5 files prepared for 15D.7. |
+| **15D.7** | Social Feed Frontend Checkpoint & Push | Staged 5 approved files, created checkpoint commit `4e7e615`, and pushed to `origin/main`. | `BATCH_15D_7_CHECKPOINT_REPORT.md` | Verified Pass | `4e7e615` | Pushed | Pushed to GitHub origin/main. |
+| **15E.1 (Notif)** | Notifications Architecture Audit | Audited database models, REST routes, Socket.IO rooms, UX components, and security boundaries. Verified 197 test assertions. | `BATCH_15E_1_NOTIFICATIONS_ARCHITECTURE_AUDIT_REPORT.md` | Verified Pass (197/197) | Audit only (Working tree modified) | Not committed | Identified UUID validation gap, missing admin triggers, and Hindi UI localization gap. |
+| **15E.2 (Notif)** | Notifications Backend Hardening & Triggers | Added UUID validation schemas, integrated ACCOUNT_STATUS_UPDATE on user status changes, and MATRIMONIAL_PROFILE_APPROVED/REJECTED on profile moderation with actorId: null. | `BATCH_15E_2_NOTIFICATIONS_BACKEND_HARDENING_REPORT.md` | Verified Pass (214/214) | Working tree modified | Not committed | Monorepo typecheck & build passing cleanly. |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `20eba1c7e2c54ab80dd300508811670dd1177f9d` (`20eba1c`)
+- **Current HEAD:** `4e7e61560275d8e3fc4319c7b63c8d0ad3380726` (`4e7e615`)
 - **Upstream Tracking:** Synchronized with `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`).
 - **Actual `git status --short`:**
   ```text
-   M apps/web/src/pages/FeedPage.tsx
+   M apps/api/src/modules/admin/matrimonial/admin.matrimonial.service.ts
+   M apps/api/src/modules/admin/users/admin.users.service.ts
+   M apps/api/src/modules/notifications/notifications.controller.ts
    M docs/PROJECT_HISTORY.md
+   M packages/validation/src/notification.ts
   ?? BATCH_15B_8_CHECKPOINT_REPORT.md
   ?? BATCH_15B_9_MEMBER_DIRECTORY_INTEGRATION_REVIEW.md
   ?? BATCH_15D_4_CHECKPOINT_REPORT.md
-  ?? BATCH_15D_5_SOCIAL_FEED_FRONTEND_REFINEMENTS_REPORT.md
-  ?? BATCH_15D_6_GIT_SAFETY_AUDIT_REPORT.md
-  ?? apps/web/src/tests/social-feed-frontend-ux.test.ts
+  ?? BATCH_15D_7_CHECKPOINT_REPORT.md
+  ?? BATCH_15E_1_NOTIFICATIONS_ARCHITECTURE_AUDIT_REPORT.md
+  ?? BATCH_15E_2_NOTIFICATIONS_BACKEND_HARDENING_REPORT.md
+  ?? apps/api/src/tests/notifications-hardening-triggers.test.ts
   ```
-- **Latest Completed Batch:** Batch 15D.6 (Social Feed Frontend Git Safety Audit).
-- **Current In-Progress Batch:** Checkpoint Preparation.
-- **Exact Next Recommended Batch:** **Batch 15D.7 — Social Feed Frontend Checkpoint Commit (Local Staging & Commit of 5 Approved Files)**
+- **Latest Completed Batch:** Batch 15E.2 (Notifications Backend Hardening & Admin Trigger Integration).
+- **Current In-Progress Batch:** None (Implementation complete).
+- **Exact Next Recommended Batch:** **Batch 15E.3 — Notifications Frontend Hindi Localization & UX Refinements**
 
 ---
 
