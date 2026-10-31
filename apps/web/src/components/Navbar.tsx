@@ -58,7 +58,7 @@ export const Navbar: React.FC = () => {
               onClick={() => navigate('/')}
               sx={{ fontWeight: location.pathname === '/' ? 600 : 400 }}
             >
-              Home
+              होम
             </Button>
 
             {user ? (
@@ -69,7 +69,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<DynamicFeedIcon />}
                   sx={{ fontWeight: location.pathname === '/feed' ? 600 : 400 }}
                 >
-                  Feed
+                  समाज अपडेट्स
                 </Button>
 
                 <Button
@@ -78,7 +78,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<GroupsIcon />}
                   sx={{ fontWeight: location.pathname.startsWith('/groups') ? 600 : 400 }}
                 >
-                  Groups
+                  समूह
                 </Button>
 
                 <Button
@@ -87,7 +87,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<PeopleIcon />}
                   sx={{ fontWeight: location.pathname === '/directory' ? 600 : 400 }}
                 >
-                  Directory
+                  सदस्य
                 </Button>
 
                 <Button
@@ -96,7 +96,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<FavoriteIcon />}
                   sx={{ fontWeight: location.pathname.startsWith('/matrimonial') ? 600 : 400 }}
                 >
-                  Matrimonial
+                  विवाह परिचय
                 </Button>
 
                 <Button
@@ -105,7 +105,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<AccountCircleIcon />}
                   sx={{ fontWeight: location.pathname === '/profile' ? 600 : 400 }}
                 >
-                  My Profile
+                  मेरी प्रोफ़ाइल
                 </Button>
 
                 <Button
@@ -114,7 +114,7 @@ export const Navbar: React.FC = () => {
                   startIcon={<GavelIcon />}
                   sx={{ fontWeight: location.pathname === '/appeals' ? 600 : 400 }}
                 >
-                  Appeals
+                  अपील
                 </Button>
 
                 <NotificationBell />
