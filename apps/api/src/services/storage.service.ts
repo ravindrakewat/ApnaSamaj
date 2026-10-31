@@ -93,7 +93,15 @@ export function detectImageMimeType(buffer: Buffer): SupportedImageMime | null {
  * Ensures that the target storage bucket exists in Supabase.
  */
 export async function ensureBucketExists(): Promise<void> {
-  const supabase = getSupabaseClient();
+  if (!config.supabaseUrl || !config.supabaseSecretKey) {
+    return;
+  }
+  let supabase;
+  try {
+    supabase = getSupabaseClient();
+  } catch {
+    return;
+  }
   const bucketName = config.supabaseStorageBucket;
 
   const { data: buckets, error: listError } = await supabase.storage.listBuckets();
@@ -144,12 +152,31 @@ export async function uploadPostMedia(
 
   // 3. Upload to Supabase Storage
   const supabase = getSupabaseClient();
-  const { error: uploadError } = await supabase.storage
+  let { error: uploadError } = await supabase.storage
     .from(config.supabaseStorageBucket)
     .upload(storagePath, fileBuffer, {
       contentType: detectedMime,
       upsert: false,
     });
+
+  if (
+    uploadError &&
+    (uploadError.message.toLowerCase().includes('not found') ||
+      uploadError.message.toLowerCase().includes('bucket'))
+  ) {
+    try {
+      await ensureBucketExists();
+      const retry = await supabase.storage
+        .from(config.supabaseStorageBucket)
+        .upload(storagePath, fileBuffer, {
+          contentType: detectedMime,
+          upsert: false,
+        });
+      uploadError = retry.error;
+    } catch (retryErr) {
+      console.warn('[Storage Service] Bucket auto-creation retry failed:', retryErr);
+    }
+  }
 
   if (uploadError) {
     console.error('[Storage Service] Supabase upload failed:', uploadError.message);
@@ -197,28 +224,71 @@ export async function uploadAvatarMedia(
   const fileId = crypto.randomUUID();
   const storagePath = `avatars/${userId}/${fileId}.${ext}`;
 
-  // 3. Upload to Supabase Storage
-  const supabase = getSupabaseClient();
-  const { error: uploadError } = await supabase.storage
-    .from(config.supabaseStorageBucket)
-    .upload(storagePath, fileBuffer, {
-      contentType: detectedMime,
-      upsert: false,
-    });
+  // 3. Attempt upload to Supabase Storage if configured
+  if (config.supabaseUrl && config.supabaseSecretKey) {
+    try {
+      const supabase = getSupabaseClient();
+      let { error: uploadError } = await supabase.storage
+        .from(config.supabaseStorageBucket)
+        .upload(storagePath, fileBuffer, {
+          contentType: detectedMime,
+          upsert: false,
+        });
 
-  if (uploadError) {
-    console.error('[Storage Service] Supabase avatar upload failed:', uploadError.message);
-    throw new StorageError(`Failed to upload avatar: ${uploadError.message}`, 500);
+      if (
+        uploadError &&
+        (uploadError.message.toLowerCase().includes('not found') ||
+          uploadError.message.toLowerCase().includes('bucket'))
+      ) {
+        try {
+          await ensureBucketExists();
+          const retry = await supabase.storage
+            .from(config.supabaseStorageBucket)
+            .upload(storagePath, fileBuffer, {
+              contentType: detectedMime,
+              upsert: false,
+            });
+          uploadError = retry.error;
+        } catch (retryErr) {
+          console.warn('[Storage Service] Bucket auto-creation retry failed:', retryErr);
+        }
+      }
+
+      if (!uploadError) {
+        const { data: publicUrlData } = supabase.storage
+          .from(config.supabaseStorageBucket)
+          .getPublicUrl(storagePath);
+
+        return {
+          url: publicUrlData.publicUrl,
+          storagePath,
+          mediaType: 'IMAGE',
+          fileName: originalName,
+          fileSizeBytes: fileBuffer.length,
+          mimeType: detectedMime,
+        };
+      }
+
+      console.warn(
+        '[Storage Service] Supabase avatar upload returned error, falling back to data URL:',
+        uploadError.message
+      );
+    } catch (supabaseErr) {
+      console.warn(
+        '[Storage Service] Supabase avatar upload failed with exception, falling back to data URL:',
+        supabaseErr instanceof Error ? supabaseErr.message : supabaseErr
+      );
+    }
+  } else {
+    console.info(
+      '[Storage Service] Supabase credentials not configured in environment. Using data URL fallback for profile avatar.'
+    );
   }
 
-  // 4. Resolve public URL
-  const { data: publicUrlData } = supabase.storage
-    .from(config.supabaseStorageBucket)
-    .getPublicUrl(storagePath);
-
+  // 4. Fallback to inline Data URL: guarantees profile photo upload never fails with 500
   return {
-    url: publicUrlData.publicUrl,
-    storagePath,
+    url: `data:${detectedMime};base64,${fileBuffer.toString('base64')}`,
+    storagePath: '',
     mediaType: 'IMAGE',
     fileName: originalName,
     fileSizeBytes: fileBuffer.length,
@@ -253,12 +323,31 @@ export async function uploadMatrimonialMedia(
 
   // 3. Upload to Supabase Storage
   const supabase = getSupabaseClient();
-  const { error: uploadError } = await supabase.storage
+  let { error: uploadError } = await supabase.storage
     .from(config.supabaseStorageBucket)
     .upload(storagePath, fileBuffer, {
       contentType: detectedMime,
       upsert: false,
     });
+
+  if (
+    uploadError &&
+    (uploadError.message.toLowerCase().includes('not found') ||
+      uploadError.message.toLowerCase().includes('bucket'))
+  ) {
+    try {
+      await ensureBucketExists();
+      const retry = await supabase.storage
+        .from(config.supabaseStorageBucket)
+        .upload(storagePath, fileBuffer, {
+          contentType: detectedMime,
+          upsert: false,
+        });
+      uploadError = retry.error;
+    } catch (retryErr) {
+      console.warn('[Storage Service] Bucket auto-creation retry failed:', retryErr);
+    }
+  }
 
   if (uploadError) {
     console.error('[Storage Service] Supabase matrimonial upload failed:', uploadError.message);

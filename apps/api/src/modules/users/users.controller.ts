@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { ApiResponse, DirectoryResponseData, PublicMemberProfile } from '@apnasamaj/shared-types';
 import { updateProfileSchema, directoryQuerySchema, memberIdSchema } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
+import { StorageError } from '../../services/storage.service';
 import {
   getMyProfile,
   updateMyProfile,
@@ -244,10 +245,21 @@ export async function uploadMyAvatarHandler(req: AuthenticatedRequest, res: Resp
       return;
     }
 
+    if (err instanceof StorageError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    const message = err instanceof Error ? err.message : 'Failed to upload profile avatar.';
     console.error('[Users Controller] Upload avatar error:', err);
     const response: ApiResponse = {
       success: false,
-      error: 'Failed to upload profile avatar.',
+      error: message.startsWith('[Supabase Storage Error]') ? message : 'Failed to upload profile avatar.',
       timestamp: new Date().toISOString(),
     };
     res.status(500).json(response);
