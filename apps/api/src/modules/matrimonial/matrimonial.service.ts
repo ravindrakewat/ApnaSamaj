@@ -862,7 +862,8 @@ export async function listDiscoveryProfiles(
           },
           photos: {
             where: { isApproved: true },
-            select: { id: true },
+            select: { id: true, url: true, isPrimary: true, order: true },
+            orderBy: [{ isPrimary: 'desc' }, { order: 'asc' }],
           },
         },
       }),
@@ -895,6 +896,8 @@ export async function listDiscoveryProfiles(
 
     const profiles: PublicMatrimonialProfileListItem[] = rawProfiles.map((raw) => {
       const p = raw.user.profile;
+      const primaryPhoto = raw.photos.find((ph) => ph.isPrimary) || raw.photos[0] || null;
+      const primaryPhotoUrl = primaryPhoto?.url || p?.avatarUrl || null;
       return {
         id: raw.id,
         userId: raw.user.id,
@@ -904,6 +907,7 @@ export async function listDiscoveryProfiles(
         city: raw.workCity || p?.city || null,
         state: raw.workState || p?.state || null,
         avatarUrl: p?.avatarUrl || null,
+        primaryPhotoUrl,
         maritalStatus: raw.maritalStatus as MaritalStatus,
         heightCm: raw.heightCm,
         highestEducation: raw.highestEducation,
@@ -1023,6 +1027,8 @@ export async function getDiscoveryProfileById(
     }
 
     const p = raw.user.profile;
+    const primaryPhoto = raw.photos.find((ph) => ph.isPrimary) || raw.photos[0] || null;
+    const primaryPhotoUrl = primaryPhoto?.url || p?.avatarUrl || null;
     return {
       id: raw.id,
       userId: raw.user.id,
@@ -1032,6 +1038,7 @@ export async function getDiscoveryProfileById(
       city: raw.workCity || p?.city || null,
       state: raw.workState || p?.state || null,
       avatarUrl: p?.avatarUrl || null,
+      primaryPhotoUrl,
       maritalStatus: raw.maritalStatus as MaritalStatus,
       heightCm: raw.heightCm,
       weightKg: raw.weightKg,
@@ -1306,8 +1313,10 @@ export async function listReceivedInterests(
                   manglik: true,
                   diet: true,
                   createdAt: true,
-                  _count: {
-                    select: { photos: { where: { isApproved: true } } },
+                  photos: {
+                    where: { isApproved: true },
+                    select: { id: true, url: true, isPrimary: true, order: true },
+                    orderBy: [{ isPrimary: 'desc' }, { order: 'asc' }],
                   },
                 },
               },
@@ -1323,6 +1332,8 @@ export async function listReceivedInterests(
       const mp = s.matrimonialProfile;
       const p = s.profile;
       if (mp) {
+        const primaryPhoto = mp.photos.find((ph) => ph.isPrimary) || mp.photos[0] || null;
+        const primaryPhotoUrl = primaryPhoto?.url || p?.avatarUrl || null;
         otherPartyProfile = {
           id: mp.id,
           userId: s.id,
@@ -1332,6 +1343,7 @@ export async function listReceivedInterests(
           city: p?.city || null,
           state: p?.state || null,
           avatarUrl: p?.avatarUrl || null,
+          primaryPhotoUrl,
           maritalStatus: mp.maritalStatus as MaritalStatus,
           heightCm: mp.heightCm,
           highestEducation: mp.highestEducation,
@@ -1342,7 +1354,7 @@ export async function listReceivedInterests(
           gotra: mp.gotra || p?.gotra || null,
           manglik: mp.manglik as ManglikStatus,
           diet: mp.diet as DietType,
-          photosCount: mp._count.photos,
+          photosCount: mp.photos.length,
           interestStatus: item.status as MatrimonialInterestStatus,
           createdAt: mp.createdAt.toISOString(),
         };
@@ -1434,8 +1446,10 @@ export async function listSentInterests(
                   manglik: true,
                   diet: true,
                   createdAt: true,
-                  _count: {
-                    select: { photos: { where: { isApproved: true } } },
+                  photos: {
+                    where: { isApproved: true },
+                    select: { id: true, url: true, isPrimary: true, order: true },
+                    orderBy: [{ isPrimary: 'desc' }, { order: 'asc' }],
                   },
                 },
               },
@@ -1451,6 +1465,8 @@ export async function listSentInterests(
       const mp = r.matrimonialProfile;
       const p = r.profile;
       if (mp) {
+        const primaryPhoto = mp.photos.find((ph) => ph.isPrimary) || mp.photos[0] || null;
+        const primaryPhotoUrl = primaryPhoto?.url || p?.avatarUrl || null;
         otherPartyProfile = {
           id: mp.id,
           userId: r.id,
@@ -1460,6 +1476,7 @@ export async function listSentInterests(
           city: p?.city || null,
           state: p?.state || null,
           avatarUrl: p?.avatarUrl || null,
+          primaryPhotoUrl,
           maritalStatus: mp.maritalStatus as MaritalStatus,
           heightCm: mp.heightCm,
           highestEducation: mp.highestEducation,
@@ -1470,7 +1487,7 @@ export async function listSentInterests(
           gotra: mp.gotra || p?.gotra || null,
           manglik: mp.manglik as ManglikStatus,
           diet: mp.diet as DietType,
-          photosCount: mp._count.photos,
+          photosCount: mp.photos.length,
           interestStatus: item.status as MatrimonialInterestStatus,
           createdAt: mp.createdAt.toISOString(),
         };

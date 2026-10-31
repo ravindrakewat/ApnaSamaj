@@ -338,7 +338,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Avatar
-                          src={profile?.avatarUrl || undefined}
+                          src={profile?.primaryPhotoUrl || profile?.avatarUrl || undefined}
                           sx={{
                             width: 56,
                             height: 56,

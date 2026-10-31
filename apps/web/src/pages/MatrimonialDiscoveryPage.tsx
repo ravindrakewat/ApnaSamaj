@@ -83,6 +83,48 @@ const DIET_OPTIONS: { value: string; label: string }[] = [
   { value: 'JAIN', label: 'Jain' },
 ];
 
+interface MatrimonialCardMediaProps {
+  imageUrl: string | null;
+  alt: string;
+}
+
+const MatrimonialCardMedia: React.FC<MatrimonialCardMediaProps> = ({ imageUrl, alt }) => {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [imageUrl]);
+
+  if (!imageUrl || hasError) {
+    return (
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: 'action.hover',
+        }}
+      >
+        <Avatar sx={{ width: 80, height: 80, bgcolor: 'primary.light' }}>
+          <PersonIcon sx={{ fontSize: 48 }} />
+        </Avatar>
+      </Box>
+    );
+  }
+
+  return (
+    <CardMedia
+      component="img"
+      height="220"
+      image={imageUrl}
+      alt={alt}
+      onError={() => setHasError(true)}
+      sx={{ objectFit: 'cover', width: '100%', height: '100%' }}
+    />
+  );
+};
+
 export const MatrimonialDiscoveryPage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -642,7 +684,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
             /* Profiles Cards Grid */
             <Grid container spacing={3}>
               {profiles.map((p) => {
-                const primaryPhotoUrl = p.avatarUrl; // public avatar or primary photo
+                const primaryPhotoUrl = p.primaryPhotoUrl || p.avatarUrl;
                 return (
                   <Grid item xs={12} sm={6} lg={4} key={p.id}>
                     <Card
@@ -662,29 +704,10 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
                     >
                       {/* Photo Thumbnail */}
                       <Box sx={{ position: 'relative', height: 220, bgcolor: 'action.hover' }}>
-                        {primaryPhotoUrl ? (
-                          <CardMedia
-                            component="img"
-                            height="220"
-                            image={primaryPhotoUrl}
-                            alt={p.fullName}
-                            sx={{ objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <Box
-                            sx={{
-                              height: '100%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              bgcolor: 'action.hover',
-                            }}
-                          >
-                            <Avatar sx={{ width: 80, height: 80, bgcolor: 'primary.light' }}>
-                              <PersonIcon sx={{ fontSize: 48 }} />
-                            </Avatar>
-                          </Box>
-                        )}
+                        <MatrimonialCardMedia
+                          imageUrl={primaryPhotoUrl}
+                          alt={p.fullName}
+                        />
 
                         {/* Photos count pill */}
                         {p.photosCount > 0 && (

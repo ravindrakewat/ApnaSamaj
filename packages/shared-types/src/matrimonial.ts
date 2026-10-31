@@ -116,6 +116,7 @@ export interface PublicMatrimonialProfileListItem {
   city: string | null;
   state: string | null;
   avatarUrl: string | null;
+  primaryPhotoUrl?: string | null;
   maritalStatus: MaritalStatus;
   heightCm: number;
   highestEducation: string;
@@ -283,6 +284,7 @@ export interface AdminMatrimonialProfileListItem {
   city: string | null;
   state: string | null;
   avatarUrl: string | null;
+  primaryPhotoUrl?: string | null;
   maritalStatus: MaritalStatus;
   highestEducation: string;
   occupation: string;

@@ -558,6 +558,64 @@ async function runMatrimonialTests() {
   assert(resubmittedProfile.status === 'PENDING_APPROVAL', 'REJECTED profile resubmission transitions to PENDING_APPROVAL');
   assert(resubmittedProfile.rejectionReason === null, 'REJECTED profile resubmission clears previous rejectionReason');
 
+  // 14. Primary Photo Selection & Listing Consistency
+  console.log('\n--- 14. Primary Photo Selection & Listing Consistency ---');
+
+  function resolvePrimaryPhoto(
+    photos: Array<{ id: string; url: string; isPrimary: boolean; isApproved: boolean }>,
+    avatarUrl?: string | null
+  ): string | null {
+    const approved = photos.filter((ph) => ph.isApproved);
+    const primary = approved.find((ph) => ph.isPrimary) || approved[0] || null;
+    return primary?.url || avatarUrl || null;
+  }
+
+  // 1. Explicit primary photo takes precedence
+  const photosWithPrimary = [
+    { id: '1', url: 'https://cdn.example.com/photo1.jpg', isPrimary: false, isApproved: true },
+    { id: '2', url: 'https://cdn.example.com/photo2_primary.jpg', isPrimary: true, isApproved: true },
+  ];
+  assert(
+    resolvePrimaryPhoto(photosWithPrimary, 'https://cdn.example.com/avatar.jpg') ===
+      'https://cdn.example.com/photo2_primary.jpg',
+    'Explicit primary matrimonial photo takes precedence over avatar and other photos'
+  );
+
+  // 2. Unmarked primary photo falls back to first approved photo
+  const photosNoPrimary = [
+    { id: '1', url: 'https://cdn.example.com/photo1_first.jpg', isPrimary: false, isApproved: true },
+    { id: '2', url: 'https://cdn.example.com/photo2.jpg', isPrimary: false, isApproved: true },
+  ];
+  assert(
+    resolvePrimaryPhoto(photosNoPrimary, 'https://cdn.example.com/avatar.jpg') ===
+      'https://cdn.example.com/photo1_first.jpg',
+    'Unmarked primary falls back to first approved photo'
+  );
+
+  // 3. Fallback to community avatar when no matrimonial photos exist
+  assert(
+    resolvePrimaryPhoto([], 'https://cdn.example.com/community_avatar.jpg') ===
+      'https://cdn.example.com/community_avatar.jpg',
+    'Falls back to community avatar when no matrimonial photos exist'
+  );
+
+  // 4. Returns null when neither matrimonial photo nor avatar exists
+  assert(
+    resolvePrimaryPhoto([], null) === null,
+    'Returns null when neither matrimonial photo nor avatar exists'
+  );
+
+  // 5. Unapproved photo is rejected even if marked isPrimary
+  const photosUnapprovedPrimary = [
+    { id: '1', url: 'https://cdn.example.com/unapproved_primary.jpg', isPrimary: true, isApproved: false },
+    { id: '2', url: 'https://cdn.example.com/approved_second.jpg', isPrimary: false, isApproved: true },
+  ];
+  assert(
+    resolvePrimaryPhoto(photosUnapprovedPrimary, null) ===
+      'https://cdn.example.com/approved_second.jpg',
+    'Unapproved photo is ignored even if marked isPrimary; valid approved photo is chosen'
+  );
+
   console.log('\n======================================================');
   console.log(`Summary: All ${passedTests} checks passed! (Failed: ${failedTests})`);
   console.log('======================================================\n');

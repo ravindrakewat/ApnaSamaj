@@ -105,7 +105,10 @@ export async function listAdminMatrimonialProfiles(
           photos: {
             select: {
               id: true,
+              url: true,
+              isPrimary: true,
               isApproved: true,
+              order: true,
             },
           },
           approvedBy: {
@@ -125,6 +128,8 @@ export async function listAdminMatrimonialProfiles(
     const profiles: AdminMatrimonialProfileListItem[] = rawProfiles.map((raw) => {
       const p = raw.user.profile;
       const unapprovedPhotos = raw.photos.filter((ph) => !ph.isApproved).length;
+      const primaryPhoto = raw.photos.find((ph) => ph.isPrimary) || raw.photos[0] || null;
+      const primaryPhotoUrl = primaryPhoto?.url || p?.avatarUrl || null;
 
       return {
         id: raw.id,
@@ -136,6 +141,7 @@ export async function listAdminMatrimonialProfiles(
         city: raw.workCity || p?.city || null,
         state: raw.workState || p?.state || null,
         avatarUrl: p?.avatarUrl || null,
+        primaryPhotoUrl,
         maritalStatus: raw.maritalStatus as MaritalStatus,
         highestEducation: raw.highestEducation,
         occupation: raw.occupation,

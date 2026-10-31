@@ -56,6 +56,7 @@ export const MatrimonialProfileDetailPage: React.FC = () => {
   const [profile, setProfile] = useState<PublicMatrimonialProfileDetail | null>(null);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
+  const [photoLoadErrors, setPhotoLoadErrors] = useState<Record<string, boolean>>({});
 
   // Interest Dialog states
   const [isInterestDialogOpen, setIsInterestDialogOpen] = useState<boolean>(false);
@@ -254,21 +255,23 @@ export const MatrimonialProfileDetailPage: React.FC = () => {
         <Grid item xs={12} md={4.5}>
           {/* Main Photo Card */}
           <Paper elevation={2} sx={{ borderRadius: 3, overflow: 'hidden', mb: 3 }}>
-            {activePhoto ? (
+            {activePhoto && !photoLoadErrors[activePhoto.id] ? (
               <CardMedia
                 component="img"
                 height="420"
                 image={activePhoto.url}
                 alt={profile.fullName}
+                onError={() => setPhotoLoadErrors((prev) => ({ ...prev, [activePhoto.id]: true }))}
                 sx={{ objectFit: 'cover', cursor: 'pointer' }}
                 onClick={() => setIsPreviewModalOpen(true)}
               />
-            ) : profile.avatarUrl ? (
+            ) : profile.avatarUrl && !photoLoadErrors['avatar'] ? (
               <CardMedia
                 component="img"
                 height="420"
                 image={profile.avatarUrl}
                 alt={profile.fullName}
+                onError={() => setPhotoLoadErrors((prev) => ({ ...prev, avatar: true }))}
                 sx={{ objectFit: 'cover' }}
               />
             ) : (

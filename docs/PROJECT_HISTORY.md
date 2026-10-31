@@ -177,7 +177,8 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **15E.3A (i18n)** | Multilingual Architecture & Localization Plan | Read-only audit & architecture blueprint across monorepo for Hindi-first localization, shared `@apnasamaj/i18n`, client persistence, and typography. | `BATCH_15E_3A_MULTILINGUAL_ARCHITECTURE_PLAN.md` | Verified Specification | Audit only | Not committed | Decoupled URLs from locale state, established two-tier persistence. |
 | **15E.3B (i18n)** | Shared Multilingual Foundation & Web App Language Selector | Created `@apnasamaj/i18n` workspace package, dual-language resources (`hi` default, `en`), accessible `LanguageSelector.tsx`, Navbar integration, and typography font stack. | `BATCH_15E_3B_MULTILINGUAL_FOUNDATION_REPORT.md` | Verified Pass (206/206) | `cb35183` | Pushed | 26 unit tests passed, all 8 workspaces typecheck & build clean. Pushed to origin/main. |
 | **15E.3C (i18n/Notif)** | Notifications Localization & Mobile UX | Localized `NotificationBell.tsx` via `notifications` namespace, implemented localized relative time helper for Hindi/English, and enhanced mobile viewport & touch UX. | `BATCH_15E_3C_NOTIFICATIONS_LOCALIZATION_REPORT.md` | Verified Pass (256/256) | `cb35183` | Pushed | 31 unit tests passed, 256 monorepo frontend assertions verified pass. Pushed to origin/main. |
-| **15E.4** | Avatar Upload Resilience & Supabase Fallback | Transparent `StorageError` handling in avatar controller, automatic bucket creation with retry, and resilient inline Data URL fallback preventing HTTP 500 errors. | `BATCH_15E_4_AVATAR_STORAGE_RESILIENCE_REPORT.md` | Verified Pass (7/7 resilience, 64/64 security) | Pending Push | Staged | Monorepo typecheck & build passing cleanly across all 8 packages. |
+| **15E.4** | Avatar Upload Resilience & Supabase Fallback | Transparent `StorageError` handling in avatar controller, automatic bucket creation with retry, and resilient inline Data URL fallback preventing HTTP 500 errors. | `BATCH_15E_4_AVATAR_STORAGE_RESILIENCE_REPORT.md` | Verified Pass (7/7 resilience, 64/64 security) | `c873e2c` | Pushed | Monorepo typecheck & build passing cleanly across all 8 packages. |
+| **15E.5** | Matrimonial Listing Cards Image Rendering Fix | Resolved missing matrimonial photo query in discovery and interest listings, added `primaryPhotoUrl`, implemented `MatrimonialCardMedia` with `onError` fallback, and ensured Full Profile consistency. | `BATCH_15E_5_MATRIMONIAL_CARD_IMAGE_RENDERING_REPORT.md` | Verified Pass (10/10 frontend, 77/77 backend) | Uncommitted (Pending Approval) | Working Tree | Monorepo typecheck & build passing cleanly across all 8 packages. |
 
 ---
 
@@ -195,9 +196,9 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
   ?? BATCH_15E_1_NOTIFICATIONS_ARCHITECTURE_AUDIT_REPORT.md
   ?? BATCH_15E_3A_MULTILINGUAL_ARCHITECTURE_PLAN.md
   ```
-- **Latest Completed Batch:** Batch 15E.4 (Profile Avatar Upload Resilience & Supabase Fallback).
+- **Latest Completed Batch:** Batch 15E.5 (Matrimonial Listing Cards Image Rendering Fix).
 - **Current In-Progress Batch:** None (Ready for next batch).
-- **Exact Next Recommended Batch:** **Batch 15E.5 — Social Feed & Posts Multilingual Localization**
+- **Exact Next Recommended Batch:** **Batch 15E.6 — Social Feed & Posts Multilingual Localization**
 
 ---
 
