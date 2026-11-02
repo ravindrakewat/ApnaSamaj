@@ -8,6 +8,8 @@ import {
   forgotPasswordHandler,
   verifyResetTokenHandler,
   resetPasswordHandler,
+  requestClaimOtpHandler,
+  verifyClaimOtpHandler,
 } from './auth.controller';
 import {
   loginRateLimiter,
@@ -17,6 +19,9 @@ import {
   forgotPasswordPhoneRateLimiter,
   verifyResetTokenRateLimiter,
   resetPasswordRateLimiter,
+  claimOtpRequestIpRateLimiter,
+  claimOtpRequestPhoneRateLimiter,
+  claimOtpVerifyRateLimiter,
 } from '../../middleware/rate-limiter';
 import { authenticateToken } from '../../middleware/authenticate';
 
@@ -57,6 +62,22 @@ authRouter.post(
   '/reset-password',
   resetPasswordRateLimiter,
   resetPasswordHandler
+);
+
+
+// POST /api/v1/auth/claim-account/request (Rate-limited, anonymous member claim request)
+authRouter.post(
+  '/claim-account/request',
+  claimOtpRequestIpRateLimiter,
+  claimOtpRequestPhoneRateLimiter,
+  requestClaimOtpHandler
+);
+
+// POST /api/v1/auth/claim-account/verify (Rate-limited, anonymous claim OTP verification & password setup)
+authRouter.post(
+  '/claim-account/verify',
+  claimOtpVerifyRateLimiter,
+  verifyClaimOtpHandler
 );
 
 export default authRouter;

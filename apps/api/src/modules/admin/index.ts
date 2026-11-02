@@ -17,6 +17,8 @@ adminRouter.use('/appeals', adminAppealsRouter);
 
 export * from './users/admin.users.routes';
 export * from './users/admin.users.service';
+export * from './users/admin.import.service';
+export * from './users/excel.service';
 export * from './metrics/admin.metrics.routes';
 export * from './metrics/admin.metrics.service';
 export * from './audit-logs/admin.audit-logs.routes';

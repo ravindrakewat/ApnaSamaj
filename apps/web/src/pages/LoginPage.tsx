@@ -220,6 +220,12 @@ export const LoginPage: React.FC = () => {
                 Register here
               </RouterLink>
             </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+              Imported by your community?{' '}
+              <RouterLink to="/claim-account" style={{ textDecoration: 'none', fontWeight: 600, color: '#1976d2' }}>
+                Claim Account & Set Password
+              </RouterLink>
+            </Typography>
           </Box>
         </Box>
       </Paper>

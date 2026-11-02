@@ -9,4 +9,5 @@ export * from './notification.js';
 export * from './chat.js';
 export * from './matrimonial.js';
 export * from './community.js';
+export * from './bulk-import.js';
 

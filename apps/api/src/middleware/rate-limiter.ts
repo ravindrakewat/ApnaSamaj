@@ -164,3 +164,78 @@ export const resetPasswordRateLimiter = rateLimit({
     res.status(429).json(response);
   },
 });
+
+// -----------------------------------------------------------------------------
+// ACCOUNT CLAIMING RATE LIMITERS
+// -----------------------------------------------------------------------------
+
+export const claimOtpRequestIpRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 OTP claim requests per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many account claim requests from this network. Please try again after 15 minutes.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});
+
+export const claimOtpRequestPhoneRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // Limit each phone number to 3 OTP requests per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req) => {
+    const rawPhone = req.body?.phone;
+    if (typeof rawPhone === 'string' && rawPhone.trim()) {
+      try {
+        const normalized = normalizeIndianPhone(rawPhone);
+        if (normalized) return `phone:claim:${normalized}`;
+      } catch {
+        // fallback
+      }
+    }
+    return `ip:claim:${req.ip || 'unknown'}`;
+  },
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many account claim requests for this mobile number. Please try again after 15 minutes.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});
+
+export const claimOtpVerifyRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Strict limit: 5 OTP verification attempts per 15 min per phone/IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req) => {
+    const rawPhone = req.body?.phone;
+    if (typeof rawPhone === 'string' && rawPhone.trim()) {
+      try {
+        const normalized = normalizeIndianPhone(rawPhone);
+        if (normalized) return `verify:claim:${normalized}`;
+      } catch {
+        // fallback
+      }
+    }
+    return `ip:verify:claim:${req.ip || 'unknown'}`;
+  },
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many verification attempts for this account. Please wait 15 minutes before trying again.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});

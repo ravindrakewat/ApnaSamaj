@@ -39,6 +39,7 @@ import {
   CalendarToday as CalendarIcon,
   LocationOn as LocationIcon,
   Person as PersonIcon,
+  FileUpload as FileUploadIcon,
 } from '@mui/icons-material';
 import {
   AdminUserDetails,
@@ -47,6 +48,7 @@ import {
   UserStatus,
 } from '@apnasamaj/shared-types';
 import { useAuth } from '../context/AuthContext';
+import { BulkImportDialog } from '../components/BulkImportDialog';
 import {
   fetchAdminUsers,
   fetchAdminUserDetails,
@@ -83,6 +85,7 @@ export const MemberManagementPage: React.FC = () => {
   const [statusDialogAction, setStatusDialogAction] = useState<'ACTIVE' | 'SUSPENDED'>('SUSPENDED');
   const [statusReason, setStatusReason] = useState('');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
   // Debounce search input
   useEffect(() => {
@@ -222,16 +225,29 @@ export const MemberManagementPage: React.FC = () => {
             View member profiles, verify identities, manage community privileges, and moderate access.
           </Typography>
         </Box>
-        <Button
-          variant="outlined"
-          color="secondary"
-          startIcon={<RefreshIcon />}
-          onClick={() => loadUsers()}
-          disabled={isLoading}
-          sx={{ textTransform: 'none' }}
-        >
-          Refresh List
-        </Button>
+        <Box display="flex" gap={1.5} flexWrap="wrap">
+          {(currentAdmin?.role === UserRole.SUPER_ADMIN || currentAdmin?.role === UserRole.COMMUNITY_ADMIN) && (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<FileUploadIcon />}
+              onClick={() => setIsImportDialogOpen(true)}
+              sx={{ textTransform: 'none' }}
+            >
+              Import Members
+            </Button>
+          )}
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<RefreshIcon />}
+            onClick={() => loadUsers()}
+            disabled={isLoading}
+            sx={{ textTransform: 'none' }}
+          >
+            Refresh List
+          </Button>
+        </Box>
       </Box>
 
       {/* Notifications */}

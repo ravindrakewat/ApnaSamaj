@@ -178,27 +178,27 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **15E.3B (i18n)** | Shared Multilingual Foundation & Web App Language Selector | Created `@apnasamaj/i18n` workspace package, dual-language resources (`hi` default, `en`), accessible `LanguageSelector.tsx`, Navbar integration, and typography font stack. | `BATCH_15E_3B_MULTILINGUAL_FOUNDATION_REPORT.md` | Verified Pass (206/206) | `cb35183` | Pushed | 26 unit tests passed, all 8 workspaces typecheck & build clean. Pushed to origin/main. |
 | **15E.3C (i18n/Notif)** | Notifications Localization & Mobile UX | Localized `NotificationBell.tsx` via `notifications` namespace, implemented localized relative time helper for Hindi/English, and enhanced mobile viewport & touch UX. | `BATCH_15E_3C_NOTIFICATIONS_LOCALIZATION_REPORT.md` | Verified Pass (256/256) | `cb35183` | Pushed | 31 unit tests passed, 256 monorepo frontend assertions verified pass. Pushed to origin/main. |
 | **15E.4** | Avatar Upload Resilience & Supabase Fallback | Transparent `StorageError` handling in avatar controller, automatic bucket creation with retry, and resilient inline Data URL fallback preventing HTTP 500 errors. | `BATCH_15E_4_AVATAR_STORAGE_RESILIENCE_REPORT.md` | Verified Pass (7/7 resilience, 64/64 security) | `c873e2c` | Pushed | Monorepo typecheck & build passing cleanly across all 8 packages. |
-| **15E.5** | Matrimonial Listing Cards Image Rendering Fix | Resolved missing matrimonial photo query in discovery and interest listings, added `primaryPhotoUrl`, implemented `MatrimonialCardMedia` with `onError` fallback, and ensured Full Profile consistency. | `BATCH_15E_5_MATRIMONIAL_CARD_IMAGE_RENDERING_REPORT.md` | Verified Pass (10/10 frontend, 77/77 backend) | Uncommitted (Pending Approval) | Working Tree | Monorepo typecheck & build passing cleanly across all 8 packages. |
+| **15E.5** | Matrimonial Listing Cards Image Rendering Fix | Resolved missing matrimonial photo query in discovery and interest listings, added `primaryPhotoUrl`, implemented `MatrimonialCardMedia` with `onError` fallback, and ensured Full Profile consistency. | `BATCH_15E_5_MATRIMONIAL_CARD_IMAGE_RENDERING_REPORT.md` | Verified Pass (10/10 frontend, 77/77 backend) | `eb3e639` | Pushed | Monorepo typecheck & build passing cleanly across all 8 packages. |
+| **15F.1** | Excel Bulk Member Import Contracts & DTOs | Added strongly typed DTOs, reusable Zod schemas with phone normalization, case-insensitive gender, strict security boundaries, and exceljs dependency. | `BATCH_15F_1_EXCEL_IMPORT_CONTRACTS_REPORT.md` | Verified Pass (75/75 contracts, monorepo typecheck & build) | `855af1e` | Pushed | Monorepo typecheck & build passing cleanly across all 8 packages. |
+| **15F.2** | Backend Excel Bulk Member Import | Implemented template generator, buffer parser with formula injection defense, dry-run preview, atomic chunked execution with Argon2id dummy hashes, and audit logging. | `BATCH_15F_2_BACKEND_BULK_IMPORT_REPORT.md` | Verified Pass (57/57 backend, 75/75 contracts, monorepo typecheck & build) | `855af1e` | Pushed | Monorepo typecheck & build passing cleanly across all 8 packages. |
+| **15F.3** | Account Activation / Claiming Alignment | Secure self-service account-claiming & initial password-setup via 6-digit SMS OTP, salted SHA-256 tokens, Argon2id passwords, single-use burning, rate limits, and audit logging. | `BATCH_15F_3_ACCOUNT_CLAIMING_REPORT.md` | Verified Pass (72/72 claiming, 57/57 backend, 75/75 contracts, 18/18 reset) | `855af1e` | Pushed | Monorepo typecheck & build passing cleanly across all 8 workspaces. |
+| **15F.4** | Admin Bulk Import UI & Member Claim Flow | 3-step import modal, dry-run preview, formula-injection-safe CSV export, member `/claim-account` page, 60s OTP cooldown, login link. | `BATCH_15F_4_IMPORT_UI_CLAIM_FLOW_REPORT.md` | Verified Pass (43 admin UX, 54 web UX, 301 total 15F suite) | `855af1e` | Pushed | Monorepo typecheck & build passing cleanly across all 8 packages. |
+| **15F.5** | Staging Verification & Pre-Commit Checkpoint Audit | Comprehensive security audit, staging readiness check, formula defense check, 354 automated assertions verified, allowlist preparation. | `BATCH_15F_5_STAGING_AND_PRECOMMIT_AUDIT_REPORT.md` | Verified Pass (354/354 assertions, 7 suites) | `855af1e` | Pushed | Staging DB offline (blocked live test); 0 critical vulnerabilities. |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `cb35183`
+- **Current HEAD:** `855af1e7e4466b0394c8e104ae5a6760ef9ee4f2` (`855af1e`)
 - **Upstream Tracking:** Synchronized with `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`).
 - **Actual `git status --short`:**
   ```text
-  ?? BATCH_15B_8_CHECKPOINT_REPORT.md
-  ?? BATCH_15B_9_MEMBER_DIRECTORY_INTEGRATION_REVIEW.md
-  ?? BATCH_15D_4_CHECKPOINT_REPORT.md
-  ?? BATCH_15D_7_CHECKPOINT_REPORT.md
-  ?? BATCH_15E_1_NOTIFICATIONS_ARCHITECTURE_AUDIT_REPORT.md
-  ?? BATCH_15E_3A_MULTILINGUAL_ARCHITECTURE_PLAN.md
+  Clean working tree (all Batch 15F files committed and pushed to origin/main).
   ```
-- **Latest Completed Batch:** Batch 15E.5 (Matrimonial Listing Cards Image Rendering Fix).
-- **Current In-Progress Batch:** None (Ready for next batch).
-- **Exact Next Recommended Batch:** **Batch 15E.6 — Social Feed & Posts Multilingual Localization**
+- **Latest Completed Batch:** Batch 15F (Excel Bulk Member Import with Self-Service Password Setup, Batches 15F.1–15F.5).
+- **Current In-Progress Batch:** None (Ready for Batch 15G).
+- **Exact Next Recommended Batch:** **Batch 15G.1 — Social Feed Localization (Hindi/English) or Matrimonial Verification & Chat Hardening**
 
 ---
 

@@ -5,6 +5,8 @@ import {
   RefreshResponseData,
   VerifyResetTokenResponseData,
   ResetPasswordRequest,
+  ClaimAccountVerifyRequest,
+  ClaimAccountResponseData,
 } from '@apnasamaj/shared-types';
 import { RegisterInput } from '@apnasamaj/validation';
 import {
@@ -171,3 +173,55 @@ export async function resetPasswordApi(
       'Password has been reset successfully. Please log in with your new password.',
   };
 }
+
+/**
+ * Initiates the account claim flow for an imported member by submitting their registered phone number.
+ * Always returns a generic response to prevent account enumeration.
+ */
+export async function requestClaimOtpApi(
+  phone: string,
+  communitySlug?: string
+): Promise<{ message: string }> {
+  if (communitySlug) {
+    setActiveCommunitySlug(communitySlug);
+  }
+
+  const response = await apiFetch<{ message?: string }>('/api/v1/auth/claim-account/request', {
+    method: 'POST',
+    body: JSON.stringify({ phone }),
+  });
+
+  if (!response.success) {
+    throw new Error(response.error || 'Failed to submit account claim request. Please try again.');
+  }
+
+  return {
+    message:
+      response.message ||
+      'If an eligible account is associated with this mobile number, an activation code has been sent.',
+  };
+}
+
+/**
+ * Submits the 6-digit OTP and new password to claim and activate an imported member account.
+ */
+export async function verifyClaimOtpApi(
+  data: ClaimAccountVerifyRequest,
+  communitySlug?: string
+): Promise<ClaimAccountResponseData> {
+  if (communitySlug) {
+    setActiveCommunitySlug(communitySlug);
+  }
+
+  const response = await apiFetch<ClaimAccountResponseData>('/api/v1/auth/claim-account/verify', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to verify code and activate account. Please try again.');
+  }
+
+  return response.data;
+}
+

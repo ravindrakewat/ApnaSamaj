@@ -71,3 +71,18 @@ export interface ResetPasswordRequest {
   token: string;
   newPassword: string;
 }
+
+export interface ClaimAccountRequest {
+  phone: string;
+}
+
+export interface ClaimAccountVerifyRequest {
+  phone: string;
+  otp: string;
+  newPassword: string;
+}
+
+export interface ClaimAccountResponseData {
+  claimed: boolean;
+  message: string;
+}

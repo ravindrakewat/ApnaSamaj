@@ -82,6 +82,31 @@ export function calculatePasswordResetTokenExpiry(): Date {
 }
 
 /**
+ * Generates a cryptographically secure 6-digit numeric OTP for account claiming.
+ */
+export function generateClaimOtp(): string {
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+/**
+ * Computes the expiration date for a claim OTP (10 minutes).
+ */
+export function calculateClaimOtpExpiry(): Date {
+  return new Date(Date.now() + 10 * 60 * 1000);
+}
+
+/**
+ * Computes a salted SHA-256 hash of a claim OTP tied to the member's unique userId.
+ * Prevents precomputation and rainbow-table attacks against 6-digit numbers.
+ */
+export function hashClaimOtp(userId: string, otp: string): string {
+  return crypto
+    .createHash('sha256')
+    .update(`CLAIM_OTP:${userId}:${otp.trim()}`)
+    .digest('hex');
+}
+
+/**
  * Computes the SHA-256 hash of a refresh token for safe database storage.
  * The raw token is never stored or logged.
  */

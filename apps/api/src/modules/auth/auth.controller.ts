@@ -7,6 +7,8 @@ import {
   forgotPasswordSchema,
   verifyResetTokenSchema,
   resetPasswordSchema,
+  claimAccountRequestSchema,
+  claimAccountVerifySchema,
 } from '@apnasamaj/validation';
 import {
   ApiResponse,
@@ -16,6 +18,7 @@ import {
   AuthUser,
   UserRole,
   VerifyResetTokenResponseData,
+  ClaimAccountResponseData,
 } from '@apnasamaj/shared-types';
 import {
   loginWithPhonePassword,
@@ -32,6 +35,9 @@ import {
   requestPasswordReset,
   verifyResetToken,
   resetPassword,
+  requestAccountClaimOtp,
+  verifyClaimOtpAndSetPassword,
+  InvalidClaimError,
 } from './auth.service';
 import {
   REFRESH_COOKIE_NAME,
@@ -671,3 +677,158 @@ export async function resetPasswordHandler(req: Request, res: Response): Promise
     res.status(500).json(response);
   }
 }
+
+/**
+ * Handles account claim OTP request for imported members:
+ * Validates phone number, enforces tenant context, dispatches OTP via configured delivery service.
+ * Always returns a generic anti-enumeration response to avoid leaking member status.
+ */
+export async function requestClaimOtpHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const tenantReq = req as TenantRequest;
+    const isCentralAdmin = Boolean(tenantReq.isCentralAdmin);
+    const tenant = tenantReq.tenant;
+    const db = tenantReq.db;
+
+    if (isCentralAdmin) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Account claiming is disabled on the central admin console. Please claim through your community portal.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!tenant || !tenant.isResolved || !db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for account claiming. Please access via a valid community subdomain or specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsed = claimAccountRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message || 'Valid Indian mobile number is required.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    await requestAccountClaimOtp(parsed.data.phone, db, tenant.slug);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'If an eligible account is associated with this mobile number, an activation code has been sent.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    console.error('[Auth Controller] Error during claim-account OTP request:', err);
+    // Anti-enumeration: Ensure unexpected failures do not disclose account existence
+    const response: ApiResponse = {
+      success: true,
+      message: 'If an eligible account is associated with this mobile number, an activation code has been sent.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  }
+}
+
+/**
+ * Handles account claim OTP verification and initial password setup:
+ * Validates input, consumes OTP atomically, sets password with Argon2id,
+ * transitions account to ACTIVE with verified phone, and records audit trail.
+ */
+export async function verifyClaimOtpHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const tenantReq = req as TenantRequest;
+    const isCentralAdmin = Boolean(tenantReq.isCentralAdmin);
+    const tenant = tenantReq.tenant;
+    const db = tenantReq.db;
+
+    if (isCentralAdmin) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Account claiming is disabled on the central admin console. Please claim through your community portal.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!tenant || !tenant.isResolved || !db) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Community context required for account claiming. Please access via a valid community subdomain or specify X-Community-Slug header.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsed = claimAccountVerifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message || 'Invalid account claim verification input.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    await verifyClaimOtpAndSetPassword(
+      parsed.data.phone,
+      parsed.data.otp,
+      parsed.data.newPassword,
+      db,
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    const responseData: ClaimAccountResponseData = {
+      claimed: true,
+      message: 'Account claimed and activated successfully.',
+    };
+
+    const response: ApiResponse<ClaimAccountResponseData> = {
+      success: true,
+      message: 'Account claimed and activated successfully. Please log in with your new password.',
+      data: responseData,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (
+      err instanceof InvalidClaimError ||
+      err instanceof AccountSuspendedError ||
+      err instanceof AuthError
+    ) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Auth Controller] Unexpected claim verification error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'An unexpected error occurred while claiming your account. Please try again later.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+}
+

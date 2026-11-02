@@ -69,3 +69,22 @@ export const resetPasswordSchema = z.object({
 });
 
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const claimAccountRequestSchema = z.object({
+  phone: phoneSchema,
+});
+
+export type ClaimAccountRequestInput = z.infer<typeof claimAccountRequestSchema>;
+
+export const claimAccountVerifySchema = z.object({
+  phone: phoneSchema,
+  otp: z
+    .string({ required_error: 'OTP is required' })
+    .trim()
+    .regex(/^\d{6}$/, 'OTP must be a 6-digit number'),
+  newPassword: z
+    .string({ required_error: 'Password is required' })
+    .min(8, 'Password must be at least 8 characters long'),
+});
+
+export type ClaimAccountVerifyInput = z.infer<typeof claimAccountVerifySchema>;
