@@ -710,6 +710,17 @@ export const MemberManagementPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Bulk Member Import Dialog */}
+      <BulkImportDialog
+        open={isImportDialogOpen}
+        onClose={() => setIsImportDialogOpen(false)}
+        onSuccess={() => {
+          setIsImportDialogOpen(false);
+          loadUsers();
+          setSuccessMessage('Member roster imported successfully.');
+        }}
+      />
     </Box>
   );
 };

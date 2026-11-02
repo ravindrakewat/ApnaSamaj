@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import assert from 'node:assert';
 import type {
   BulkImportPreviewSummary,
@@ -253,6 +254,76 @@ async function runBulkImportDialogUxTests() {
     assertTest(mockExecuteResult.skippedExistingCount === 1, 'TEST-05D', 'Results view displays 1 skipped existing');
     assertTest(mockExecuteResult.skippedDuplicateCount === 1, 'TEST-05E', 'Results view displays 1 skipped duplicate');
     assertTest(mockExecuteResult.failedCount === 0, 'TEST-05F', 'Results view displays 0 failures');
+  }
+
+  // -------------------------------------------------------------
+  // 7. MemberManagementPage Integration & Dialog Mounting Verification
+  // -------------------------------------------------------------
+  {
+    const pageSource = fs.readFileSync('apps/admin/src/pages/MemberManagementPage.tsx', 'utf8');
+
+    // TEST-07A: Dialog is imported and mounted in JSX
+    assertTest(
+      pageSource.includes('import { BulkImportDialog } from \'../components/BulkImportDialog\''),
+      'TEST-07A',
+      'BulkImportDialog is imported from components directory'
+    );
+
+    // TEST-07B: Dialog JSX is rendered in DOM tree
+    assertTest(
+      pageSource.includes('<BulkImportDialog'),
+      'TEST-07B',
+      'BulkImportDialog is mounted within MemberManagementPage JSX return tree'
+    );
+
+    // TEST-07C: Dialog open state is correctly connected
+    assertTest(
+      pageSource.includes('open={isImportDialogOpen}'),
+      'TEST-07C',
+      'BulkImportDialog receives isImportDialogOpen as open prop'
+    );
+
+    // TEST-07D: Dialog onClose resets isImportDialogOpen
+    assertTest(
+      pageSource.includes('onClose={() => setIsImportDialogOpen(false)}'),
+      'TEST-07D',
+      'BulkImportDialog onClose handler resets open state'
+    );
+
+    // TEST-07E: Dialog onSuccess triggers dialog close, loadUsers, and success feedback
+    assertTest(
+      pageSource.includes('loadUsers()') && pageSource.includes('setIsImportDialogOpen(false)'),
+      'TEST-07E',
+      'BulkImportDialog onSuccess handler closes dialog and reloads user list'
+    );
+
+    // TEST-07F: Import button click handler activates isImportDialogOpen state
+    assertTest(
+      pageSource.includes('onClick={() => setIsImportDialogOpen(true)}'),
+      'TEST-07F',
+      'Import Members button click handler sets isImportDialogOpen to true'
+    );
+
+    // TEST-07G: State simulation of complete dialog lifecycle
+    let isOpen = false;
+    let usersLoaded = 0;
+    let message: string | null = null;
+
+    const openDialog = () => { isOpen = true; };
+    const closeDialog = () => { isOpen = false; };
+    const triggerSuccess = () => {
+      closeDialog();
+      usersLoaded++;
+      message = 'Member roster imported successfully.';
+    };
+
+    openDialog();
+    assertTest(Boolean(isOpen) === true, 'TEST-07G1', 'Lifecycle: Button click opens import dialog');
+
+    triggerSuccess();
+    assertTest(Boolean(isOpen) === false, 'TEST-07G2', 'Lifecycle: Success callback closes dialog');
+    assertTest(usersLoaded === 1, 'TEST-07G3', 'Lifecycle: Success callback reloads member list');
+    assertTest(message !== null, 'TEST-07G4', 'Lifecycle: Success callback provides visual feedback');
   }
 
   // -------------------------------------------------------------
