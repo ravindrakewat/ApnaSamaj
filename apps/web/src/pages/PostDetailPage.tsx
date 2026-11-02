@@ -21,8 +21,10 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import type { PostItem } from '@apnasamaj/shared-types';
 import { getPostApi } from '../services/posts.service';
 import { PostCard } from '../components/PostCard';
+import { useTranslation } from '@apnasamaj/i18n';
 
 export const PostDetailPage: React.FC = () => {
+  const { t } = useTranslation(['feed', 'common']);
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -130,7 +132,7 @@ export const PostDetailPage: React.FC = () => {
               fontWeight: 600,
             }}
           >
-            {post?.group ? `Back to ${post.group.name}` : 'Back to Feed'}
+            {post?.group ? t('backToGroup', { groupName: post.group.name }) : t('backToFeed')}
           </Button>
 
           <Breadcrumbs aria-label="breadcrumb" sx={{ display: { xs: 'none', sm: 'flex' } }}>
@@ -141,7 +143,7 @@ export const PostDetailPage: React.FC = () => {
               sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 0.5 }}
             >
               <DynamicFeedIcon fontSize="inherit" />
-              Feed
+              {t('breadcrumbFeed')}
             </Link>
             {post?.group && (
               <Link
@@ -155,7 +157,7 @@ export const PostDetailPage: React.FC = () => {
               </Link>
             )}
             <Typography color="text.primary" fontWeight={600}>
-              Post
+              {t('breadcrumbPost')}
             </Typography>
           </Breadcrumbs>
         </Stack>
@@ -187,7 +189,7 @@ export const PostDetailPage: React.FC = () => {
           <Box display="flex" justifyContent="center" alignItems="center" py={4}>
             <CircularProgress size={32} />
             <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
-              Loading post details...
+              {t('postDetailsLoading')}
             </Typography>
           </Box>
         </Paper>
@@ -219,15 +221,14 @@ export const PostDetailPage: React.FC = () => {
             <LockOutlinedIcon sx={{ fontSize: 48 }} />
           </Box>
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Post Unavailable
+            {t('postUnavailableTitle')}
           </Typography>
           <Typography
             variant="body1"
             color="text.secondary"
             sx={{ maxWidth: 480, mx: 'auto', mb: 3 }}
           >
-            This post could not be found or you may not have permission to view it.
-            It may have been deleted, or belongs to a private group that requires membership.
+            {t('postUnavailableDesc')}
           </Typography>
           <Stack direction="row" spacing={2} justifyContent="center">
             <Button

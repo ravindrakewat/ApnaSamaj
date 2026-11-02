@@ -184,21 +184,25 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **15F.3** | Account Activation / Claiming Alignment | Secure self-service account-claiming & initial password-setup via 6-digit SMS OTP, salted SHA-256 tokens, Argon2id passwords, single-use burning, rate limits, and audit logging. | `BATCH_15F_3_ACCOUNT_CLAIMING_REPORT.md` | Verified Pass (72/72 claiming, 57/57 backend, 75/75 contracts, 18/18 reset) | `ae2fe5e` | Pushed | Monorepo typecheck & build passing cleanly across all 8 workspaces. |
 | **15F.4** | Admin Bulk Import UI & Member Claim Flow | 3-step import modal, dry-run preview, formula-injection-safe CSV export, member `/claim-account` page, 60s OTP cooldown, login link. | `BATCH_15F_4_IMPORT_UI_CLAIM_FLOW_REPORT.md` | Verified Pass (43 admin UX, 54 web UX, 301 total 15F suite) | `ae2fe5e` | Pushed | Monorepo typecheck & build passing cleanly across all 8 packages. |
 | **15F.5** | Staging Verification & Pre-Commit Checkpoint Audit | Comprehensive security audit, staging readiness check, formula defense check, 354 automated assertions verified, allowlist preparation. | `BATCH_15F_5_STAGING_AND_PRECOMMIT_AUDIT_REPORT.md` | Verified Pass (354/354 assertions, 7 suites) | `ae2fe5e` | Pushed | Staging DB offline (blocked live test); 0 critical vulnerabilities. |
+| **15G.1** | Social Feed Localization (Hindi/English) | Registered `feed` i18n namespace, added 147 translation keys with 1:1 Hindi/English parity across FeedPage, CreatePostComposer, PostCard, PostDetailPage, and relative timestamp formatting. | `BATCH_15G_1_SOCIAL_FEED_LOCALIZATION_REPORT.md` | Verified Pass (25/25 tests, clean typecheck & build) | Uncommitted | Working tree | Clean working tree changes preserved. |
+| **15G.2** | Direct Video Upload + YouTube Video Integration | Authenticated MP4/WebM video uploads, memory-safe disk streaming upload via Multer, server-side magic bytes validation (128-byte header read), 30MB/90s bounds, video preview card with progress/retry, and zero DB migration using existing `PostMedia`. | `BATCH_15G_2_VIDEO_UPLOAD_REPORT.md` | Verified Pass (35 backend + 45 frontend + 25 15G.1 = 105/105 tests pass) | Uncommitted | Working tree | Clean working tree changes preserved. |
+| **15F Fix** | Admin Excel Member Import Modal Mounting Fix | Fixed missing <BulkImportDialog /> in JSX of MemberManagementPage.tsx, restored modal trigger, verified FormData boundary handling, added lifecycle tests. | BATCH_MEMBER_EXCEL_IMPORT_FIX_REPORT.md | Verified Pass (53 admin UX, 57 backend, 75 contracts, 8/8 typecheck & build) | Uncommitted | Working tree | Clean working tree changes preserved. Batch 15G.1 & 15G.2 files untouched. |
+| **15G.3** | Stabilization, Security Audit & Checkpoint Prep | Read-only stabilization audit across Feed i18n, Video Upload, and Admin Member Import Fix. Verified 290 automated tests, clean typecheck across 8 workspaces, production builds, 0 secrets, and prepared 2-commit architecture. | BATCH_15G_3_STABILIZATION_REPORT.md | Verified Pass (290/290 tests, clean typecheck & builds) | Uncommitted | Working tree | Clean working tree changes preserved. Ready for user approval. |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `ae2fe5eaf74450818887562952f92a966634c83e` (`ae2fe5e`)
+- **Current HEAD:** `58493f74b1724b80433ebe59b0ba08cc5b6cd4b1` (`58493f7`)
 - **Upstream Tracking:** Synchronized with `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`).
 - **Actual `git status --short`:**
   ```text
-  Clean working tree (all Batch 15F files committed and pushed to origin/main).
+  Working tree modified (Batch 15G.1 & 15G.2 verified files uncommitted).
   ```
-- **Latest Completed Batch:** Batch 15F (Excel Bulk Member Import with Self-Service Password Setup, Batches 15F.1–15F.5).
-- **Current In-Progress Batch:** None (Ready for Batch 15G).
-- **Exact Next Recommended Batch:** **Batch 15G.1 — Social Feed Localization (Hindi/English) or Matrimonial Verification & Chat Hardening**
+- **Latest Completed Batch:** Batch 15G.3 (Stabilization, Security Audit & Checkpoint Preparation).
+- **Current In-Progress Batch:** Stabilization & pre-commit audit complete; awaiting explicit user approval to execute commits.
+- **Exact Next Recommended Batch:** **Execute Commit 1 (Admin Import Fix) and Commit 2 (Unified Batch 15G) upon approval**.
 
 ---
 

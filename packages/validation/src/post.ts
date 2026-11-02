@@ -3,6 +3,11 @@ import { z } from 'zod';
 export const postTypeEnum = z.enum(['GENERAL', 'ANNOUNCEMENT', 'EVENT']);
 export const postMediaTypeEnum = z.enum(['IMAGE', 'VIDEO', 'DOCUMENT']);
 
+export const MAX_VIDEO_FILE_SIZE_BYTES = 30 * 1024 * 1024; // 30 MB
+export const MAX_VIDEO_DURATION_SECONDS = 90; // 90 seconds
+export const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm'] as const;
+export type AllowedVideoMimeType = (typeof ALLOWED_VIDEO_MIME_TYPES)[number];
+
 export const postIdSchema = z.string().uuid('Invalid post ID format. Expected a valid UUID.');
 export const commentIdSchema = z.string().uuid('Invalid comment ID format. Expected a valid UUID.');
 export const postCommentIdSchema = z.object({
@@ -183,7 +188,8 @@ export const postMediaItemSchema = z
         const isYt = parseYouTubeUrl(item.url) !== null;
         const isDirectVideo =
           /\.(mp4|webm|mov|ogg)($|\?)/i.test(item.url) ||
-          item.url.includes('/storage/v1/object/public/');
+          item.url.includes('/storage/v1/object/public/') ||
+          item.url.includes('mock-storage');
         return isYt || isDirectVideo;
       }
 

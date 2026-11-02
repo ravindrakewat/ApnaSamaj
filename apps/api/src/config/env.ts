@@ -20,6 +20,7 @@ export interface AppConfig {
   supabaseSecretKey: string;
   supabaseStorageBucket: string;
   maxMediaFileSizeBytes: number;
+  maxVideoFileSizeBytes: number;
   maxPostMediaCount: number;
 }
 
@@ -43,6 +44,7 @@ export function validateAndGetConfig(): AppConfig {
   const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || '';
   const supabaseStorageBucket = process.env.SUPABASE_STORAGE_BUCKET || 'post-media';
   const maxMediaFileSizeBytes = parseInt(process.env.MAX_MEDIA_FILE_SIZE_BYTES || '5242880', 10); // 5MB
+  const maxVideoFileSizeBytes = parseInt(process.env.MAX_VIDEO_FILE_SIZE_BYTES || '31457280', 10); // 30MB
   const maxPostMediaCount = parseInt(process.env.MAX_POST_MEDIA_COUNT || '4', 10); // 4 images
 
   return {
@@ -57,6 +59,7 @@ export function validateAndGetConfig(): AppConfig {
     supabaseSecretKey,
     supabaseStorageBucket,
     maxMediaFileSizeBytes: isNaN(maxMediaFileSizeBytes) ? 5242880 : maxMediaFileSizeBytes,
+    maxVideoFileSizeBytes: isNaN(maxVideoFileSizeBytes) ? 31457280 : maxVideoFileSizeBytes,
     maxPostMediaCount: isNaN(maxPostMediaCount) ? 4 : maxPostMediaCount,
   };
 }

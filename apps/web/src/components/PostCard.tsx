@@ -85,6 +85,8 @@ import {
   reportPostApi,
 } from '../services/posts.service';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from '@apnasamaj/i18n';
+import { formatRelativeTime } from '../utils/notifications';
 import { buildSharePayload } from '../utils/post-sharing';
 
 interface PostCardProps {
@@ -125,6 +127,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   onPostDeleted,
 }) => {
   const { user } = useAuth();
+  const { t, i18n } = useTranslation(['feed', 'common']);
   const navigate = useNavigate();
 
   // Menu state
@@ -306,7 +309,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         : await pinPostApi(post.id);
       onPostUpdated(updated);
     } catch (err: unknown) {
-      setPinError(err instanceof Error ? err.message : 'Failed to update post pin status.');
+      setPinError(err instanceof Error ? err.message : t('pinStatusFailed'));
     } finally {
       setIsPinning(false);
     }
@@ -347,9 +350,9 @@ export const PostCard: React.FC<PostCardProps> = ({
         details: reportDetails.trim() || undefined,
       });
       setIsReportDialogOpen(false);
-      setReportSuccess(res.message);
+      setReportSuccess(res.message || t('reportSubmitted'));
     } catch (err: unknown) {
-      setReportError(err instanceof Error ? err.message : 'Failed to submit report.');
+      setReportError(err instanceof Error ? err.message : t('reportFailed'));
     } finally {
       setIsSubmittingReport(false);
     }
@@ -417,8 +420,8 @@ export const PostCard: React.FC<PostCardProps> = ({
     const canonicalUrl = getCanonicalPostUrl();
     const isPrivateGroupPost = post.group?.privacy === 'PRIVATE';
     const successMsg = isPrivateGroupPost
-      ? 'Post link copied! Note: Only members of this private group can view it.'
-      : 'Post link copied to clipboard!';
+      ? t('copyLinkPrivateNotice')
+      : t('copyLinkSuccess');
 
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       navigator.clipboard
@@ -427,7 +430,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           setCopyFeedback(successMsg);
         })
         .catch(() => {
-          setCopyFeedback('Failed to copy link to clipboard.');
+          setCopyFeedback(t('copyLinkFailed'));
         });
     } else {
       try {
@@ -442,10 +445,10 @@ export const PostCard: React.FC<PostCardProps> = ({
         if (success) {
           setCopyFeedback(successMsg);
         } else {
-          setCopyFeedback('Failed to copy link to clipboard.');
+          setCopyFeedback(t('copyLinkFailed'));
         }
       } catch {
-        setCopyFeedback('Failed to copy link to clipboard.');
+        setCopyFeedback(t('copyLinkFailed'));
       }
     }
   };
@@ -667,7 +670,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         commentsCount: nextCount,
       });
     } catch (err: unknown) {
-      setDeleteCommentError(err instanceof Error ? err.message : 'Failed to delete comment.');
+      setDeleteCommentError(err instanceof Error ? err.message : t('deleteCommentFailed'));
     } finally {
       setIsDeletingComment(false);
     }
@@ -688,7 +691,7 @@ export const PostCard: React.FC<PostCardProps> = ({
     if (!files || files.length === 0) return;
 
     if (editMedia.length + files.length > 4) {
-      setUpdateError('Maximum 4 images allowed per post.');
+      setUpdateError(t('maxImagesExceeded', { count: 4 }));
       return;
     }
 
@@ -700,7 +703,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.size > 5 * 1024 * 1024) {
-          throw new Error(`File ${file.name} exceeds 5MB size limit.`);
+          throw new Error(t('imageSizeExceeded', { name: file.name }));
         }
         const uploaded = await uploadPostMediaApi(file);
         newItems.push({
@@ -713,7 +716,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       }
       setEditMedia((prev) => [...prev, ...newItems]);
     } catch (err: unknown) {
-      setUpdateError(err instanceof Error ? err.message : 'Failed to upload image.');
+      setUpdateError(err instanceof Error ? err.message : t('uploadFailedGeneral'));
     } finally {
       setIsUploadingEditMedia(false);
       event.target.value = '';
@@ -741,12 +744,12 @@ export const PostCard: React.FC<PostCardProps> = ({
     });
 
     if (!validation.success) {
-      setUpdateError(validation.error.issues[0]?.message || 'Invalid post update.');
+      setUpdateError(validation.error.issues[0]?.message || t('invalidPostUpdate'));
       return;
     }
 
     if (!editContent.trim() && mediaPayload.length === 0) {
-      setUpdateError('A post must have either text content or at least one image.');
+      setUpdateError(t('emptyPostUpdate'));
       return;
     }
 
@@ -756,7 +759,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       onPostUpdated(updated);
       setIsEditDialogOpen(false);
     } catch (err: unknown) {
-      setUpdateError(err instanceof Error ? err.message : 'Failed to update post.');
+      setUpdateError(err instanceof Error ? err.message : t('updatePostFailed'));
     } finally {
       setIsUpdating(false);
     }
@@ -777,7 +780,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       setIsDeleteDialogOpen(false);
       onPostDeleted(post.id);
     } catch (err: unknown) {
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete post.');
+      setDeleteError(err instanceof Error ? err.message : t('deletePostFailed'));
     } finally {
       setIsDeleting(false);
     }
@@ -788,20 +791,20 @@ export const PostCard: React.FC<PostCardProps> = ({
     switch (type) {
       case PostType.ANNOUNCEMENT:
         return {
-          label: 'Announcement',
+          label: t('postTypeAnnouncement'),
           color: 'warning' as const,
           icon: <CampaignIcon fontSize="small" />,
         };
       case PostType.EVENT:
         return {
-          label: 'Event',
+          label: t('postTypeEvent'),
           color: 'info' as const,
           icon: <EventIcon fontSize="small" />,
         };
       case PostType.GENERAL:
       default:
         return {
-          label: 'General',
+          label: t('postTypeGeneral'),
           color: 'default' as const,
           icon: <ForumIcon fontSize="small" />,
         };
@@ -811,13 +814,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   const typeDetails = getPostTypeDetails(post.type);
   const locationString = [post.author.city, post.author.state].filter(Boolean).join(', ');
 
-  const formattedDate = new Date(post.createdAt).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const formattedDate = formatRelativeTime(post.createdAt, i18n.language);
 
   const isEdited = post.createdAt !== post.updatedAt;
 
@@ -870,11 +867,11 @@ export const PostCard: React.FC<PostCardProps> = ({
               ...containerSx,
             }}
             role="img"
-            aria-label={`Attachment ${index + 1} unavailable`}
+            aria-label={t('imageUnavailable')}
           >
             <BrokenImageIcon sx={{ fontSize: 32, opacity: 0.6 }} />
             <Typography variant="caption" color="text.secondary" textAlign="center">
-              Image unavailable
+              {t('imageUnavailable')}
             </Typography>
           </Box>
         );
@@ -1052,9 +1049,9 @@ export const PostCard: React.FC<PostCardProps> = ({
                   color: 'text.secondary',
                   '&:hover': { color: 'primary.main' },
                 }}
-                aria-label={`Watch video on YouTube in a new tab (ID: ${parsedYt.videoId})`}
+                aria-label={t('watchOnYoutube')}
               >
-                <span>Watch on YouTube</span>
+                <span>{t('watchOnYoutube')}</span>
                 <OpenInNewIcon sx={{ fontSize: 14 }} />
               </Link>
             </Box>
@@ -1081,14 +1078,14 @@ export const PostCard: React.FC<PostCardProps> = ({
                   color: 'text.secondary',
                 }}
                 role="alert"
-                aria-label="Video playback unavailable"
+                aria-label={t('videoUnavailable')}
               >
                 <VideocamOffIcon sx={{ fontSize: 40, opacity: 0.6 }} />
                 <Typography variant="body2" color="text.secondary" fontWeight={500}>
-                  Video playback unavailable
+                  {t('videoUnavailable')}
                 </Typography>
                 <Typography variant="caption" color="text.disabled" textAlign="center">
-                  The video file could not be loaded or is in an unsupported format.
+                  {t('videoUnavailableDesc')}
                 </Typography>
               </Box>
             ) : (
@@ -1138,7 +1135,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           }
           action={
             <>
-              <IconButton aria-label="post options" onClick={handleMenuOpen} size="small">
+              <IconButton aria-label={t('postOptionsAria')} onClick={handleMenuOpen} size="small">
                 <MoreVertIcon />
               </IconButton>
               <Menu
@@ -1152,13 +1149,13 @@ export const PostCard: React.FC<PostCardProps> = ({
                   <ListItemIcon>
                     <ShareIcon fontSize="small" color="action" />
                   </ListItemIcon>
-                  <ListItemText>Copy Link to Post</ListItemText>
+                  <ListItemText>{t('copyLink')}</ListItemText>
                 </MenuItem>
                 <MenuItem onClick={handleViewPostDetail}>
                   <ListItemIcon>
                     <OpenInNewIcon fontSize="small" color="action" />
                   </ListItemIcon>
-                  <ListItemText>View Post Details</ListItemText>
+                  <ListItemText>{t('viewPostDetails')}</ListItemText>
                 </MenuItem>
                 {canPin && (
                   <MenuItem onClick={handleTogglePin} disabled={isPinning}>
@@ -1169,7 +1166,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                         <PushPinIcon fontSize="small" color="primary" />
                       )}
                     </ListItemIcon>
-                    <ListItemText>{post.isPinned ? 'Unpin Post' : 'Pin Post'}</ListItemText>
+                    <ListItemText>{post.isPinned ? t('unpinPost') : t('pinPost')}</ListItemText>
                   </MenuItem>
                 )}
                 {canEdit && (
@@ -1177,7 +1174,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <ListItemIcon>
                       <EditIcon fontSize="small" color="primary" />
                     </ListItemIcon>
-                    <ListItemText>Edit Post</ListItemText>
+                    <ListItemText>{t('editPost')}</ListItemText>
                   </MenuItem>
                 )}
                 {canDelete && (
@@ -1185,9 +1182,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <ListItemIcon>
                       <DeleteIcon fontSize="small" color="error" />
                     </ListItemIcon>
-                    <ListItemText>
-                      {!isOwner && isModerator ? 'Moderate Delete' : 'Delete Post'}
-                    </ListItemText>
+                    <ListItemText>{!isOwner && isModerator ? t('moderateDeletePost') : t('deletePost')}</ListItemText>
                   </MenuItem>
                 )}
                 {!isOwner && user && (
@@ -1195,7 +1190,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <ListItemIcon>
                       <FlagOutlinedIcon fontSize="small" color="warning" />
                     </ListItemIcon>
-                    <ListItemText>Report Post</ListItemText>
+                    <ListItemText>{t('reportPost')}</ListItemText>
                   </MenuItem>
                 )}
               </Menu>
@@ -1240,7 +1235,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                   '&:hover': { color: 'primary.main', textDecoration: 'underline' },
                 }}
               >
-                {formattedDate} {isEdited && '(edited)'}
+                {formattedDate} {isEdited && ` ${t('edited')}`}
               </Typography>
               {locationString && (
                 <Box display="flex" alignItems="center" gap={0.5}>
@@ -1264,7 +1259,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           <Box mb={1.5} display="flex" alignItems="center" gap={1} flexWrap="wrap">
             {post.isPinned && (
               <Chip
-                label="Pinned"
+                label={t('pinned')}
                 size="small"
                 color="secondary"
                 icon={<PushPinIcon fontSize="small" />}
@@ -1316,7 +1311,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 textTransform: 'none',
               }}
             >
-              {likesCount > 0 ? `${likesCount} ${likesCount === 1 ? 'Like' : 'Likes'}` : 'Like'}
+              {likesCount > 0 ? (likesCount === 1 ? t('likeWithCount', { count: likesCount }) : t('likeWithCount_plural', { count: likesCount })) : t('like')}
             </Button>
 
             {/* Comment Toggle Button */}
@@ -1330,9 +1325,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 textTransform: 'none',
               }}
             >
-              {commentsCount > 0
-                ? `${commentsCount} ${commentsCount === 1 ? 'Comment' : 'Comments'}`
-                : 'Comment'}
+              {commentsCount > 0 ? (commentsCount === 1 ? t('commentWithCount', { count: commentsCount }) : t('commentWithCount_plural', { count: commentsCount })) : t('comment')}
             </Button>
 
             {/* Share Button */}
@@ -1361,20 +1354,20 @@ export const PostCard: React.FC<PostCardProps> = ({
                 <ListItemIcon>
                   <WhatsAppIcon fontSize="small" sx={{ color: '#25D366' }} />
                 </ListItemIcon>
-                <ListItemText>Share on WhatsApp</ListItemText>
+                <ListItemText>{t('shareWhatsApp')}</ListItemText>
               </MenuItem>
               <MenuItem onClick={handleCopyLink}>
                 <ListItemIcon>
                   <ContentCopyIcon fontSize="small" color="action" />
                 </ListItemIcon>
-                <ListItemText>Copy Link</ListItemText>
+                <ListItemText>{t('copyLink')}</ListItemText>
               </MenuItem>
             </Menu>
           </Box>
 
           <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
             {/* View Analytics Indicator */}
-            <Tooltip title="Verified views and unique member reach">
+            <Tooltip title={t('viewsTooltip')}>
               <Box
                 display="flex"
                 alignItems="center"
@@ -1391,13 +1384,13 @@ export const PostCard: React.FC<PostCardProps> = ({
               >
                 <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
                 <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
-                  {viewsCount} {viewsCount === 1 ? 'View' : 'Views'} · {uniqueMembersCount} {uniqueMembersCount === 1 ? 'Member' : 'Members'}
+                  {viewsCount === 1 && uniqueMembersCount === 1 ? t('viewsAndMembers_singularBoth', { views: viewsCount, members: uniqueMembersCount }) : viewsCount === 1 ? t('viewsAndMembers_singularView', { views: viewsCount, members: uniqueMembersCount }) : uniqueMembersCount === 1 ? t('viewsAndMembers_singularMember', { views: viewsCount, members: uniqueMembersCount }) : t('viewsAndMembers', { views: viewsCount, members: uniqueMembersCount })}
                 </Typography>
               </Box>
             </Tooltip>
 
             {!isOwner && isModerator && (
-              <Chip label="Admin Control Enabled" size="small" variant="outlined" color="secondary" />
+              <Chip label={t('adminControlEnabled')} size="small" variant="outlined" color="secondary" />
             )}
           </Box>
         </CardActions>
@@ -1430,7 +1423,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 <TextField
                   fullWidth
                   size="small"
-                  placeholder="Write a comment for the community..."
+                  placeholder={t('writeCommentPlaceholder')}
                   value={newCommentText}
                   onChange={(e) => setNewCommentText(e.target.value)}
                   disabled={isSubmittingComment}
@@ -1475,7 +1468,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 }}
               >
                 <Typography variant="body2" color="text.secondary">
-                  No comments yet. Be the first to start the conversation!
+                  {t('noCommentsYet')}
                 </Typography>
               </Box>
             ) : (
@@ -1486,12 +1479,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                   const isEditingThisComment = editingCommentId === comment.id;
                   const isHighlighted = highlightedCommentId === comment.id;
 
-                  const commentDate = new Date(comment.createdAt).toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  });
+                  const commentDate = formatRelativeTime(comment.createdAt, i18n.language);
 
                   return (
                     <Box
@@ -1545,7 +1533,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                         {!isEditingThisComment && (
                           <Box display="flex" gap={0.5}>
                             {isCommentOwner && (
-                              <Tooltip title="Edit comment">
+                              <Tooltip title={t('editComment')}>
                                 <IconButton
                                   size="small"
                                   onClick={() => handleStartEditComment(comment)}
@@ -1555,7 +1543,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                               </Tooltip>
                             )}
                             {canDeleteComment && (
-                              <Tooltip title={!isCommentOwner && isModerator ? 'Moderate delete' : 'Delete comment'}>
+                              <Tooltip title={!isCommentOwner && isModerator ? t('moderateDeleteComment') : t('deleteComment')}>
                                 <IconButton
                                   size="small"
                                   color="error"
@@ -1600,7 +1588,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                               onClick={() => handleSaveEditComment(comment.id)}
                               disabled={isUpdatingComment || !editingCommentText.trim()}
                             >
-                              {isUpdatingComment ? 'Saving...' : 'Save'}
+                              {isUpdatingComment ? t('common:loading') : t('common:save')}
                             </Button>
                           </Box>
                         </Box>
@@ -1630,7 +1618,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                         ) : undefined
                       }
                     >
-                      {isLoadingMoreComments ? 'Loading...' : 'Load more comments'}
+                      {isLoadingMoreComments ? t('loadingComments') : t('loadMoreComments')}
                     </Button>
                   </Box>
                 )}
@@ -1645,7 +1633,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         open={Boolean(commentToDelete)}
         onClose={() => !isDeletingComment && setCommentToDelete(null)}
       >
-        <DialogTitle sx={{ fontWeight: 'bold' }}>Confirm Comment Deletion</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>{t('confirmDeleteCommentTitle')}</DialogTitle>
         <DialogContent>
           {deleteCommentError && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -1653,9 +1641,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             </Alert>
           )}
           <DialogContentText>
-            {commentToDelete && user?.id !== commentToDelete.authorId && isModerator
-              ? 'As a moderator, you are deleting this member comment. This action cannot be undone.'
-              : 'Are you sure you want to delete your comment?'}
+            {commentToDelete && user?.id !== commentToDelete.authorId && isModerator ? t('confirmDeleteCommentModerator') : t('confirmDeleteCommentUser')}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
@@ -1679,7 +1665,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               )
             }
           >
-            {isDeletingComment ? 'Deleting...' : 'Delete Comment'}
+            {isDeletingComment ? t('deleting') : t('deleteComment')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1691,7 +1677,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle sx={{ fontWeight: 'bold' }}>Edit Community Post</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>{t('editPostTitle')}</DialogTitle>
         <DialogContent dividers>
           {updateError && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -1709,9 +1695,9 @@ export const PostCard: React.FC<PostCardProps> = ({
             disabled={isUpdating || isUploadingEditMedia}
             sx={{ mb: 2, mt: 1 }}
           >
-            <MenuItem value={PostType.GENERAL}>General Post</MenuItem>
-            <MenuItem value={PostType.EVENT}>Community Event</MenuItem>
-            {isModerator && <MenuItem value={PostType.ANNOUNCEMENT}>Announcement</MenuItem>}
+            <MenuItem value={PostType.GENERAL}>{t('postTypeGeneral')}</MenuItem>
+            <MenuItem value={PostType.EVENT}>{t('postTypeEvent')}</MenuItem>
+            {isModerator && <MenuItem value={PostType.ANNOUNCEMENT}>{t('postTypeAnnouncement')}</MenuItem>}
           </TextField>
 
           <TextField
@@ -1719,8 +1705,8 @@ export const PostCard: React.FC<PostCardProps> = ({
             multiline
             minRows={4}
             maxRows={8}
-            label="Post Content"
-            placeholder="Share something with your community..."
+            label={t('editPostContentLabel')}
+            placeholder={t('editPostContentPlaceholder')}
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
             disabled={isUpdating || isUploadingEditMedia}
@@ -1729,7 +1715,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           {/* Edit Attached Images */}
           <Box mt={2}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Attached Images ({editMedia.length}/4)
+              {t('attachedImagesCount', { current: editMedia.length, max: 4 })}
             </Typography>
 
             {editMedia.length > 0 && (
@@ -1798,7 +1784,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                     }
                     disabled={isUpdating || isUploadingEditMedia}
                   >
-                    {isUploadingEditMedia ? 'Uploading...' : 'Add Images'}
+                    {isUploadingEditMedia ? t('uploading') : t('addImages')}
                   </Button>
                 </label>
               </Box>
@@ -1820,14 +1806,14 @@ export const PostCard: React.FC<PostCardProps> = ({
             disabled={isUpdating || isUploadingEditMedia || (!editContent.trim() && editMedia.length === 0)}
             startIcon={isUpdating ? <CircularProgress size={18} color="inherit" /> : undefined}
           >
-            {isUpdating ? 'Saving...' : 'Save Changes'}
+            {isUpdating ? t('uploading') : t('saveChanges')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Post Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onClose={() => !isDeleting && setIsDeleteDialogOpen(false)}>
-        <DialogTitle sx={{ fontWeight: 'bold' }}>Confirm Deletion</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>{t('confirmDeletePostTitle')}</DialogTitle>
         <DialogContent>
           {deleteError && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -1835,9 +1821,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             </Alert>
           )}
           <DialogContentText>
-            {!isOwner && isModerator
-              ? 'As a community administrator, you are about to delete this member post for moderation. Attached media will also be removed. This action cannot be undone.'
-              : 'Are you sure you want to delete your post? Attached media will also be removed. This action cannot be undone.'}
+            {!isOwner && isModerator ? t('confirmDeletePostModerator') : t('confirmDeletePostUser')}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
@@ -1851,7 +1835,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             disabled={isDeleting}
             startIcon={isDeleting ? <CircularProgress size={18} color="inherit" /> : <DeleteIcon />}
           >
-            {isDeleting ? 'Deleting...' : 'Delete Post'}
+            {isDeleting ? t('deleting') : t('deletePost')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1913,7 +1897,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle sx={{ fontWeight: 'bold' }}>Report Community Post</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>{t('reportPostTitle')}</DialogTitle>
         <DialogContent dividers>
           {reportError && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -1921,32 +1905,32 @@ export const PostCard: React.FC<PostCardProps> = ({
             </Alert>
           )}
           <DialogContentText sx={{ mb: 2 }}>
-            Help our moderators keep this community safe. What is the issue with this post?
+            {t('reportPostDesc')}
           </DialogContentText>
           <TextField
             select
             fullWidth
             size="small"
-            label="Report Reason"
+            label={t('reportReasonLabel')}
             value={reportReason}
             onChange={(e) => setReportReason(e.target.value as ReportPostReason)}
             disabled={isSubmittingReport}
             sx={{ mb: 2 }}
           >
-            <MenuItem value="INAPPROPRIATE_CONTENT">Inappropriate Content</MenuItem>
-            <MenuItem value="SPAM">Spam or Promotional</MenuItem>
-            <MenuItem value="HARASSMENT">Harassment or Bullying</MenuItem>
-            <MenuItem value="HATE_SPEECH">Hate Speech</MenuItem>
-            <MenuItem value="MISINFORMATION">Misinformation</MenuItem>
-            <MenuItem value="OTHER">Other Reason</MenuItem>
+            <MenuItem value="INAPPROPRIATE_CONTENT">{t('reportReasonInappropriate')}</MenuItem>
+            <MenuItem value="SPAM">{t('reportReasonSpam')}</MenuItem>
+            <MenuItem value="HARASSMENT">{t('reportReasonHarassment')}</MenuItem>
+            <MenuItem value="HATE_SPEECH">{t('reportReasonHate')}</MenuItem>
+            <MenuItem value="MISINFORMATION">{t('reportReasonMisinformation')}</MenuItem>
+            <MenuItem value="OTHER">{t('reportReasonOther')}</MenuItem>
           </TextField>
           <TextField
             fullWidth
             multiline
             rows={3}
             size="small"
-            label="Additional Details (Optional)"
-            placeholder="Describe why this content violates community guidelines..."
+            label={t('reportDetailsLabel')}
+            placeholder={t('reportDetailsPlaceholder')}
             value={reportDetails}
             onChange={(e) => setReportDetails(e.target.value)}
             disabled={isSubmittingReport}
@@ -1973,7 +1957,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               )
             }
           >
-            {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+            {isSubmittingReport ? t('submittingReport') : t('submitReport')}
           </Button>
         </DialogActions>
       </Dialog>

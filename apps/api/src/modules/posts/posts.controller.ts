@@ -42,7 +42,8 @@ import {
   deleteComment,
   PostServiceError,
 } from './posts.service';
-import { uploadPostMedia, StorageError } from '../../services/storage.service';
+import fs from 'fs';
+import { uploadPostMedia, uploadPostVideo, StorageError } from '../../services/storage.service';
 
 export async function createPostHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -1142,5 +1143,76 @@ export async function uploadMediaHandler(req: AuthenticatedRequest, res: Respons
       timestamp: new Date().toISOString(),
     };
     res.status(500).json(response);
+  }
+}
+
+export async function uploadVideoHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const tempFilePath = req.file?.path;
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    if (!req.file || !tempFilePath) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'No video file uploaded.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const uploadResult = await uploadPostVideo(
+      userId,
+      tempFilePath,
+      req.file.mimetype,
+      req.file.originalname
+    );
+
+    const response: ApiResponse<UploadMediaResponseData> = {
+      success: true,
+      message: 'Video uploaded successfully.',
+      data: uploadResult,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(201).json(response);
+  } catch (err: unknown) {
+    if (err instanceof StorageError) {
+      const response: ApiResponse = {
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(err.statusCode).json(response);
+      return;
+    }
+
+    console.error('[Posts Controller] Upload video error:', err);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to upload video.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  } finally {
+    // Guaranteed disk cleanup of temporary video upload file
+    if (tempFilePath) {
+      try {
+        if (fs.existsSync(tempFilePath)) {
+          await fs.promises.unlink(tempFilePath);
+        }
+      } catch (cleanupErr) {
+        console.warn('[Posts Controller] Failed to unlink temp video file:', cleanupErr);
+      }
+    }
   }
 }

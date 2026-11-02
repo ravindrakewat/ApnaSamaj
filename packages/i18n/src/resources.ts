@@ -2,11 +2,13 @@ import commonHi from './locales/hi/common.json';
 import navHi from './locales/hi/nav.json';
 import authHi from './locales/hi/auth.json';
 import notificationsHi from './locales/hi/notifications.json';
+import feedHi from './locales/hi/feed.json';
 
 import commonEn from './locales/en/common.json';
 import navEn from './locales/en/nav.json';
 import authEn from './locales/en/auth.json';
 import notificationsEn from './locales/en/notifications.json';
+import feedEn from './locales/en/feed.json';
 
 export const resources = {
   hi: {
@@ -14,11 +16,13 @@ export const resources = {
     nav: navHi,
     auth: authHi,
     notifications: notificationsHi,
+    feed: feedHi,
   },
   en: {
     common: commonEn,
     nav: navEn,
     auth: authEn,
     notifications: notificationsEn,
+    feed: feedEn,
   },
 } as const;

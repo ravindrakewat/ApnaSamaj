@@ -12,6 +12,8 @@ import {
   Stack,
   IconButton,
   Tooltip,
+  LinearProgress,
+  Chip,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import CampaignIcon from '@mui/icons-material/Campaign';
@@ -21,10 +23,50 @@ import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import CloseIcon from '@mui/icons-material/Close';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { PostItem, PostType, UserRole } from '@apnasamaj/shared-types';
-import { createPostSchema, parseYouTubeUrl, ParsedYouTubeVideo } from '@apnasamaj/validation';
-import { createPostApi, uploadPostMediaApi } from '../services/posts.service';
+import {
+  createPostSchema,
+  parseYouTubeUrl,
+  ParsedYouTubeVideo,
+  MAX_VIDEO_FILE_SIZE_BYTES,
+  MAX_VIDEO_DURATION_SECONDS,
+  ALLOWED_VIDEO_MIME_TYPES,
+} from '@apnasamaj/validation';
+import { useTranslation } from '@apnasamaj/i18n';
+import { createPostApi, uploadPostMediaApi, uploadPostVideoApi } from '../services/posts.service';
 import { useAuth } from '../context/AuthContext';
+
+
+export interface UploadedVideoItem {
+  url: string;
+  previewUrl: string;
+  file: File;
+  fileName: string;
+  fileSizeBytes: number;
+  durationSeconds?: number;
+  isUploading: boolean;
+  uploadProgress: number;
+  error?: string;
+}
+
+export function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    const objectUrl = URL.createObjectURL(file);
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(video.duration);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to read video metadata'));
+    };
+    video.src = objectUrl;
+  });
+}
 
 interface UploadedMediaItem {
   url: string;
@@ -44,7 +86,11 @@ const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'
 
 export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId, onPostCreated }) => {
   const { user } = useAuth();
+  const { t } = useTranslation(['feed', 'common']);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
+  const [attachedVideo, setAttachedVideo] = useState<UploadedVideoItem | null>(null);
+
 
   const [content, setContent] = useState('');
   const [postType, setPostType] = useState<PostType>(PostType.GENERAL);
@@ -66,18 +112,117 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
   const handleAddYoutubeVideo = () => {
     const trimmed = youtubeUrlInput.trim();
     if (!trimmed) {
-      setYoutubeInputError('Please enter a YouTube video URL.');
+      setYoutubeInputError(t('youtubeRequired'));
       return;
     }
     const parsed = parseYouTubeUrl(trimmed);
     if (!parsed) {
-      setYoutubeInputError('Invalid YouTube URL. Please enter a valid watch, shorts, or youtu.be link.');
+      setYoutubeInputError(t('youtubeInvalid'));
       return;
     }
     setAttachedYoutubeVideo(parsed);
     setYoutubeUrlInput('');
     setYoutubeInputOpen(false);
     setYoutubeInputError(null);
+  };
+
+
+  const uploadVideoWithProgress = async (file: File, previewUrl: string) => {
+    try {
+      const uploadResult = await uploadPostVideoApi(file, (percent) => {
+        setAttachedVideo((prev) => (prev ? { ...prev, uploadProgress: percent } : null));
+      });
+      setAttachedVideo((prev) =>
+        prev && prev.previewUrl === previewUrl
+          ? { ...prev, url: uploadResult.url, isUploading: false, uploadProgress: 100 }
+          : prev
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('uploadFailedGeneral');
+      setAttachedVideo((prev) =>
+        prev && prev.previewUrl === previewUrl
+          ? { ...prev, isUploading: false, error: msg }
+          : prev
+      );
+    }
+  };
+
+  const handleSelectVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+
+    if (attachedVideo || attachedYoutubeVideo) {
+      setErrorMessage(t('composerVideoDisabledTooltip'));
+      return;
+    }
+
+    if (mediaList.length >= 4) {
+      setErrorMessage(t('composerVideoDisabledTooltip'));
+      return;
+    }
+
+    setErrorMessage(null);
+
+    // 1. File size check
+    if (file.size > MAX_VIDEO_FILE_SIZE_BYTES) {
+      setErrorMessage(t('videoSizeExceeded'));
+      return;
+    }
+
+    // 2. MIME type check
+    if (!ALLOWED_VIDEO_MIME_TYPES.includes(file.type as any)) {
+      setErrorMessage(t('unsupportedVideoFormat'));
+      return;
+    }
+
+    // 3. Duration check via HTMLVideoElement
+    let duration = 0;
+    try {
+      duration = await getVideoDuration(file);
+    } catch {
+      setErrorMessage(t('videoMetadataError'));
+      return;
+    }
+
+    if (duration > MAX_VIDEO_DURATION_SECONDS) {
+      setErrorMessage(
+        t('videoDurationExceeded', {
+          actual: Math.round(duration),
+        })
+      );
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    const newVideoItem: UploadedVideoItem = {
+      url: '',
+      previewUrl,
+      file,
+      fileName: file.name,
+      fileSizeBytes: file.size,
+      durationSeconds: Math.round(duration),
+      isUploading: true,
+      uploadProgress: 0,
+    };
+
+    setAttachedVideo(newVideoItem);
+    await uploadVideoWithProgress(file, previewUrl);
+  };
+
+  const handleRemoveVideo = () => {
+    if (attachedVideo) {
+      URL.revokeObjectURL(attachedVideo.previewUrl);
+      setAttachedVideo(null);
+    }
+  };
+
+  const handleRetryVideoUpload = async () => {
+    if (!attachedVideo) return;
+    setAttachedVideo((prev) =>
+      prev ? { ...prev, isUploading: true, error: undefined, uploadProgress: 0 } : null
+    );
+    await uploadVideoWithProgress(attachedVideo.file, attachedVideo.previewUrl);
   };
 
   const handleRemoveYoutubeVideo = () => {
@@ -90,7 +235,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     const files = Array.from(e.target.files);
 
     if (mediaList.length + files.length > MAX_IMAGES) {
-      setErrorMessage(`You can upload a maximum of ${MAX_IMAGES} images per post.`);
+      setErrorMessage(t('maxImagesExceeded', { count: MAX_IMAGES }));
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -100,12 +245,12 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     // Validate each selected file
     for (const file of files) {
       if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-        setErrorMessage(`"${file.name}" is not a supported format. Please select JPEG, PNG, WebP, or GIF.`);
+        setErrorMessage(t('unsupportedImageFormat', { name: file.name }));
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
       if (file.size > MAX_FILE_SIZE_BYTES) {
-        setErrorMessage(`"${file.name}" exceeds the 5MB size limit.`);
+        setErrorMessage(t('imageSizeExceeded', { name: file.name }));
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
@@ -132,7 +277,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
           )
         );
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Upload failed';
+        const msg = err instanceof Error ? err.message : t('uploadFailedGeneral');
         setMediaList((prev) =>
           prev.map((item) =>
             item.previewUrl === previewUrl
@@ -184,6 +329,14 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
         mediaType: 'IMAGE' as const,
       }));
 
+    if (attachedVideo && attachedVideo.url) {
+      validMedia.push({
+        url: attachedVideo.url,
+        mediaType: 'VIDEO',
+        order: validMedia.length,
+      });
+    }
+
     if (attachedYoutubeVideo) {
       validMedia.push({
         url: attachedYoutubeVideo.embedUrl,
@@ -206,7 +359,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     });
 
     if (!validation.success) {
-      const issue = validation.error.issues[0]?.message || 'Please enter valid post content or attach media.';
+      const issue = validation.error.issues[0]?.message || t('contentOrMediaRequired');
       setErrorMessage(issue);
       return;
     }
@@ -219,13 +372,15 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       // Clean up object URLs
       mediaList.forEach((m) => URL.revokeObjectURL(m.previewUrl));
       setMediaList([]);
+      if (attachedVideo) URL.revokeObjectURL(attachedVideo.previewUrl);
+      setAttachedVideo(null);
       setAttachedYoutubeVideo(null);
       setYoutubeUrlInput('');
       setYoutubeInputOpen(false);
       setYoutubeInputError(null);
       onPostCreated(created);
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to publish post.');
+      setErrorMessage(err instanceof Error ? err.message : t('publishPostFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -233,8 +388,9 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
 
   const remainingChars = 5000 - content.length;
   const canSubmit =
-    (content.trim().length > 0 || mediaList.length > 0 || !!attachedYoutubeVideo) &&
+    (content.trim().length > 0 || mediaList.length > 0 || !!attachedYoutubeVideo || !!attachedVideo) &&
     !isAnyMediaUploading &&
+    !attachedVideo?.isUploading &&
     !isSubmitting;
 
   return (
@@ -245,10 +401,10 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
         </Avatar>
         <Box>
           <Typography variant="subtitle1" fontWeight="bold" sx={{ lineHeight: 1.2 }}>
-            {user?.fullName || 'Community Member'}
+            {user?.fullName || t('composerDefaultAuthor')}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Share updates, discussions, photos, or announcements with Apna Samaj
+            {t('composerSubtitle')}
           </Typography>
         </Box>
       </Box>
@@ -265,7 +421,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
           fullWidth
           minRows={3}
           maxRows={8}
-          placeholder="What's happening in your community? Share an update, photo, or thought..."
+          placeholder={t('composerPlaceholder')}
           value={content}
           onChange={(e) => setContent(e.target.value)}
           disabled={isSubmitting}
@@ -286,13 +442,13 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
           >
             <Typography variant="subtitle2" fontWeight={600} mb={1} display="flex" alignItems="center" gap={0.75}>
               <YouTubeIcon sx={{ color: '#FF0000', fontSize: 20 }} />
-              Embed YouTube Video
+              {t('youtubeModalTitle')}
             </Typography>
             <Box display="flex" gap={1} alignItems="flex-start">
               <TextField
                 fullWidth
                 size="small"
-                placeholder="Paste YouTube link (e.g. https://www.youtube.com/watch?v=... or https://youtu.be/...)"
+                placeholder={t('youtubeModalPlaceholder')}
                 value={youtubeUrlInput}
                 onChange={(e) => {
                   setYoutubeUrlInput(e.target.value);
@@ -316,7 +472,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
                 disabled={!youtubeUrlInput.trim() || isSubmitting}
                 sx={{ minWidth: 80, height: 40 }}
               >
-                Add
+                {t('add')}
               </Button>
               <Button
                 variant="outlined"
@@ -328,9 +484,144 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
                 }}
                 sx={{ height: 40 }}
               >
-                Cancel
+                {t('common:cancel')}
               </Button>
             </Box>
+          </Box>
+        )}
+
+        
+        {/* Direct Uploaded Video Preview Card */}
+        {attachedVideo && (
+          <Box
+            sx={{
+              p: 2,
+              mb: 2,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: attachedVideo.error ? 'error.main' : 'divider',
+              bgcolor: 'background.paper',
+              position: 'relative',
+              boxShadow: 1,
+            }}
+          >
+            <Box display="flex" alignItems="center" gap={2}>
+              <Box
+                sx={{
+                  position: 'relative',
+                  width: { xs: 120, sm: 160 },
+                  height: { xs: 68, sm: 90 },
+                  borderRadius: 1.5,
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  bgcolor: '#000',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Box
+                  component="video"
+                  src={attachedVideo.previewUrl}
+                  sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  preload="metadata"
+                />
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: 'rgba(0,0,0,0.25)',
+                  }}
+                >
+                  <PlayCircleOutlineIcon sx={{ color: 'white', fontSize: 32 }} />
+                </Box>
+              </Box>
+
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box display="flex" alignItems="center" gap={0.75} mb={0.5}>
+                  <VideocamIcon color="primary" sx={{ fontSize: 20 }} />
+                  <Typography variant="subtitle2" fontWeight={600} noWrap>
+                    {t('videoAttachedTitle')}
+                  </Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: '80%' }}>
+                  {attachedVideo.fileName}
+                </Typography>
+                <Box display="flex" gap={1} mt={0.5} flexWrap="wrap">
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={`${(attachedVideo.fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`}
+                    sx={{ height: 20, fontSize: '0.7rem' }}
+                  />
+                  {attachedVideo.durationSeconds !== undefined && (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color="info"
+                      label={`${Math.floor(attachedVideo.durationSeconds / 60)}:${String(
+                        attachedVideo.durationSeconds % 60
+                      ).padStart(2, '0')}`}
+                      sx={{ height: 20, fontSize: '0.7rem' }}
+                    />
+                  )}
+                </Box>
+              </Box>
+
+              <Tooltip title={t('removeVideoAria')}>
+                <IconButton
+                  size="small"
+                  onClick={handleRemoveVideo}
+                  disabled={isSubmitting}
+                  aria-label={t('removeVideoAria')}
+                  sx={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    bgcolor: 'action.hover',
+                    '&:hover': { bgcolor: 'error.light', color: 'white' },
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+
+            {/* Video Upload Progress Bar */}
+            {attachedVideo.isUploading && (
+              <Box sx={{ mt: 1.5 }}>
+                <LinearProgress
+                  variant="determinate"
+                  value={attachedVideo.uploadProgress}
+                  sx={{ height: 6, borderRadius: 1 }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                  {t('videoUploading', { progress: attachedVideo.uploadProgress })}
+                </Typography>
+              </Box>
+            )}
+
+            {/* Video Upload Error Alert & Retry */}
+            {attachedVideo.error && (
+              <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Alert severity="error" sx={{ flex: 1, py: 0.5 }}>
+                  {attachedVideo.error}
+                </Alert>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  startIcon={<RefreshIcon />}
+                  onClick={handleRetryVideoUpload}
+                  disabled={isSubmitting}
+                >
+                  {t('retryUpload')}
+                </Button>
+              </Box>
+            )}
           </Box>
         )}
 
@@ -388,7 +679,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
               <Box display="flex" alignItems="center" gap={0.75} mb={0.5}>
                 <YouTubeIcon sx={{ color: '#FF0000', fontSize: 20 }} />
                 <Typography variant="subtitle2" fontWeight={600} noWrap>
-                  YouTube Video Attached
+                  {t('composerYoutubeAttachedTitle')}
                 </Typography>
               </Box>
               <Typography variant="body2" color="text.secondary" noWrap>
@@ -401,12 +692,12 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
               )}
             </Box>
 
-            <Tooltip title="Remove YouTube video">
+            <Tooltip title={t('removeYoutubeAria')}>
               <IconButton
                 size="small"
                 onClick={handleRemoveYoutubeVideo}
                 disabled={isSubmitting}
-                aria-label="Remove YouTube video"
+                aria-label={t('removeYoutubeAria')}
                 sx={{
                   position: 'absolute',
                   top: 8,
@@ -440,7 +731,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
               >
                 <img
                   src={item.previewUrl}
-                  alt={`Upload preview ${index + 1}`}
+                  alt={t('uploadPreviewAlt', { index: index + 1 })}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
 
@@ -474,12 +765,13 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
                       textAlign: 'center',
                     }}
                   >
-                    Failed
+                    {t('uploadFailed')}
                   </Box>
                 )}
 
                 <IconButton
                   size="small"
+                  aria-label={t('removeMediaAria')}
                   onClick={() => handleRemoveMedia(item.previewUrl)}
                   disabled={isSubmitting}
                   sx={{
@@ -518,23 +810,58 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
             />
 
             {/* Photo Picker Button */}
-            <Tooltip title={mediaList.length >= MAX_IMAGES ? 'Maximum 4 images reached' : 'Attach photo (up to 4)'}>
+            <Tooltip title={mediaList.length >= MAX_IMAGES ? t('composerMaxPhotosTooltip', { max: MAX_IMAGES }) : t('composerPhotoTooltip', { max: MAX_IMAGES })}>
               <span>
                 <Button
                   variant="outlined"
                   size="small"
                   startIcon={<AddPhotoAlternateIcon />}
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isSubmitting || mediaList.length >= MAX_IMAGES}
+                  disabled={isSubmitting || mediaList.length >= MAX_IMAGES || (mediaList.length + (attachedVideo || attachedYoutubeVideo ? 1 : 0) >= 4)}
                   sx={{ borderRadius: 2 }}
                 >
-                  Photo ({mediaList.length}/{MAX_IMAGES})
+                  {t('composerPhoto', { current: mediaList.length, max: MAX_IMAGES })}
+                </Button>
+              </span>
+            </Tooltip>
+
+            
+            {/* Hidden native video file input */}
+            <input
+              type="file"
+              ref={videoFileInputRef}
+              style={{ display: 'none' }}
+              accept="video/mp4,video/webm"
+              onChange={handleSelectVideo}
+            />
+
+            {/* Direct Video Action Button */}
+            <Tooltip
+              title={
+                attachedVideo
+                  ? t('composerVideoAttachedTooltip')
+                  : attachedYoutubeVideo || mediaList.length >= 4
+                  ? t('composerVideoDisabledTooltip')
+                  : t('composerVideoTooltip')
+              }
+            >
+              <span>
+                <Button
+                  variant={attachedVideo ? 'contained' : 'outlined'}
+                  color={attachedVideo ? 'secondary' : 'primary'}
+                  size="small"
+                  startIcon={<VideocamIcon />}
+                  onClick={() => videoFileInputRef.current?.click()}
+                  disabled={isSubmitting || !!attachedVideo || !!attachedYoutubeVideo || mediaList.length >= 4}
+                  sx={{ borderRadius: 2 }}
+                >
+                  {attachedVideo ? t('composerVideoAttached') : t('composerVideo')}
                 </Button>
               </span>
             </Tooltip>
 
             {/* YouTube Video Action Button */}
-            <Tooltip title={attachedYoutubeVideo ? 'Only 1 video allowed per post' : 'Embed YouTube video'}>
+            <Tooltip title={attachedYoutubeVideo ? t('composerYoutubeAttachedTooltip') : t('composerYoutubeTooltip')}>
               <span>
                 <Button
                   variant={attachedYoutubeVideo ? 'contained' : 'outlined'}
@@ -550,7 +877,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
                   disabled={isSubmitting || !!attachedYoutubeVideo}
                   sx={{ borderRadius: 2 }}
                 >
-                  {attachedYoutubeVideo ? 'YouTube Attached' : 'YouTube Video'}
+                  {attachedYoutubeVideo ? t('composerYoutubeAttached') : t('composerYoutube')}
                 </Button>
               </span>
             </Tooltip>
@@ -567,20 +894,20 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
               <MenuItem value={PostType.GENERAL}>
                 <Box display="flex" alignItems="center" gap={1}>
                   <ForumIcon fontSize="small" color="action" />
-                  <span>General Post</span>
+                  <span>{t('postTypeGeneral')}</span>
                 </Box>
               </MenuItem>
               <MenuItem value={PostType.EVENT}>
                 <Box display="flex" alignItems="center" gap={1}>
                   <EventIcon fontSize="small" color="primary" />
-                  <span>Community Event</span>
+                  <span>{t('postTypeEvent')}</span>
                 </Box>
               </MenuItem>
               {isAdminOrMod && (
                 <MenuItem value={PostType.ANNOUNCEMENT}>
                   <Box display="flex" alignItems="center" gap={1}>
                     <CampaignIcon fontSize="small" color="warning" />
-                    <span>Announcement</span>
+                    <span>{t('postTypeAnnouncement')}</span>
                   </Box>
                 </MenuItem>
               )}
@@ -590,7 +917,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
               variant="caption"
               color={remainingChars < 200 ? 'error.main' : 'text.secondary'}
             >
-              {remainingChars} chars left
+              {t('charsLeft', { count: remainingChars })}
             </Typography>
           </Stack>
 
@@ -602,7 +929,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
             startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : <SendIcon />}
             sx={{ px: 3, py: 1, borderRadius: 2, fontWeight: 600 }}
           >
-            {isSubmitting ? 'Publishing...' : 'Publish Post'}
+            {isSubmitting ? t('publishing') : t('publishPost')}
           </Button>
         </Box>
       </Box>

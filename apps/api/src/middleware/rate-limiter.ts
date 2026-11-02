@@ -92,6 +92,21 @@ export const reportPostRateLimiter = rateLimit({
   },
 });
 
+export const uploadVideoRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 video uploads per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many video upload requests from this network. Please wait a few minutes before uploading again.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});
+
 export const forgotPasswordIpRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Limit each IP to 5 forgot-password requests per 15 min

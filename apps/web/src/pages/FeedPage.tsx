@@ -23,6 +23,7 @@ import EventIcon from '@mui/icons-material/Event';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
 import { PostItem, PostType, FeedPaginationMeta } from '@apnasamaj/shared-types';
+import { useTranslation } from '@apnasamaj/i18n';
 import { getFeedApi } from '../services/posts.service';
 import { CreatePostComposer } from '../components/CreatePostComposer';
 import { PostCard } from '../components/PostCard';
@@ -53,6 +54,7 @@ function getPageFromParams(params: URLSearchParams): number {
 }
 
 export const FeedPage: React.FC = () => {
+  const { t } = useTranslation(['feed', 'common']);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // 1. Initial State synchronized with URL parameters
@@ -223,7 +225,7 @@ export const FeedPage: React.FC = () => {
 
         if (requestIdRef.current === currentRequestId && isMountedRef.current) {
           setErrorMessage(
-            err instanceof Error ? err.message : 'कम्युनिटी फ़ीड लोड करने में समस्या हुई। कृपया पुनः प्रयास करें।'
+            err instanceof Error ? err.message : t('loadFeedError')
           );
         }
       } finally {
@@ -327,11 +329,11 @@ export const FeedPage: React.FC = () => {
           <Box display="flex" alignItems="center" gap={1.5}>
             <DynamicFeedIcon color="primary" sx={{ fontSize: 32 }} />
             <Typography variant="h4" component="h1" fontWeight="bold">
-              Community Feed
+              {t('title')}
             </Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Discover updates, events, and discussions from Apna Samaj members
+            {t('subtitle')}
           </Typography>
         </Box>
 
@@ -343,9 +345,9 @@ export const FeedPage: React.FC = () => {
           onClick={handleRefresh}
           disabled={isLoading || isLoadingMore}
           sx={{ borderRadius: 2 }}
-          aria-label="फ़ीड रीफ़्रेश करें"
+          aria-label={t('refreshAria')}
         >
-          Refresh Feed
+          {t('refresh')}
         </Button>
       </Box>
 
@@ -359,12 +361,12 @@ export const FeedPage: React.FC = () => {
           <TextField
             fullWidth
             size="small"
-            placeholder="समाज की पोस्ट खोजें..."
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value.slice(0, 100))}
             inputProps={{
               maxLength: 100,
-              'aria-label': 'समाज की पोस्ट खोजें',
+              'aria-label': t('searchAria'),
             }}
             InputProps={{
               startAdornment: (
@@ -377,7 +379,7 @@ export const FeedPage: React.FC = () => {
                   <IconButton
                     size="small"
                     onClick={handleClearSearch}
-                    aria-label="खोज साफ़ करें"
+                    aria-label={t('clearSearchAria')}
                     edge="end"
                   >
                     <ClearIcon fontSize="small" />
@@ -396,14 +398,14 @@ export const FeedPage: React.FC = () => {
           <Box display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               <Chip
-                label="All Posts / सभी"
+                label={t('filterAll')}
                 clickable
                 color={selectedType === undefined ? 'primary' : 'default'}
                 onClick={() => handleTypeSelect(undefined)}
                 sx={{ fontWeight: selectedType === undefined ? 600 : 400 }}
               />
               <Chip
-                label="General / सामान्य"
+                label={t('filterGeneral')}
                 icon={<ForumIcon fontSize="small" />}
                 clickable
                 color={selectedType === PostType.GENERAL ? 'primary' : 'default'}
@@ -411,7 +413,7 @@ export const FeedPage: React.FC = () => {
                 sx={{ fontWeight: selectedType === PostType.GENERAL ? 600 : 400 }}
               />
               <Chip
-                label="Announcements / सूचनाएं"
+                label={t('filterAnnouncements')}
                 icon={<CampaignIcon fontSize="small" />}
                 clickable
                 color={selectedType === PostType.ANNOUNCEMENT ? 'warning' : 'default'}
@@ -419,7 +421,7 @@ export const FeedPage: React.FC = () => {
                 sx={{ fontWeight: selectedType === PostType.ANNOUNCEMENT ? 600 : 400 }}
               />
               <Chip
-                label="Events / आयोजन"
+                label={t('filterEvents')}
                 icon={<EventIcon fontSize="small" />}
                 clickable
                 color={selectedType === PostType.EVENT ? 'info' : 'default'}
@@ -429,7 +431,7 @@ export const FeedPage: React.FC = () => {
             </Stack>
 
             <Typography variant="caption" color="text.secondary">
-              {pagination.totalPosts} {pagination.totalPosts === 1 ? 'post' : 'posts'} total
+              {t('totalPostsCount', { count: pagination.totalPosts })}
             </Typography>
           </Box>
         </Box>
@@ -446,7 +448,7 @@ export const FeedPage: React.FC = () => {
               size="small"
               onClick={() => fetchFeed(pagination.page, selectedType, debouncedSearch, false)}
             >
-              पुनः प्रयास करें
+              {t('common:retry')}
             </Button>
           }
         >
@@ -485,29 +487,36 @@ export const FeedPage: React.FC = () => {
         >
           <DynamicFeedIcon sx={{ fontSize: 56, color: 'text.secondary', opacity: 0.6, mb: 1.5 }} />
           <Typography variant="h6" fontWeight="bold" gutterBottom>
-            {hasActiveFilters ? 'कोई पोस्ट नहीं मिली' : 'कोई पोस्ट उपलब्ध नहीं है'}
+            {hasActiveFilters ? t('emptyNoPostsFound') : t('emptyNoPostsAvailable')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 450, mx: 'auto', mb: 3 }}>
             {debouncedSearch
-              ? `आपकी खोज "${debouncedSearch}" से मेल खाती कोई पोस्ट नहीं मिली। कृपया कोई अन्य शब्द खोजें या फ़िल्टर हटाएँ।`
+              ? t('emptySearchResults', { query: debouncedSearch })
               : selectedType
-                ? `इस श्रेणी (${selectedType.toLowerCase()}) में अभी कोई पोस्ट नहीं है। पहली पोस्ट साझा करें!`
-                : 'समाज का फ़ीड अभी खाली है। ऊपर दिए गए कंपोज़र का उपयोग करके पहली पोस्ट साझा करें!'}
+                ? t('emptyCategory', {
+                    type:
+                      selectedType === PostType.GENERAL
+                        ? t('filterGeneral')
+                        : selectedType === PostType.ANNOUNCEMENT
+                          ? t('filterAnnouncements')
+                          : t('filterEvents'),
+                  })
+                : t('emptyFeedGeneric')}
           </Typography>
           <Box display="flex" justifyContent="center" gap={1.5} flexWrap="wrap">
             {debouncedSearch && (
               <Button variant="contained" size="small" onClick={handleClearSearch}>
-                खोज साफ़ करें
+                {t('clearSearch')}
               </Button>
             )}
             {selectedType && (
               <Button variant="outlined" size="small" onClick={() => handleTypeSelect(undefined)}>
-                सभी पोस्ट देखें
+                {t('viewAllPosts')}
               </Button>
             )}
             {hasActiveFilters && (
               <Button variant="text" size="small" onClick={handleClearAllFilters}>
-                सभी फ़िल्टर साफ़ करें
+                {t('clearAllFilters')}
               </Button>
             )}
           </Box>
@@ -535,7 +544,7 @@ export const FeedPage: React.FC = () => {
                 startIcon={isLoadingMore ? <CircularProgress size={18} color="inherit" /> : null}
                 sx={{ borderRadius: 3, px: 4, py: 1 }}
               >
-                {isLoadingMore ? 'पुराने पोस्ट लोड हो रहे हैं...' : 'और पोस्ट देखें'}
+                {isLoadingMore ? t('loadingMore') : t('loadMore')}
               </Button>
             </Box>
           )}
@@ -544,8 +553,8 @@ export const FeedPage: React.FC = () => {
             <Box textAlign="center" py={3}>
               <Typography variant="body2" color="text.secondary">
                 {debouncedSearch
-                  ? `"${debouncedSearch}" के लिए सभी परिणाम प्रदर्शित हैं।`
-                  : 'आपने सभी नवीनतम पोस्ट देख ली हैं।'}
+                  ? t('allResultsShown', { query: debouncedSearch })
+                  : t('caughtUp')}
               </Typography>
             </Box>
           )}
@@ -558,12 +567,16 @@ export const FeedPage: React.FC = () => {
             sx={{ mt: 2, mb: 2, px: 1 }}
           >
             <Typography variant="caption" color="text.secondary">
-              Showing {posts.length} of {pagination.totalPosts} {pagination.totalPosts === 1 ? 'post' : 'posts'}
+              {t('showingPostsMeta', {
+                current: posts.length,
+                total: pagination.totalPosts,
+                label: pagination.totalPosts === 1 ? t('postSingular') : t('postPlural'),
+              })}
             </Typography>
 
             {pagination.totalPages > 1 && (
               <Typography variant="caption" color="text.secondary">
-                Page {pagination.page} of {pagination.totalPages}
+                {t('pageMeta', { current: pagination.page, total: pagination.totalPages })}
               </Typography>
             )}
           </Box>

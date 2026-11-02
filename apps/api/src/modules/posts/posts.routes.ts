@@ -6,11 +6,13 @@ import {
   createPostRateLimiter,
   createCommentRateLimiter,
   reportPostRateLimiter,
+  uploadVideoRateLimiter,
 } from '../../middleware/rate-limiter';
-import { singleImageUpload } from '../../middleware/upload.middleware';
+import { singleImageUpload, singleVideoUpload } from '../../middleware/upload.middleware';
 import {
   createPostHandler,
   uploadMediaHandler,
+  uploadVideoHandler,
   getFeedHandler,
   getPostHandler,
   updatePostHandler,
@@ -36,6 +38,9 @@ postsRouter.use(authenticateToken, requireActiveUser, requireTenantContext);
 
 // POST /api/v1/posts/media/upload - Upload an image to Supabase Storage
 postsRouter.post('/media/upload', singleImageUpload, uploadMediaHandler);
+
+// POST /api/v1/posts/media/video-upload - Upload a video (MP4/WebM) to Supabase Storage
+postsRouter.post('/media/video-upload', uploadVideoRateLimiter, singleVideoUpload, uploadVideoHandler);
 
 // GET /api/v1/posts - List community feed with pagination & filters
 postsRouter.get('/', getFeedHandler);

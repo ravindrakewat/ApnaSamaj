@@ -76,7 +76,7 @@ export interface UpdatePostRequest {
 export interface UploadMediaResponseData {
   url: string;
   storagePath: string;
-  mediaType: 'IMAGE';
+  mediaType: 'IMAGE' | 'VIDEO' | 'DOCUMENT';
   fileName: string;
   fileSizeBytes: number;
   mimeType: string;

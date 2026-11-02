@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import fs from 'fs';
 import { UploadMediaResponseData } from '@apnasamaj/shared-types';
 import { config } from '../config/env';
 import { getSupabaseClient } from '../config/supabase';
@@ -92,6 +93,65 @@ export function detectImageMimeType(buffer: Buffer): SupportedImageMime | null {
 /**
  * Ensures that the target storage bucket exists in Supabase.
  */
+
+export type SupportedVideoMime = 'video/mp4' | 'video/webm';
+
+/**
+ * Validates binary video content by inspecting file signatures (magic bytes).
+ * Supports standard MP4 (ftyp atom) and WebM (EBML header with webm docType).
+ */
+export function detectVideoMimeType(buffer: Buffer): SupportedVideoMime | null {
+  if (!buffer || buffer.length < 12) {
+    return null;
+  }
+
+  // MP4: ISO BMFF ftyp box at offset 4
+  if (
+    buffer[4] === 0x66 &&
+    buffer[5] === 0x74 &&
+    buffer[6] === 0x79 &&
+    buffer[7] === 0x70
+  ) {
+    return 'video/mp4';
+  }
+
+  // WebM: EBML header starting with 0x1A 0x45 0xDF 0xA3 containing 'webm' docType
+  if (
+    buffer[0] === 0x1a &&
+    buffer[1] === 0x45 &&
+    buffer[2] === 0xdf &&
+    buffer[3] === 0xa3
+  ) {
+    const headerSlice = buffer.subarray(0, Math.min(buffer.length, 64)).toString('latin1');
+    if (headerSlice.includes('webm')) {
+      return 'video/webm';
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Memory-safe video MIME detection reading only the first 128 bytes from disk.
+ * Avoids loading multi-megabyte video files into Node.js heap memory.
+ */
+export async function detectVideoMimeTypeFromDisk(filePath: string): Promise<SupportedVideoMime | null> {
+  let fileHandle = null;
+  try {
+    fileHandle = await fs.promises.open(filePath, 'r');
+    const headerBuf = Buffer.alloc(128);
+    const { bytesRead } = await fileHandle.read(headerBuf, 0, 128, 0);
+    if (bytesRead < 12) {
+      return null;
+    }
+    return detectVideoMimeType(headerBuf.subarray(0, bytesRead));
+  } finally {
+    if (fileHandle) {
+      await fileHandle.close();
+    }
+  }
+}
+
 export async function ensureBucketExists(): Promise<void> {
   if (!config.supabaseUrl || !config.supabaseSecretKey) {
     return;
@@ -114,8 +174,8 @@ export async function ensureBucketExists(): Promise<void> {
   if (!exists) {
     const { error: createError } = await supabase.storage.createBucket(bucketName, {
       public: true,
-      fileSizeLimit: config.maxMediaFileSizeBytes,
-      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      fileSizeLimit: 52428800,
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
     });
 
     if (createError && !createError.message.includes('already exists')) {
@@ -129,6 +189,120 @@ export async function ensureBucketExists(): Promise<void> {
  * Namespaces files under posts/{userId}/{uuid}.{ext} to guarantee zero path traversal
  * and prevent unauthorized overwrites.
  */
+
+/**
+ * Uploads a video file from a disk path to Supabase Storage with strict MIME and size validation.
+ * Uses streaming to prevent loading multi-megabyte buffers into Node.js heap memory.
+ * Namespaces files under posts/{userId}/{uuid}.{ext} to guarantee zero path traversal
+ * and prevent unauthorized overwrites.
+ */
+export async function uploadPostVideo(
+  userId: string,
+  tempFilePath: string,
+  _claimedMimeType?: string,
+  originalName: string = 'video.mp4'
+): Promise<UploadMediaResponseData> {
+  // 1. File existence and size check
+  const stat = await fs.promises.stat(tempFilePath);
+  const maxBytes = config.maxVideoFileSizeBytes; // 30MB
+  if (stat.size > maxBytes) {
+    throw new OversizedFileError(maxBytes);
+  }
+  if (stat.size === 0) {
+    throw new StorageError('Uploaded video file is empty.', 400);
+  }
+
+  // 2. Magic bytes validation (memory-safe: reads only first 128 bytes from disk)
+  const detectedMime = await detectVideoMimeTypeFromDisk(tempFilePath);
+  if (!detectedMime) {
+    throw new InvalidMimeTypeError(
+      'Corrupted or unsupported video file content. Only MP4 and WebM videos are allowed.'
+    );
+  }
+
+  const ext = detectedMime === 'video/mp4' ? 'mp4' : 'webm';
+  const fileId = crypto.randomUUID();
+  const storagePath = `posts/${userId}/${fileId}.${ext}`;
+
+  // 3. Upload to Supabase Storage if credentials are configured
+  if (config.supabaseUrl && config.supabaseSecretKey) {
+    try {
+      const supabase = getSupabaseClient();
+      const fileStream = fs.createReadStream(tempFilePath);
+
+      let { error: uploadError } = await supabase.storage
+        .from(config.supabaseStorageBucket)
+        .upload(storagePath, fileStream, {
+          contentType: detectedMime,
+          upsert: false,
+          duplex: 'half',
+        });
+
+      if (
+        uploadError &&
+        (uploadError.message.toLowerCase().includes('not found') ||
+          uploadError.message.toLowerCase().includes('bucket'))
+      ) {
+        try {
+          await ensureBucketExists();
+          const retryStream = fs.createReadStream(tempFilePath);
+          const retry = await supabase.storage
+            .from(config.supabaseStorageBucket)
+            .upload(storagePath, retryStream, {
+              contentType: detectedMime,
+              upsert: false,
+              duplex: 'half',
+            });
+          uploadError = retry.error;
+        } catch (retryErr) {
+          console.warn('[Storage Service] Bucket auto-creation retry failed:', retryErr);
+        }
+      }
+
+      if (uploadError) {
+        console.error('[Storage Service] Supabase video upload failed:', uploadError.message);
+        throw new StorageError(`Failed to upload video: ${uploadError.message}`, 500);
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from(config.supabaseStorageBucket)
+        .getPublicUrl(storagePath);
+
+      return {
+        url: publicUrlData.publicUrl,
+        storagePath,
+        mediaType: 'VIDEO',
+        fileName: originalName,
+        fileSizeBytes: stat.size,
+        mimeType: detectedMime,
+      };
+    } catch (supabaseErr) {
+      if (supabaseErr instanceof StorageError) throw supabaseErr;
+      console.warn(
+        '[Storage Service] Supabase video upload encountered exception:',
+        supabaseErr instanceof Error ? supabaseErr.message : supabaseErr
+      );
+      throw new StorageError(
+        `Failed to upload video: ${supabaseErr instanceof Error ? supabaseErr.message : 'Unknown storage error'}`,
+        500
+      );
+    }
+  }
+
+  // 4. Safe fallback for dev/test environments without live Supabase storage credentials
+  console.info(
+    '[Storage Service] Supabase credentials not configured in environment. Using mock storage URL for video upload.'
+  );
+  return {
+    url: `https://mock-storage.apnasamaj.local/${config.supabaseStorageBucket}/${storagePath}`,
+    storagePath,
+    mediaType: 'VIDEO',
+    fileName: originalName,
+    fileSizeBytes: stat.size,
+    mimeType: detectedMime,
+  };
+}
+
 export async function uploadPostMedia(
   userId: string,
   fileBuffer: Buffer,
