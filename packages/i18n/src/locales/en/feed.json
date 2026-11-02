@@ -162,5 +162,15 @@
   "videoUploading": "Uploading video... ({{progress}}%)",
   "videoUploadingWait": "Please wait for the video to finish uploading.",
   "videoUploadFailedRemoveOrRetry": "Video upload failed. Please retry or remove it before publishing.",
-  "videoPreviewAlt": "Attached video preview"
+  "videoPreviewAlt": "Attached video preview",
+  "postTitleLabel": "Post Title",
+  "postTitlePlaceholder": "Enter a title for this post...",
+  "postTitleAnnouncementPlaceholder": "e.g. Important Samaj Announcement...",
+  "postTitleEventPlaceholder": "e.g. Annual Community Gathering 2026...",
+  "titleRequiredError": "Title is required for this post type.",
+  "titleMaxLengthError": "Post title must not exceed 150 characters.",
+  "postTypeLabel": "Post Type",
+  "postTitleOptionalHint": "Optional",
+  "postTitleRequiredHint": "Required",
+  "postTitleCharsLeft": "{{count}} chars left"
 }

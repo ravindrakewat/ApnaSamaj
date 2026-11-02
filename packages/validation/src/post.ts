@@ -205,6 +205,12 @@ export type PostMediaItemInput = z.infer<typeof postMediaItemSchema>;
 
 export const createPostSchema = z
   .object({
+    title: z
+      .string()
+      .trim()
+      .max(150, 'Post title must not exceed 150 characters')
+      .optional()
+      .nullable(),
     content: z
       .string()
       .trim()
@@ -219,10 +225,25 @@ export const createPostSchema = z
       .default([]),
   })
   .refine(
-    (data) => (data.content && data.content.trim().length > 0) || (data.media && data.media.length > 0),
+    (data) =>
+      (data.content && data.content.trim().length > 0) ||
+      (data.title && data.title.trim().length > 0) ||
+      (data.media && data.media.length > 0),
     {
       message: 'Post must contain either text content or at least one media attachment',
       path: ['content'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.type === 'ANNOUNCEMENT' || data.type === 'EVENT') {
+        return typeof data.title === 'string' && data.title.trim().length > 0;
+      }
+      return true;
+    },
+    {
+      message: 'Title is required for this post type',
+      path: ['title'],
     }
   )
   .refine(
@@ -243,6 +264,12 @@ export type CreatePostInput = z.infer<typeof createPostSchema>;
 
 export const updatePostSchema = z
   .object({
+    title: z
+      .string()
+      .trim()
+      .max(150, 'Post title must not exceed 150 characters')
+      .optional()
+      .nullable(),
     content: z
       .string()
       .trim()
@@ -256,9 +283,26 @@ export const updatePostSchema = z
   })
   .refine(
     (data) =>
-      data.content !== undefined || data.type !== undefined || data.media !== undefined,
+      data.title !== undefined ||
+      data.content !== undefined ||
+      data.type !== undefined ||
+      data.media !== undefined,
     {
-      message: 'At least one field (content, type, or media) must be provided for update',
+      message: 'At least one field (title, content, type, or media) must be provided for update',
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.type === 'ANNOUNCEMENT' || data.type === 'EVENT') {
+        if (data.title !== undefined) {
+          return typeof data.title === 'string' && data.title.trim().length > 0;
+        }
+      }
+      return true;
+    },
+    {
+      message: 'Title is required for this post type',
+      path: ['title'],
     }
   )
   .refine(

@@ -136,6 +136,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   // Edit post dialog state
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState(post.title || '');
   const [editContent, setEditContent] = useState(post.content);
   const [editType, setEditType] = useState<PostType>(post.type);
   const [editMedia, setEditMedia] = useState<PostMediaItem[]>(post.media || []);
@@ -678,6 +679,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   // Edit Post Handlers
   const handleOpenEdit = () => {
+    setEditTitle(post.title || '');
     setEditContent(post.content);
     setEditType(post.type);
     setEditMedia(post.media ? [...post.media] : []);
@@ -737,7 +739,18 @@ export const PostCard: React.FC<PostCardProps> = ({
       thumbnail: m.thumbnail || null,
     }));
 
+    const isTitleRequired = editType === PostType.ANNOUNCEMENT || editType === PostType.EVENT;
+    if (isTitleRequired && !editTitle.trim()) {
+      setUpdateError(t('titleRequiredError'));
+      return;
+    }
+    if (editTitle.length > 150) {
+      setUpdateError(t('titleMaxLengthError'));
+      return;
+    }
+
     const validation = updatePostSchema.safeParse({
+      title: editTitle.trim() || null,
       content: editContent.trim(),
       type: editType,
       media: mediaPayload,
@@ -1274,6 +1287,21 @@ export const PostCard: React.FC<PostCardProps> = ({
               sx={{ fontWeight: 500 }}
             />
           </Box>
+          {post.title && (
+            <Typography
+              variant="h6"
+              component="h3"
+              sx={{
+                fontWeight: 700,
+                lineHeight: 1.35,
+                mb: post.content ? 1 : 0,
+                wordBreak: 'break-word',
+                color: 'text.primary',
+              }}
+            >
+              {post.title}
+            </Typography>
+          )}
           {post.content && (
             <Typography
               variant="body1"
@@ -1689,7 +1717,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             select
             fullWidth
             size="small"
-            label="Post Type"
+            label={t('postTypeLabel')}
             value={editType}
             onChange={(e) => setEditType(e.target.value as PostType)}
             disabled={isUpdating || isUploadingEditMedia}
@@ -1699,6 +1727,30 @@ export const PostCard: React.FC<PostCardProps> = ({
             <MenuItem value={PostType.EVENT}>{t('postTypeEvent')}</MenuItem>
             {isModerator && <MenuItem value={PostType.ANNOUNCEMENT}>{t('postTypeAnnouncement')}</MenuItem>}
           </TextField>
+
+          <TextField
+            fullWidth
+            size="small"
+            label={t('postTitleLabel')}
+            placeholder={
+              editType === PostType.ANNOUNCEMENT
+                ? t('postTitleAnnouncementPlaceholder')
+                : editType === PostType.EVENT
+                ? t('postTitleEventPlaceholder')
+                : t('postTitlePlaceholder')
+            }
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            disabled={isUpdating || isUploadingEditMedia}
+            required={editType === PostType.ANNOUNCEMENT || editType === PostType.EVENT}
+            inputProps={{ maxLength: 150 }}
+            helperText={
+              (editType === PostType.ANNOUNCEMENT || editType === PostType.EVENT)
+                ? `${t('postTitleRequiredHint')} · ${t('postTitleCharsLeft', { count: 150 - editTitle.length })}`
+                : `${t('postTitleOptionalHint')} · ${t('postTitleCharsLeft', { count: 150 - editTitle.length })}`
+            }
+            sx={{ mb: 2 }}
+          />
 
           <TextField
             fullWidth

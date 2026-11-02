@@ -74,6 +74,7 @@ interface PostWithAuthorAndMedia {
     slug: string;
   } | null;
   type: DbPostType;
+  title?: string | null;
   content: string;
   isPinned: boolean;
   createdAt: Date;
@@ -129,6 +130,7 @@ function mapToPostItem(
       }
       : null,
     type: post.type as unknown as PostType,
+    title: post.title ?? null,
     content: post.content,
     isPinned: post.isPinned,
     media: (post.media || []).map((m): PostMediaItem => ({
@@ -462,6 +464,7 @@ export async function createPost(
         data: {
           authorId,
           groupId: targetGroupId,
+          title: input.title !== undefined ? (input.title?.trim() || null) : null,
           content: input.content || '',
           type: (input.type as unknown as DbPostType) || DbPostType.GENERAL,
         },
@@ -556,6 +559,7 @@ export async function getCommunityFeed(
   if (trimmedSearch && trimmedSearch.length > 0) {
     const searchFilter = {
       OR: [
+        { title: { contains: trimmedSearch, mode: 'insensitive' } },
         { content: { contains: trimmedSearch, mode: 'insensitive' } },
         { author: { profile: { fullName: { contains: trimmedSearch, mode: 'insensitive' } } } },
       ],
@@ -715,9 +719,10 @@ export async function updatePost(
     throw new PostServiceError('A maximum of 4 media attachments can be attached per post.', 400);
   }
 
-  const updateData: { content?: string; type?: DbPostType } = {};
+  const updateData: { content?: string; type?: DbPostType; title?: string | null } = {};
   if (input.content !== undefined) updateData.content = input.content;
   if (input.type !== undefined) updateData.type = input.type as unknown as DbPostType;
+  if (input.title !== undefined) updateData.title = input.title !== null ? (input.title?.trim() || null) : null;
 
   // Track media to delete from storage if media was updated
   let removedStoragePaths: string[] = [];

@@ -39,10 +39,11 @@ export const PostDetailPage: React.FC = () => {
   useEffect(() => {
     const previousTitle = document.title;
     if (post) {
-      const snippet = post.content
-        ? post.content.length > 50
-          ? `${post.content.slice(0, 47)}...`
-          : post.content
+      const displayTitle = post.title || post.content;
+      const snippet = displayTitle
+        ? displayTitle.length > 50
+          ? `${displayTitle.slice(0, 47)}...`
+          : displayTitle
         : 'Post';
       document.title = `${post.author.fullName}: "${snippet}" | Apna Samaj`;
     }

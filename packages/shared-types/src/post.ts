@@ -49,6 +49,7 @@ export interface PostItem {
   groupId?: string | null;
   group?: { id: string; name: string; slug: string; privacy?: 'PUBLIC' | 'PRIVATE' } | null;
   type: PostType;
+  title?: string | null;
   content: string;
   isPinned: boolean;
   media: PostMediaItem[];
@@ -62,12 +63,14 @@ export interface PostItem {
 }
 
 export interface CreatePostRequest {
+  title?: string | null;
   content: string;
   type?: PostType;
   media?: PostMediaInput[];
 }
 
 export interface UpdatePostRequest {
+  title?: string | null;
   content?: string;
   type?: PostType;
   media?: PostMediaInput[];
@@ -212,6 +215,7 @@ export interface ModerationQueueItem {
   };
   post: {
     id: string;
+    title?: string | null;
     content: string;
     type: PostType;
     createdAt: string;

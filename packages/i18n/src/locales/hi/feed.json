@@ -162,5 +162,15 @@
   "videoUploading": "वीडियो अपलोड हो रहा है... ({{progress}}%)",
   "videoUploadingWait": "कृपया वीडियो अपलोड पूरा होने तक प्रतीक्षा करें।",
   "videoUploadFailedRemoveOrRetry": "वीडियो अपलोड विफल रहा। कृपया प्रकाशित करने से पहले पुनः प्रयास करें या इसे हटाएं।",
-  "videoPreviewAlt": "संलग्न वीडियो पूर्वावलोकन"
+  "videoPreviewAlt": "संलग्न वीडियो पूर्वावलोकन",
+  "postTitleLabel": "पोस्ट का शीर्षक",
+  "postTitlePlaceholder": "इस पोस्ट के लिए एक शीर्षक दर्ज करें...",
+  "postTitleAnnouncementPlaceholder": "उदा. समाज की महत्वपूर्ण घोषणा...",
+  "postTitleEventPlaceholder": "उदा. वार्षिक समाज सम्मेलन २०२६...",
+  "titleRequiredError": "इस पोस्ट प्रकार के लिए शीर्षक अनिवार्य है।",
+  "titleMaxLengthError": "पोस्ट का शीर्षक 150 अक्षरों से अधिक नहीं हो सकता।",
+  "postTypeLabel": "पोस्ट प्रकार",
+  "postTitleOptionalHint": "वैकल्पिक",
+  "postTitleRequiredHint": "अनिवार्य",
+  "postTitleCharsLeft": "{{count}} अक्षर शेष"
 }

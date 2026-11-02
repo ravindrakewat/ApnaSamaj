@@ -272,6 +272,7 @@ model Post {
   groupId   String?
   group     Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
   type      PostType  @default(GENERAL)
+  title     String?
   content   String
   isPinned  Boolean   @default(false)
   createdAt DateTime  @default(now())

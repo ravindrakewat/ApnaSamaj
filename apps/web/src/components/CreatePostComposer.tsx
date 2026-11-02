@@ -91,7 +91,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
   const videoFileInputRef = useRef<HTMLInputElement>(null);
   const [attachedVideo, setAttachedVideo] = useState<UploadedVideoItem | null>(null);
 
-
+  const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [postType, setPostType] = useState<PostType>(PostType.GENERAL);
   const [mediaList, setMediaList] = useState<UploadedMediaItem[]>([]);
@@ -351,7 +351,18 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       return;
     }
 
+    const isTitleRequired = postType === PostType.ANNOUNCEMENT || postType === PostType.EVENT;
+    if (isTitleRequired && !title.trim()) {
+      setErrorMessage(t('titleRequiredError'));
+      return;
+    }
+    if (title.length > 150) {
+      setErrorMessage(t('titleMaxLengthError'));
+      return;
+    }
+
     const validation = createPostSchema.safeParse({
+      title: title.trim() || undefined,
       content: content.trim(),
       type: postType,
       groupId: groupId || undefined,
@@ -367,6 +378,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     setIsSubmitting(true);
     try {
       const created = await createPostApi(validation.data);
+      setTitle('');
       setContent('');
       setPostType(PostType.GENERAL);
       // Clean up object URLs
@@ -387,8 +399,17 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
   };
 
   const remainingChars = 5000 - content.length;
+  const isTitleRequired = postType === PostType.ANNOUNCEMENT || postType === PostType.EVENT;
+  const isTitleValid = !isTitleRequired || title.trim().length > 0;
+  const hasTextOrMedia =
+    title.trim().length > 0 ||
+    content.trim().length > 0 ||
+    mediaList.length > 0 ||
+    !!attachedYoutubeVideo ||
+    !!attachedVideo;
   const canSubmit =
-    (content.trim().length > 0 || mediaList.length > 0 || !!attachedYoutubeVideo || !!attachedVideo) &&
+    isTitleValid &&
+    hasTextOrMedia &&
     !isAnyMediaUploading &&
     !attachedVideo?.isUploading &&
     !isSubmitting;
@@ -416,6 +437,30 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       )}
 
       <Box component="form" onSubmit={handleSubmit} noValidate>
+        <TextField
+          fullWidth
+          size="small"
+          label={t('postTitleLabel')}
+          placeholder={
+            postType === PostType.ANNOUNCEMENT
+              ? t('postTitleAnnouncementPlaceholder')
+              : postType === PostType.EVENT
+              ? t('postTitleEventPlaceholder')
+              : t('postTitlePlaceholder')
+          }
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          disabled={isSubmitting}
+          required={isTitleRequired}
+          inputProps={{ maxLength: 150 }}
+          helperText={
+            isTitleRequired
+              ? `${t('postTitleRequiredHint')} · ${t('postTitleCharsLeft', { count: 150 - title.length })}`
+              : `${t('postTitleOptionalHint')} · ${t('postTitleCharsLeft', { count: 150 - title.length })}`
+          }
+          sx={{ mb: 2 }}
+        />
+
         <TextField
           multiline
           fullWidth

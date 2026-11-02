@@ -401,6 +401,7 @@ async function runDirectVideoUploadTests() {
 
   // 5D. 1 direct video + 3 photos (total 4) accepted
   const parseVideoAndPhotos = createPostSchema.safeParse({
+    title: 'Event highlights video',
     content: 'Event highlights with video and photos',
     type: 'EVENT',
     media: [
