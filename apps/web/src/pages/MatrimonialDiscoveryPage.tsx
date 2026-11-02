@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from '@apnasamaj/i18n';
 import {
   Container,
   Box,
@@ -127,6 +128,50 @@ const MatrimonialCardMedia: React.FC<MatrimonialCardMediaProps> = ({ imageUrl, a
 
 export const MatrimonialDiscoveryPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation('matrimonial');
+
+  const genderOptions = useMemo(
+    () => [
+      { value: '', label: t('allGenders') },
+      { value: 'FEMALE', label: t('genderBrides') },
+      { value: 'MALE', label: t('genderGrooms') },
+      { value: 'OTHER', label: t('genderOther') },
+    ],
+    [t]
+  );
+
+  const maritalStatusOptions = useMemo(
+    () => [
+      { value: '', label: t('anyMaritalStatus') },
+      { value: 'NEVER_MARRIED', label: t('maritalNeverMarried') },
+      { value: 'DIVORCED', label: t('maritalDivorced') },
+      { value: 'WIDOWED', label: t('maritalWidowed') },
+      { value: 'AWAITING_DIVORCE', label: t('maritalAwaitingDivorce') },
+    ],
+    [t]
+  );
+
+  const manglikOptions = useMemo(
+    () => [
+      { value: '', label: t('anyManglik') },
+      { value: 'NON_MANGLIK', label: t('manglikNonManglik') },
+      { value: 'MANGLIK', label: t('manglikManglik') },
+      { value: 'ANSHIK', label: t('manglikAnshik') },
+      { value: 'DONT_KNOW', label: t('manglikDontKnow') },
+    ],
+    [t]
+  );
+
+  const dietOptions = useMemo(
+    () => [
+      { value: '', label: t('anyDiet') },
+      { value: 'VEGETARIAN', label: t('dietVegetarian') },
+      { value: 'NON_VEGETARIAN', label: t('dietNonVegetarian') },
+      { value: 'EGGETARIAN', label: t('dietEggetarian') },
+      { value: 'JAIN', label: t('dietJain') },
+    ],
+    [t]
+  );
 
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -286,7 +331,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="subtitle1" fontWeight="bold">
-          Filter Profiles
+          {t('filterProfiles')}
         </Typography>
         {activeFilterCount > 0 && (
           <Button
@@ -295,7 +340,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
             onClick={resetFilters}
             color="inherit"
           >
-            Reset
+            {t('resetFilters')}
           </Button>
         )}
       </Box>
@@ -305,14 +350,14 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
         select
         size="small"
         fullWidth
-        label="Looking For"
+        label={t('lookingFor')}
         value={gender}
         onChange={(e) => {
           setGender(e.target.value);
           setPage(1);
         }}
       >
-        {GENDER_OPTIONS.map((opt) => (
+        {genderOptions.map((opt) => (
           <MenuItem key={opt.value} value={opt.value}>
             {opt.label}
           </MenuItem>
@@ -324,14 +369,14 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
         select
         size="small"
         fullWidth
-        label="Marital Status"
+        label={t('maritalStatusLabel')}
         value={maritalStatus}
         onChange={(e) => {
           setMaritalStatus(e.target.value);
           setPage(1);
         }}
       >
-        {MARITAL_STATUS_OPTIONS.map((opt) => (
+        {maritalStatusOptions.map((opt) => (
           <MenuItem key={opt.value} value={opt.value}>
             {opt.label}
           </MenuItem>
@@ -341,14 +386,14 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
       {/* Age Range */}
       <Box>
         <Typography variant="caption" color="text.secondary" fontWeight={600}>
-          Age Range (Years)
+          {t('ageRangeLabel')}
         </Typography>
         <Grid container spacing={1} sx={{ mt: 0.2 }}>
           <Grid item xs={6}>
             <TextField
               size="small"
               type="number"
-              placeholder="Min"
+              placeholder={t('minAgePlaceholder')}
               value={minAge}
               onChange={(e) => {
                 setMinAge(e.target.value);
@@ -360,7 +405,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
             <TextField
               size="small"
               type="number"
-              placeholder="Max"
+              placeholder={t('maxAgePlaceholder')}
               value={maxAge}
               onChange={(e) => {
                 setMaxAge(e.target.value);
@@ -374,14 +419,14 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
       {/* Height Range */}
       <Box>
         <Typography variant="caption" color="text.secondary" fontWeight={600}>
-          Height Range (cm)
+          {t('heightRangeLabel')}
         </Typography>
         <Grid container spacing={1} sx={{ mt: 0.2 }}>
           <Grid item xs={6}>
             <TextField
               size="small"
               type="number"
-              placeholder="Min cm"
+              placeholder={t('minHeightPlaceholder')}
               value={minHeightCm}
               onChange={(e) => {
                 setMinHeightCm(e.target.value);
@@ -393,7 +438,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
             <TextField
               size="small"
               type="number"
-              placeholder="Max cm"
+              placeholder={t('maxHeightPlaceholder')}
               value={maxHeightCm}
               onChange={(e) => {
                 setMaxHeightCm(e.target.value);
@@ -409,14 +454,14 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
         select
         size="small"
         fullWidth
-        label="Manglik Dosha"
+        label={t('manglikDoshaLabel')}
         value={manglik}
         onChange={(e) => {
           setManglik(e.target.value);
           setPage(1);
         }}
       >
-        {MANGLIK_OPTIONS.map((opt) => (
+        {manglikOptions.map((opt) => (
           <MenuItem key={opt.value} value={opt.value}>
             {opt.label}
           </MenuItem>
@@ -428,14 +473,14 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
         select
         size="small"
         fullWidth
-        label="Dietary Preference"
+        label={t('dietPreferenceLabel')}
         value={diet}
         onChange={(e) => {
           setDiet(e.target.value);
           setPage(1);
         }}
       >
-        {DIET_OPTIONS.map((opt) => (
+        {dietOptions.map((opt) => (
           <MenuItem key={opt.value} value={opt.value}>
             {opt.label}
           </MenuItem>
@@ -446,32 +491,32 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
       <TextField
         size="small"
         fullWidth
-        label="City"
+        label={t('cityLabel')}
         value={city}
         onChange={(e) => {
           setCity(e.target.value);
           setPage(1);
         }}
-        placeholder="e.g. Indore, Bhopal"
+        placeholder={t('cityPlaceholder')}
       />
 
       <TextField
         size="small"
         fullWidth
-        label="State"
+        label={t('stateLabel')}
         value={state}
         onChange={(e) => {
           setState(e.target.value);
           setPage(1);
         }}
-        placeholder="e.g. Madhya Pradesh"
+        placeholder={t('statePlaceholder')}
       />
 
       {/* Community Specifics */}
       <TextField
         size="small"
         fullWidth
-        label="Sub-Caste"
+        label={t('subCasteLabel')}
         value={subCaste}
         onChange={(e) => {
           setSubCaste(e.target.value);
@@ -482,7 +527,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
       <TextField
         size="small"
         fullWidth
-        label="Gotra"
+        label={t('gotraLabel')}
         value={gotra}
         onChange={(e) => {
           setGotra(e.target.value);
@@ -494,25 +539,25 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
       <TextField
         size="small"
         fullWidth
-        label="Occupation"
+        label={t('occupationLabel')}
         value={occupation}
         onChange={(e) => {
           setOccupation(e.target.value);
           setPage(1);
         }}
-        placeholder="e.g. Engineer, Business"
+        placeholder={t('occupationPlaceholder')}
       />
 
       <TextField
         size="small"
         fullWidth
-        label="Education"
+        label={t('educationLabel')}
         value={education}
         onChange={(e) => {
           setEducation(e.target.value);
           setPage(1);
         }}
-        placeholder="e.g. B.Tech, MBA"
+        placeholder={t('educationPlaceholder')}
       />
     </Box>
   );
@@ -536,14 +581,13 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
             <InfoIcon sx={{ fontSize: 56, color: 'warning.main' }} />
           </Box>
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Matrimonial Service Unavailable
+            {t('serviceUnavailableTitle')}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto', mb: 3 }}>
-            Matrimonial service is not available yet; database setup is pending. Our community engineering team
-            is preparing the matrimonial database tables. Please check back shortly.
+            {t('serviceUnavailableDiscoveryDesc')}
           </Typography>
           <Button variant="outlined" color="primary" onClick={fetchProfiles}>
-            Retry Connection
+            {t('retryConnectionBtn')}
           </Button>
         </Paper>
       </Container>
@@ -556,10 +600,10 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
       <Box sx={{ mb: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
         <Box>
           <Typography variant="h4" fontWeight="bold" color="text.primary">
-            Samaj Matrimony Discovery
+            {t('discoveryTitle')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Browse approved community matrimonial profiles with verified Samaj membership.
+            {t('discoverySubtitle')}
           </Typography>
         </Box>
 
@@ -570,7 +614,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
           onClick={() => navigate('/matrimonial/me')}
           sx={{ fontWeight: 600 }}
         >
-          My Profile & Preferences
+          {t('myProfileAndPreferences')}
         </Button>
       </Box>
 
@@ -583,7 +627,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
               size="small"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Quick search by city, education, occupation, or gotra..."
+              placeholder={t('quickSearchPlaceholder')}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -611,7 +655,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
               onClick={() => setIsFilterDrawerOpen(true)}
               sx={{ display: { md: 'none' } }}
             >
-              Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
+              {t('filters')}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
             </Button>
           </Grid>
         </Grid>
@@ -637,12 +681,16 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
           {/* Results Summary Bar */}
           <Box sx={{ mb: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              Showing <strong>{profiles.length}</strong> of <strong>{total}</strong> approved profiles
+              {t('showingProfilesMeta', { current: profiles.length, total })}
             </Typography>
 
             {activeFilterCount > 0 && (
               <Chip
-                label={`${activeFilterCount} active filter${activeFilterCount > 1 ? 's' : ''}`}
+                label={
+                  activeFilterCount === 1
+                    ? t('activeFilterCount', { count: activeFilterCount })
+                    : t('activeFilterCount_plural', { count: activeFilterCount })
+                }
                 size="small"
                 color="primary"
                 onDelete={resetFilters}
@@ -670,14 +718,13 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
             >
               <GroupIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
               <Typography variant="h6" fontWeight="bold">
-                No Matrimonial Matches Found
+                {t('noMatchesFound')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 450, mx: 'auto', mt: 1, mb: 3 }}>
-                We couldn't find any approved profiles matching your current search filters. Try widening your age,
-                height, or location criteria.
+                {t('noMatchesFoundDesc')}
               </Typography>
               <Button variant="outlined" startIcon={<RestartAltIcon />} onClick={resetFilters}>
-                Clear All Filters
+                {t('clearAllFilters')}
               </Button>
             </Paper>
           ) : (
@@ -728,9 +775,9 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
                               size="small"
                               label={
                                 p.interestStatus === 'ACCEPTED'
-                                  ? 'Connected'
+                                  ? t('interestConnectedBadge')
                                   : p.interestStatus === 'PENDING'
-                                  ? 'Interest Pending'
+                                  ? t('interestPendingBadge')
                                   : p.interestStatus
                               }
                               color={
@@ -762,20 +809,38 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
                         {/* Key Attributes Chips */}
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1, mb: 1.5 }}>
                           {p.age !== null && (
-                            <Chip label={`${p.age} yrs`} size="small" variant="outlined" />
+                            <Chip label={t('yearsOld', { age: p.age })} size="small" variant="outlined" />
                           )}
-                          <Chip label={`${p.heightCm} cm`} size="small" variant="outlined" />
+                          <Chip label={t('heightCm', { height: p.heightCm })} size="small" variant="outlined" />
                           <Chip
                             label={
                               p.maritalStatus === 'NEVER_MARRIED'
-                                ? 'Never Married'
-                                : p.maritalStatus.replace('_', ' ')
+                                ? t('maritalNeverMarried')
+                                : p.maritalStatus === 'DIVORCED'
+                                ? t('maritalDivorced')
+                                : p.maritalStatus === 'WIDOWED'
+                                ? t('maritalWidowed')
+                                : p.maritalStatus === 'AWAITING_DIVORCE'
+                                ? t('maritalAwaitingDivorce')
+                                : p.maritalStatus
                             }
                             size="small"
                             variant="outlined"
                           />
                           {p.manglik !== 'DONT_KNOW' && (
-                            <Chip label={p.manglik.replace('_', ' ')} size="small" variant="outlined" />
+                            <Chip
+                              label={
+                                p.manglik === 'NON_MANGLIK'
+                                  ? t('manglikNonManglik')
+                                  : p.manglik === 'MANGLIK'
+                                  ? t('manglikManglik')
+                                  : p.manglik === 'ANSHIK'
+                                  ? t('manglikAnshik')
+                                  : p.manglik
+                              }
+                              size="small"
+                              variant="outlined"
+                            />
                           )}
                         </Box>
 
@@ -807,7 +872,10 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
                         {/* Sub-caste / Gotra */}
                         {(p.subCaste || p.gotra) && (
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                            {[p.subCaste && `Sub-caste: ${p.subCaste}`, p.gotra && `Gotra: ${p.gotra}`]
+                            {[
+                              p.subCaste && t('subCastePrefix', { value: p.subCaste }),
+                              p.gotra && t('gotraPrefix', { value: p.gotra }),
+                            ]
                               .filter(Boolean)
                               .join(' • ')}
                           </Typography>
@@ -823,7 +891,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
                           onClick={() => navigate(`/matrimonial/profiles/${p.id}`)}
                           sx={{ fontWeight: 600 }}
                         >
-                          View Full Profile
+                          {t('viewFullProfile')}
                         </Button>
                       </CardActions>
                     </Card>
@@ -860,7 +928,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6" fontWeight="bold">
-            Filters
+            {t('filters')}
           </Typography>
           <IconButton onClick={() => setIsFilterDrawerOpen(false)}>
             <ClearIcon />
@@ -874,7 +942,7 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
           sx={{ mt: 3 }}
           onClick={() => setIsFilterDrawerOpen(false)}
         >
-          Apply Filters
+          {t('applyFilters')}
         </Button>
       </Drawer>
     </Container>

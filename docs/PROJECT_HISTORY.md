@@ -53,12 +53,16 @@ The following milestone checkpoint commits have been independently inspected in 
 | `2af6d8f` | `2af6d8ff04e57e9306b83f3e1bf24933a39e763b` | `fix(build): ensure types, prisma generation, and test exclusion for render production build` | Batch 15E.1 | **Confirmed** | **Confirmed** |
 | `fd6fb0e` | `fd6fb0ef0d19f5a770020bf051c2017c6b986b45` | `fix(deps): promote typescript type definitions to root production dependencies and update lockfile` | Batch 15E.2 | **Confirmed** | **Confirmed** |
 | `20eba1c` | `20eba1c7e2c54ab80dd300508811670dd1177f9d` | `feat(web): localize navbar navigation labels to Hindi` | Navbar i18n | **Confirmed** | **Confirmed** |
+| `3d36b06` | `3d36b0606ba30282b04c8fcf2c62c2f62779fa7b` | `fix(admin): mount BulkImportDialog in MemberManagementPage` | Admin Member Import Fix | **Confirmed** | **Confirmed (Pushed)** |
+| `247fb6d` | `247fb6d7ad4fe5bca836ef4997ec7d7c58e14313` | `feat(feed): implement social feed localization and direct video upload` | Social Feed i18n + Video Upload | **Confirmed** | **Confirmed (Pushed)** |
+| `e02c6f2` | `e02c6f272a2ceca805e75da76814631377a06c8b` | `feat(feed): implement post title and structured content with backward compatibility` | Post Title & Structured Content | **Confirmed** | **Confirmed (Pushed)** |
+| `6a9795b` | `6a9795b36bb032c5890c291244349e5d4cb0d82d` | `feat(i18n): localize member directory, community groups, and matrimonial modules in hindi and english` | Batch 15H.1, 15H.2, 15H.3 | **Confirmed** | **Confirmed (Pushed)** |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current HEAD:** `20eba1c7e2c54ab80dd300508811670dd1177f9d` (`20eba1c`)
+- **Current HEAD:** `6a9795b36bb032c5890c291244349e5d4cb0d82d` (`6a9795b`)
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
-- **Upstream Sync Status:** Synchronized. `main` is directly at `origin/main` (0 commits ahead, 0 commits behind). Commit `20eba1c` and all prior checkpoints are verified present on the GitHub remote.
+- **Upstream Sync Status:** Synchronized with `origin/main` following user push request.
 
 ---
 
@@ -187,22 +191,27 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **15G.1** | Social Feed Localization (Hindi/English) | Registered `feed` i18n namespace, added 147 translation keys with 1:1 Hindi/English parity across FeedPage, CreatePostComposer, PostCard, PostDetailPage, and relative timestamp formatting. | `BATCH_15G_1_SOCIAL_FEED_LOCALIZATION_REPORT.md` | Verified Pass (25/25 tests, clean typecheck & build) | Uncommitted | Working tree | Clean working tree changes preserved. |
 | **15G.2** | Direct Video Upload + YouTube Video Integration | Authenticated MP4/WebM video uploads, memory-safe disk streaming upload via Multer, server-side magic bytes validation (128-byte header read), 30MB/90s bounds, video preview card with progress/retry, and zero DB migration using existing `PostMedia`. | `BATCH_15G_2_VIDEO_UPLOAD_REPORT.md` | Verified Pass (35 backend + 45 frontend + 25 15G.1 = 105/105 tests pass) | Uncommitted | Working tree | Clean working tree changes preserved. |
 | **15F Fix** | Admin Excel Member Import Modal Mounting Fix | Fixed missing <BulkImportDialog /> in JSX of MemberManagementPage.tsx, restored modal trigger, verified FormData boundary handling, added lifecycle tests. | BATCH_MEMBER_EXCEL_IMPORT_FIX_REPORT.md | Verified Pass (53 admin UX, 57 backend, 75 contracts, 8/8 typecheck & build) | Uncommitted | Working tree | Clean working tree changes preserved. Batch 15G.1 & 15G.2 files untouched. |
-| **15G.3** | Stabilization, Security Audit & Checkpoint Prep | Read-only stabilization audit across Feed i18n, Video Upload, and Admin Member Import Fix. Verified 290 automated tests, clean typecheck across 8 workspaces, production builds, 0 secrets, and prepared 2-commit architecture. | BATCH_15G_3_STABILIZATION_REPORT.md | Verified Pass (290/290 tests, clean typecheck & builds) | Uncommitted | Working tree | Clean working tree changes preserved. Ready for user approval. |
+| **15G.3** | Stabilization & 2-Commit Checkpoint Execution | Read-only stabilization audit across Feed i18n, Video Upload, and Admin Member Import Fix. Created Commit 1 (3d36b06) and Commit 2 (247fb6d). Verified 290 automated tests, clean typecheck, and production builds. | BATCH_15G_3_STABILIZATION_REPORT.md | Verified Pass (290/290 tests, clean typecheck & builds) | 3d36b06, 247fb6d | Local main (ahead 2) | All files committed cleanly. Ready for Batch 15H. |
+| **15G.4** | Next-Batch Architectural Planning Audit | Evaluated 6 prioritized candidate batches across UI localization, notifications, chat, audio, analytics, and tenant management. Formulated 4-phase roadmap and recommended Batch 15H.1. | BATCH_15G_4_PLANNING_REPORT.md | Verified (Clean audit) | Working tree | Planning report preserved. |
+| **15H.1** | Member Directory & Profile Localization (Hindi/English) | Registered `directory` i18n namespace with 55 translation keys (1:1 Hindi/English parity), localized `DirectoryPage.tsx` and `MemberProfilePage.tsx`, added Indian locale date formatting (`hi-IN` / `en-IN`), preserved raw user data (names, cities, gotras, bios), added 14 automated UX tests. | BATCH_15H_1_DIRECTORY_LOCALIZATION_REPORT.md | Verified Pass (14 directory UX + 25 feed UX + 45 directory UX + 53 admin UX + 35 video = 172/172 tests, clean monorepo typecheck across 8 workspaces & Vite build) | 6a9795b | Confirmed (Pushed) | Committed & pushed in Batch 15H checkpoint. |
+| **15H.2** | Groups & Mandals Localization (Hindi/English) | Registered `groups` i18n namespace with 138 translation keys (1:1 Hindi/English parity), localized `GroupsPage.tsx` and `GroupDetailPage.tsx` (headers, filters, privacy chips, tabs, membership badges, dialogs, member roster, role management), preserved raw user data (group names, member names, discussions, descriptions), added 15 automated UX tests. | BATCH_15H_2_GROUPS_LOCALIZATION_REPORT.md | Verified Pass (15 groups UX + 57 groups frontend UX + 14 directory UX + 25 feed UX = 111 tests, clean monorepo typecheck across 8 workspaces & Vite build) | 6a9795b | Confirmed (Pushed) | Committed & pushed in Batch 15H checkpoint. |
+| **Post Title** | Post Title & Structured Content | Added optional title for GENERAL posts, required title for ANNOUNCEMENT and EVENT posts, updated Prisma schema (`title String?`), created migration SQL artifact (`20261102193000_add_post_title`), updated shared types, Zod schemas, posts service with title persistence & search filter, 10 new i18n keys with 100% Hindi/English parity, UI inputs in composer and card/detail views, and 26 automated tests. | BATCH_POST_TITLE_IMPLEMENTATION_REPORT.md | Verified Pass (26 post title UX + 25 feed UX + 14 directory UX + 15 groups UX + 35 video = 115 tests, clean monorepo typecheck across 8 workspaces & Vite build) | e02c6f2 | Local main (ahead 3) | Clean commit verified. |
+| **15H.3** | Matrimonial Module Localization (Hindi/English) | Registered `matrimonial` i18n namespace with 165 translation keys (100% Hindi/English parity), localized `MatrimonialDiscoveryPage.tsx`, `MatrimonialDashboardPage.tsx` (7 tabs, forms, options, dialogs), `MatrimonialProfileDetailPage.tsx`, `ReceivedInterestsList.tsx`, and `SentInterestsList.tsx`. Preserved raw user data (names, bios, gotras), enforced phone number privacy boundaries, added 13 automated UX tests. | BATCH_15H_3_MATRIMONIAL_LOCALIZATION_REPORT.md | Verified Pass (13 matrimonial UX + 38 matrimonial tests + 26 post title UX + 25 feed UX + 15 groups UX + 35 video = 152 tests, clean monorepo typecheck across 8 workspaces & Vite build) | 6a9795b | Confirmed (Pushed) | Committed & pushed in Batch 15H checkpoint. |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `58493f74b1724b80433ebe59b0ba08cc5b6cd4b1` (`58493f7`)
-- **Upstream Tracking:** Synchronized with `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`).
+- **Current HEAD:** `6a9795b36bb032c5890c291244349e5d4cb0d82d` (`6a9795b`)
+- **Upstream Tracking:** Synchronized with `origin/main`.
 - **Actual `git status --short`:**
   ```text
-  Working tree modified (Batch 15G.1 & 15G.2 verified files uncommitted).
+  Working tree 100% clean. All work committed and pushed to origin/main.
   ```
-- **Latest Completed Batch:** Batch 15G.3 (Stabilization, Security Audit & Checkpoint Preparation).
-- **Current In-Progress Batch:** Stabilization & pre-commit audit complete; awaiting explicit user approval to execute commits.
-- **Exact Next Recommended Batch:** **Execute Commit 1 (Admin Import Fix) and Commit 2 (Unified Batch 15G) upon approval**.
+- **Latest Completed Batch:** **Batch 15H.3 — Matrimonial Module Localization (Hindi / English)**.
+- **Current In-Progress Batch:** Batch 15H.3 complete, verified, and pushed; ready for next batch on any workstation.
+- **Exact Next Recommended Batch:** **Batch 15H.4 — Matrimonial Admin Moderation & Appeals Localization**.
 
 ---
 

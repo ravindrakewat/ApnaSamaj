@@ -10,5 +10,5 @@ export const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
   en: 'English',
 };
 
-export const TRANSLATION_NAMESPACES = ['common', 'nav', 'auth', 'notifications', 'feed'] as const;
+export const TRANSLATION_NAMESPACES = ['common', 'nav', 'auth', 'notifications', 'feed', 'directory', 'groups', 'matrimonial'] as const;
 export type TranslationNamespace = (typeof TRANSLATION_NAMESPACES)[number];

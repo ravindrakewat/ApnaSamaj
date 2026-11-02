@@ -41,6 +41,7 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { GroupListItem, GroupPrivacy } from '@apnasamaj/shared-types';
+import { useTranslation } from '@apnasamaj/i18n';
 import { fetchGroups, createGroupApi, joinGroupApi } from '../services/groups.service';
 
 export type PrivacyTabOption = 'ALL' | 'PUBLIC' | 'PRIVATE';
@@ -63,6 +64,7 @@ function getPageFromParams(params: URLSearchParams): number {
 }
 
 export const GroupsPage: React.FC = () => {
+  const { t } = useTranslation(['groups', 'common']);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -200,14 +202,14 @@ export const GroupsPage: React.FC = () => {
       if (currentReqId !== requestIdRef.current || !isMountedRef.current) {
         return;
       }
-      const msg = err instanceof Error ? err.message : 'Failed to load community groups.';
+      const msg = err instanceof Error ? err.message : t('loadError');
       setError(msg);
     } finally {
       if (currentReqId === requestIdRef.current && isMountedRef.current) {
         setLoading(false);
       }
     }
-  }, [page, limit, debouncedSearch, privacyTab]);
+  }, [page, limit, debouncedSearch, privacyTab, t]);
 
   useEffect(() => {
     loadGroups();
@@ -217,7 +219,7 @@ export const GroupsPage: React.FC = () => {
     e.preventDefault();
     const trimmedName = createName.trim();
     if (!trimmedName || trimmedName.length < 3) {
-      setCreateError('Group name must be at least 3 characters.');
+      setCreateError(t('groupNameMinLength'));
       return;
     }
 
@@ -239,7 +241,7 @@ export const GroupsPage: React.FC = () => {
 
       navigate(`/groups/${newGroup.slug}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create group.';
+      const msg = err instanceof Error ? err.message : t('createError');
       setCreateError(msg);
     } finally {
       setCreateLoading(false);
@@ -259,7 +261,7 @@ export const GroupsPage: React.FC = () => {
         )
       );
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to join group.';
+      const msg = err instanceof Error ? err.message : t('joinError');
       setError(msg);
     } finally {
       setJoiningId(null);
@@ -299,11 +301,11 @@ export const GroupsPage: React.FC = () => {
           <Box display="flex" alignItems="center" gap={1.5} mb={1}>
             <GroupsIcon sx={{ fontSize: 36, color: '#ffb74d' }} />
             <Typography variant="h4" component="h1" fontWeight="bold">
-              Community Groups & Mandals
+              {t('title')}
             </Typography>
           </Box>
           <Typography variant="body1" sx={{ opacity: 0.9, maxWidth: 650 }}>
-            Connect with regional samaj mandals, youth chapters, and specialized community interest circles.
+            {t('subtitle')}
           </Typography>
         </Box>
 
@@ -312,6 +314,7 @@ export const GroupsPage: React.FC = () => {
           size="large"
           startIcon={<AddIcon />}
           onClick={() => setOpenCreate(true)}
+          aria-label={t('createGroupAria')}
           sx={{
             bgcolor: '#ff9800',
             color: '#ffffff',
@@ -323,7 +326,7 @@ export const GroupsPage: React.FC = () => {
             whiteSpace: 'nowrap',
           }}
         >
-          Create Group
+          {t('createGroup')}
         </Button>
       </Paper>
 
@@ -334,10 +337,10 @@ export const GroupsPage: React.FC = () => {
             <TextField
               fullWidth
               size="small"
-              placeholder="Search groups by name or description..."
+              placeholder={t('searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value.slice(0, 100))}
-              inputProps={{ maxLength: 100 }}
+              inputProps={{ maxLength: 100, 'aria-label': t('searchAria') }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -346,7 +349,7 @@ export const GroupsPage: React.FC = () => {
                 ),
                 endAdornment: searchTerm ? (
                   <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setSearchTerm('')}>
+                    <IconButton size="small" onClick={() => setSearchTerm('')} aria-label={t('clearSearchAria')}>
                       <ClearIcon fontSize="small" />
                     </IconButton>
                   </InputAdornment>
@@ -367,9 +370,9 @@ export const GroupsPage: React.FC = () => {
               variant="scrollable"
               scrollButtons="auto"
             >
-              <Tab label="All Groups" value="ALL" sx={{ textTransform: 'none', fontWeight: 600 }} />
-              <Tab label="Public Mandals" value="PUBLIC" sx={{ textTransform: 'none', fontWeight: 600 }} />
-              <Tab label="Private Groups" value="PRIVATE" sx={{ textTransform: 'none', fontWeight: 600 }} />
+              <Tab label={t('tabAll')} value="ALL" sx={{ textTransform: 'none', fontWeight: 600 }} />
+              <Tab label={t('tabPublic')} value="PUBLIC" sx={{ textTransform: 'none', fontWeight: 600 }} />
+              <Tab label={t('tabPrivate')} value="PRIVATE" sx={{ textTransform: 'none', fontWeight: 600 }} />
             </Tabs>
           </Grid>
         </Grid>
@@ -380,8 +383,8 @@ export const GroupsPage: React.FC = () => {
         <Alert
           severity="error"
           action={
-            <Button color="inherit" size="small" onClick={loadGroups} startIcon={<RefreshIcon />}>
-              Retry
+            <Button color="inherit" size="small" onClick={loadGroups} startIcon={<RefreshIcon />} aria-label={t('retryAria')}>
+              {t('common:retry')}
             </Button>
           }
           sx={{ mb: 4, borderRadius: 2 }}
@@ -421,12 +424,10 @@ export const GroupsPage: React.FC = () => {
         >
           <GroupsIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
           <Typography variant="h6" fontWeight="bold" gutterBottom>
-            No Groups Found
+            {t('emptyTitle')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 450, mx: 'auto', mb: 3 }}>
-            {hasActiveFilters
-              ? 'No groups match your current search criteria. Try clearing search filters.'
-              : 'Be the first to launch a community group or local mandal!'}
+            {hasActiveFilters ? t('emptyFilteredDesc') : t('emptyGenericDesc')}
           </Typography>
           {hasActiveFilters ? (
             <Button
@@ -434,16 +435,17 @@ export const GroupsPage: React.FC = () => {
               onClick={handleClearFilters}
               sx={{ textTransform: 'none' }}
             >
-              Clear Filters
+              {t('clearFilters')}
             </Button>
           ) : (
             <Button
               variant="contained"
               startIcon={<AddIcon />}
               onClick={() => setOpenCreate(true)}
+              aria-label={t('createGroupAria')}
               sx={{ textTransform: 'none' }}
             >
-              Create Group Now
+              {t('createGroupNow')}
             </Button>
           )}
         </Paper>
@@ -514,7 +516,7 @@ export const GroupsPage: React.FC = () => {
                               <LockIcon sx={{ fontSize: '14px !important' }} />
                             )
                           }
-                          label={group.privacy}
+                          label={group.privacy === GroupPrivacy.PUBLIC ? t('privacyPublic') : t('privacyPrivate')}
                           size="small"
                           color={group.privacy === GroupPrivacy.PUBLIC ? 'success' : 'default'}
                           variant="outlined"
@@ -535,18 +537,18 @@ export const GroupsPage: React.FC = () => {
                           mb: 2,
                         }}
                       >
-                        {group.description || 'No description provided.'}
+                        {group.description || t('noDescription')}
                       </Typography>
 
                       {/* Counts / Meta */}
                       <Box display="flex" alignItems="center" gap={2} color="text.secondary">
-                        <Box display="flex" alignItems="center" gap={0.5}>
+                        <Box display="flex" alignItems="center" gap={0.5} title={t('membersCount', { count: group.membersCount })}>
                           <PeopleIcon sx={{ fontSize: 16 }} />
                           <Typography variant="caption" fontWeight="bold">
                             {group.membersCount}
                           </Typography>
                         </Box>
-                        <Box display="flex" alignItems="center" gap={0.5}>
+                        <Box display="flex" alignItems="center" gap={0.5} title={t('discussionsCount', { count: group.postsCount })}>
                           <DynamicFeedIcon sx={{ fontSize: 16 }} />
                           <Typography variant="caption" fontWeight="bold">
                             {group.postsCount}
@@ -560,7 +562,15 @@ export const GroupsPage: React.FC = () => {
                   <Box p={2} pt={0} display="flex" alignItems="center" justifyContent="space-between">
                     {group.isMember ? (
                       <Chip
-                        label={group.myRole ? `${group.myRole}` : 'Member'}
+                        label={
+                          group.myRole
+                            ? group.myRole === 'ADMIN'
+                              ? t('roleAdmin')
+                              : group.myRole === 'MODERATOR'
+                              ? t('roleModerator')
+                              : t('roleMember')
+                            : t('member')
+                        }
                         size="small"
                         color="primary"
                         sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}
@@ -574,16 +584,21 @@ export const GroupsPage: React.FC = () => {
                         onClick={(e) => handleJoin(e, group)}
                         sx={{ textTransform: 'none', borderRadius: 2 }}
                       >
-                        {joiningId === group.id ? <CircularProgress size={16} /> : 'Join'}
+                        {joiningId === group.id ? <CircularProgress size={16} /> : t('join')}
                       </Button>
                     ) : (
                       <Typography variant="caption" color="text.secondary">
-                        Private Group
+                        {t('privateGroup')}
                       </Typography>
                     )}
 
-                    <Button size="small" color="inherit" sx={{ textTransform: 'none', fontWeight: 600 }}>
-                      View &rarr;
+                    <Button
+                      size="small"
+                      color="inherit"
+                      aria-label={t('viewAria', { name: group.name })}
+                      sx={{ textTransform: 'none', fontWeight: 600 }}
+                    >
+                      {t('view')}
                     </Button>
                   </Box>
                 </Card>
@@ -600,6 +615,7 @@ export const GroupsPage: React.FC = () => {
                 onChange={(_, val) => setPage(val)}
                 color="primary"
                 shape="rounded"
+                aria-label={t('paginationAria')}
               />
             </Box>
           )}
@@ -613,7 +629,7 @@ export const GroupsPage: React.FC = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle fontWeight="bold">Create New Group</DialogTitle>
+        <DialogTitle fontWeight="bold">{t('createModalTitle')}</DialogTitle>
         <DialogContent dividers>
           {createError && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -622,47 +638,47 @@ export const GroupsPage: React.FC = () => {
           )}
           <Box component="form" onSubmit={handleCreateGroup} display="flex" flexDirection="column" gap={2.5} pt={1}>
             <TextField
-              label="Group Name"
-              placeholder="e.g. Pune Youth Samaj Circle"
+              label={t('groupName')}
+              placeholder={t('groupNamePlaceholder')}
               value={createName}
               onChange={(e) => setCreateName(e.target.value.slice(0, 100))}
               fullWidth
               required
-              helperText={`${createName.length}/100 characters`}
+              helperText={t('groupNameHelper', { current: createName.length })}
               disabled={createLoading}
               inputProps={{ maxLength: 100 }}
             />
 
             <TextField
-              label="Description"
-              placeholder="What is the objective or community chapter for this group?"
+              label={t('description')}
+              placeholder={t('descriptionPlaceholder')}
               value={createDescription}
               onChange={(e) => setCreateDescription(e.target.value.slice(0, 1000))}
               fullWidth
               multiline
               rows={3}
-              helperText={`${createDescription.length}/1000 characters`}
+              helperText={t('descriptionHelper', { current: createDescription.length })}
               disabled={createLoading}
               inputProps={{ maxLength: 1000 }}
             />
 
             <FormControl fullWidth size="small">
-              <InputLabel id="create-privacy-label">Privacy</InputLabel>
+              <InputLabel id="create-privacy-label">{t('privacy')}</InputLabel>
               <Select
                 labelId="create-privacy-label"
                 value={createPrivacy}
-                label="Privacy"
+                label={t('privacy')}
                 onChange={(e) => setCreatePrivacy(e.target.value as GroupPrivacy)}
                 disabled={createLoading}
               >
-                <MenuItem value={GroupPrivacy.PUBLIC}>Public (Anyone in Samaj can join & view)</MenuItem>
-                <MenuItem value={GroupPrivacy.PRIVATE}>Private (Invite or approval only)</MenuItem>
+                <MenuItem value={GroupPrivacy.PUBLIC}>{t('privacyPublicOption')}</MenuItem>
+                <MenuItem value={GroupPrivacy.PRIVATE}>{t('privacyPrivateOption')}</MenuItem>
               </Select>
             </FormControl>
 
             <TextField
-              label="Cover Image URL (Optional)"
-              placeholder="https://example.com/banner.jpg"
+              label={t('coverImageUrl')}
+              placeholder={t('coverImagePlaceholder')}
               value={createCoverUrl}
               onChange={(e) => setCreateCoverUrl(e.target.value)}
               fullWidth
@@ -672,7 +688,7 @@ export const GroupsPage: React.FC = () => {
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setOpenCreate(false)} disabled={createLoading}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             variant="contained"
@@ -680,7 +696,7 @@ export const GroupsPage: React.FC = () => {
             disabled={createLoading || !createName.trim() || createName.trim().length < 3}
             sx={{ textTransform: 'none', px: 3, fontWeight: 'bold' }}
           >
-            {createLoading ? <CircularProgress size={20} color="inherit" /> : 'Create Group'}
+            {createLoading ? <CircularProgress size={20} color="inherit" /> : t('createSubmit')}
           </Button>
         </DialogActions>
       </Dialog>

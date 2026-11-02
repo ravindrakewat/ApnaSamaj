@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from '@apnasamaj/i18n';
 import {
   Box,
   Typography,
@@ -52,6 +53,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
   onSuccessNotice,
 }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('matrimonial');
   const [interests, setInterests] = useState<MatrimonialInterestItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -104,7 +106,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
     try {
       await respondMatrimonialInterestApi(interestId, 'WITHDRAWN');
       if (onSuccessNotice) {
-        onSuccessNotice('Interest request withdrawn successfully.');
+        onSuccessNotice(t('interestWithdrawnSuccess'));
       }
       await fetchSent(page);
     } catch (err: unknown) {
@@ -131,7 +133,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
           <Chip
             size="small"
             icon={<HourglassEmptyIcon fontSize="small" />}
-            label="Pending Response"
+            label={t('interestPendingResponse')}
             color="warning"
             sx={{ fontWeight: 600 }}
           />
@@ -141,7 +143,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
           <Chip
             size="small"
             icon={<CheckCircleIcon fontSize="small" />}
-            label="Accepted & Connected"
+            label={t('interestAcceptedConnected')}
             color="success"
             sx={{ fontWeight: 600 }}
           />
@@ -151,7 +153,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
           <Chip
             size="small"
             icon={<CancelIcon fontSize="small" />}
-            label="Declined"
+            label={t('interestDeclinedStatus')}
             variant="outlined"
             color="default"
             sx={{ fontWeight: 600 }}
@@ -162,7 +164,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
           <Chip
             size="small"
             icon={<UndoIcon fontSize="small" />}
-            label="Withdrawn"
+            label={t('interestWithdrawnStatus')}
             variant="outlined"
             color="default"
             sx={{ fontWeight: 600 }}
@@ -193,13 +195,13 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
       <Paper elevation={0} sx={{ p: 4, textAlign: 'center', bgcolor: 'background.paper', borderRadius: 2 }}>
         <HourglassEmptyIcon sx={{ fontSize: 48, color: 'warning.main', mb: 1.5 }} />
         <Typography variant="h6" fontWeight="bold" gutterBottom>
-          Matrimonial Database Pending
+          {t('serviceUnavailableTitle')}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520, mx: 'auto', mb: 2 }}>
-          The matrimonial interest management tables are currently being prepared. Please check back shortly.
+          {t('serviceUnavailableInterestsDesc')}
         </Typography>
         <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => fetchSent(page)}>
-          Retry Connection
+          {t('retryConnectionBtn')}
         </Button>
       </Paper>
     );
@@ -211,10 +213,10 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h6" fontWeight="bold">
-            Sent Interest Requests{totalCount > 0 ? ` (${totalCount})` : ''}
+            {t('sentInterestsTitle')}{totalCount > 0 ? ` (${totalCount})` : ''}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Track connection requests you have initiated with other community members.
+            {t('sentInterestsSubtitle')}
           </Typography>
         </Box>
         <Button
@@ -224,7 +226,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
           onClick={() => fetchSent(page)}
           disabled={isLoading}
         >
-          Refresh
+          {t('refresh')}
         </Button>
       </Box>
 
@@ -240,7 +242,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6, gap: 2 }}>
           <CircularProgress size={36} />
           <Typography variant="body2" color="text.secondary">
-            Loading sent requests...
+            {t('loadingSentRequests')}
           </Typography>
         </Box>
       )}
@@ -261,10 +263,10 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
         >
           <PersonIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 1.5 }} />
           <Typography variant="h6" fontWeight="bold" gutterBottom>
-            No Sent Interests Yet
+            {t('noSentTitle')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 500, mx: 'auto', mb: 3 }}>
-            You have not sent any matrimonial interest requests yet. Discover verified community profiles and express your interest.
+            {t('noSentDesc')}
           </Typography>
           <Button
             variant="contained"
@@ -272,7 +274,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
             startIcon={<SearchIcon />}
             onClick={() => navigate('/matrimonial')}
           >
-            Explore Community Discovery
+            {t('exploreDiscoveryBtn')}
           </Button>
         </Paper>
       )}
@@ -359,7 +361,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
                         >
                           <CalendarTodayIcon sx={{ fontSize: 13, color: 'text.secondary' }} />
                           <Typography variant="caption" color="text.secondary">
-                            Sent {formatDate(item.createdAt)}
+                            {t('sentOnDate', { date: formatDate(item.createdAt) })}
                           </Typography>
                         </Box>
                       </Box>
@@ -380,7 +382,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                           <MessageIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                           <Typography variant="caption" fontWeight="bold" color="text.secondary">
-                            Introductory message sent:
+                            {t('messageFromYou')}
                           </Typography>
                         </Box>
                         <Typography variant="body2" color="text.primary" sx={{ fontStyle: 'italic' }}>
@@ -409,7 +411,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
                           <Typography variant="body2" color="success.dark" fontWeight="500">
-                            Great news! This member accepted your interest. Mutual contact details are unlocked.
+                            {t('mutualConnectedUnlockedNotice')}
                           </Typography>
                         </Box>
                         {profile?.id && (
@@ -420,7 +422,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
                             startIcon={<PhoneIcon />}
                             onClick={() => navigate(`/matrimonial/profiles/${profile.id}`)}
                           >
-                            View Contact Details
+                            {t('viewContactDetailsBtn')}
                           </Button>
                         )}
                       </Box>
@@ -439,7 +441,7 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
                           startIcon={<VisibilityIcon />}
                           onClick={() => navigate(`/matrimonial/profiles/${profile.id}`)}
                         >
-                          View Profile Details
+                          {t('viewFullProfile')}
                         </Button>
                       )}
                     </Box>
@@ -460,13 +462,13 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
                           disabled={isItemProcessing}
                           onClick={() => setWithdrawTarget(item)}
                         >
-                          Withdraw Request
+                          {t('withdrawBtn')}
                         </Button>
                       )}
 
                       {!isPending && (
                         <Typography variant="caption" color="text.secondary">
-                          {item.respondedAt ? `Responded on ${formatDate(item.respondedAt)}` : `Updated on ${formatDate(item.updatedAt)}`}
+                          {item.respondedAt ? t('respondedOnDate', { date: formatDate(item.respondedAt) }) : t('respondedOnDate', { date: formatDate(item.updatedAt) })}
                         </Typography>
                       )}
                     </Box>
@@ -498,20 +500,18 @@ export const SentInterestsList: React.FC<SentInterestsListProps> = ({
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle fontWeight="bold">Withdraw Interest Request?</DialogTitle>
+        <DialogTitle fontWeight="bold">{t('withdrawDialogTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText variant="body2">
-            Are you sure you want to withdraw your interest request to{' '}
-            <strong>{withdrawTarget?.otherPartyProfile?.fullName || 'this member'}</strong>? You will not be
-            able to send another request right away.
+            {t('withdrawDialogDesc', { name: withdrawTarget?.otherPartyProfile?.fullName || 'this member' })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setWithdrawTarget(null)} color="inherit">
-            Cancel
+            {t('common:cancel', { defaultValue: 'Cancel' })}
           </Button>
           <Button onClick={handleConfirmWithdraw} color="warning" variant="contained">
-            Confirm Withdraw
+            {t('confirmWithdrawBtn')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from '@apnasamaj/i18n';
 import {
   Box,
   Typography,
@@ -51,6 +52,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
   onSuccessNotice,
 }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('matrimonial');
   const [interests, setInterests] = useState<MatrimonialInterestItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -99,7 +101,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
     try {
       await respondMatrimonialInterestApi(interest.id, 'ACCEPTED');
       if (onSuccessNotice) {
-        onSuccessNotice('Interest request accepted! Mutual contact details are now unlocked.');
+        onSuccessNotice(t('interestAcceptedSuccess'));
       }
       // Refresh list to confirm server state
       await fetchReceived(page);
@@ -131,7 +133,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
     try {
       await respondMatrimonialInterestApi(interestId, 'DECLINED');
       if (onSuccessNotice) {
-        onSuccessNotice('Interest request declined.');
+        onSuccessNotice(t('interestDeclinedSuccess'));
       }
       await fetchReceived(page);
     } catch (err: unknown) {
@@ -156,7 +158,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
           <Chip
             size="small"
             icon={<HourglassEmptyIcon fontSize="small" />}
-            label="Pending Decision"
+            label={t('interestPendingDecision')}
             color="warning"
             sx={{ fontWeight: 600 }}
           />
@@ -166,7 +168,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
           <Chip
             size="small"
             icon={<CheckCircleIcon fontSize="small" />}
-            label="Accepted & Connected"
+            label={t('interestAcceptedConnected')}
             color="success"
             sx={{ fontWeight: 600 }}
           />
@@ -176,7 +178,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
           <Chip
             size="small"
             icon={<CancelIcon fontSize="small" />}
-            label="Declined"
+            label={t('interestDeclinedStatus')}
             variant="outlined"
             color="default"
             sx={{ fontWeight: 600 }}
@@ -186,7 +188,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
         return (
           <Chip
             size="small"
-            label="Withdrawn by Sender"
+            label={t('interestWithdrawnBySender')}
             variant="outlined"
             color="default"
             sx={{ fontWeight: 600 }}
@@ -217,13 +219,13 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
       <Paper elevation={0} sx={{ p: 4, textAlign: 'center', bgcolor: 'background.paper', borderRadius: 2 }}>
         <HourglassEmptyIcon sx={{ fontSize: 48, color: 'warning.main', mb: 1.5 }} />
         <Typography variant="h6" fontWeight="bold" gutterBottom>
-          Matrimonial Database Pending
+          {t('serviceUnavailableTitle')}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520, mx: 'auto', mb: 2 }}>
-          The matrimonial interest management tables are currently being prepared. Please check back shortly.
+          {t('serviceUnavailableInterestsDesc')}
         </Typography>
         <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => fetchReceived(page)}>
-          Retry Connection
+          {t('retryConnectionBtn')}
         </Button>
       </Paper>
     );
@@ -235,10 +237,10 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h6" fontWeight="bold">
-            Received Interest Requests{totalCount > 0 ? ` (${totalCount})` : ''}
+            {t('receivedInterestsTitle')}{totalCount > 0 ? ` (${totalCount})` : ''}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Community members who have expressed interest in connecting with you.
+            {t('receivedInterestsSubtitle')}
           </Typography>
         </Box>
         <Button
@@ -248,7 +250,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
           onClick={() => fetchReceived(page)}
           disabled={isLoading}
         >
-          Refresh
+          {t('refresh')}
         </Button>
       </Box>
 
@@ -264,7 +266,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6, gap: 2 }}>
           <CircularProgress size={36} />
           <Typography variant="body2" color="text.secondary">
-            Loading received requests...
+            {t('loadingReceivedRequests')}
           </Typography>
         </Box>
       )}
@@ -285,10 +287,10 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
         >
           <PersonIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 1.5 }} />
           <Typography variant="h6" fontWeight="bold" gutterBottom>
-            No Received Interests Yet
+            {t('noReceivedTitle')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 500, mx: 'auto', mb: 3 }}>
-            When verified community members express interest in your profile, their requests will appear here. You can also explore compatible matches in Discovery.
+            {t('noReceivedDesc')}
           </Typography>
           <Button
             variant="contained"
@@ -296,7 +298,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
             startIcon={<SearchIcon />}
             onClick={() => navigate('/matrimonial')}
           >
-            Explore Community Discovery
+            {t('exploreDiscoveryBtn')}
           </Button>
         </Paper>
       )}
@@ -383,7 +385,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
                         >
                           <CalendarTodayIcon sx={{ fontSize: 13, color: 'text.secondary' }} />
                           <Typography variant="caption" color="text.secondary">
-                            Received {formatDate(item.createdAt)}
+                            {t('receivedOnDate', { date: formatDate(item.createdAt) })}
                           </Typography>
                         </Box>
                       </Box>
@@ -404,7 +406,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                           <MessageIcon sx={{ fontSize: 16, color: 'primary.main' }} />
                           <Typography variant="caption" fontWeight="bold" color="text.secondary">
-                            Message from sender:
+                            {t('messageFromSender')}
                           </Typography>
                         </Box>
                         <Typography variant="body2" color="text.primary" sx={{ fontStyle: 'italic' }}>
@@ -433,7 +435,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
                           <Typography variant="body2" color="success.dark" fontWeight="500">
-                            Mutual connection accepted. Contact details are unlocked.
+                            {t('mutualConnectedUnlockedNotice')}
                           </Typography>
                         </Box>
                         {profile?.id && (
@@ -444,7 +446,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
                             startIcon={<PhoneIcon />}
                             onClick={() => navigate(`/matrimonial/profiles/${profile.id}`)}
                           >
-                            View Contact Details
+                            {t('viewContactDetailsBtn')}
                           </Button>
                         )}
                       </Box>
@@ -463,7 +465,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
                           startIcon={<VisibilityIcon />}
                           onClick={() => navigate(`/matrimonial/profiles/${profile.id}`)}
                         >
-                          View Full Profile
+                          {t('viewFullProfile')}
                         </Button>
                       )}
                     </Box>
@@ -479,7 +481,7 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
                             disabled={isItemProcessing}
                             onClick={() => setDeclineTarget(item)}
                           >
-                            Decline
+                            {t('declineBtn')}
                           </Button>
                           <Button
                             size="small"
@@ -495,14 +497,14 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
                             disabled={isItemProcessing}
                             onClick={() => handleAccept(item)}
                           >
-                            Accept
+                            {t('acceptBtn')}
                           </Button>
                         </>
                       )}
 
                       {!isPending && !isAccepted && (
                         <Typography variant="caption" color="text.secondary">
-                          Responded on {formatDate(item.updatedAt)}
+                          {t('respondedOnDate', { date: formatDate(item.updatedAt) })}
                         </Typography>
                       )}
                     </Box>
@@ -534,20 +536,18 @@ export const ReceivedInterestsList: React.FC<ReceivedInterestsListProps> = ({
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle fontWeight="bold">Decline Interest Request?</DialogTitle>
+        <DialogTitle fontWeight="bold">{t('declineDialogTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText variant="body2">
-            Are you sure you want to decline the interest request from{' '}
-            <strong>{declineTarget?.otherPartyProfile?.fullName || 'this member'}</strong>? Once declined, this
-            action cannot be undone.
+            {t('declineDialogDesc', { name: declineTarget?.otherPartyProfile?.fullName || 'this member' })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDeclineTarget(null)} color="inherit">
-            Cancel
+            {t('common:cancel', { defaultValue: 'Cancel' })}
           </Button>
           <Button onClick={handleConfirmDecline} color="error" variant="contained">
-            Confirm Decline
+            {t('confirmDeclineBtn')}
           </Button>
         </DialogActions>
       </Dialog>

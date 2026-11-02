@@ -78,6 +78,7 @@ import {
   fetchGroupMembers,
 } from '../services/groups.service';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from '@apnasamaj/i18n';
 import { CreatePostComposer } from '../components/CreatePostComposer';
 import { PostCard } from '../components/PostCard';
 import { GroupChatTab } from '../components/chat/GroupChatTab';
@@ -85,6 +86,7 @@ import { GroupChatTab } from '../components/chat/GroupChatTab';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const GroupDetailPage: React.FC = () => {
+  const { t, i18n } = useTranslation(['groups', 'common']);
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
@@ -186,12 +188,12 @@ export const GroupDetailPage: React.FC = () => {
       const data = await fetchGroupBySlug(slug);
       setGroup(data);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to load group details.';
+      const msg = err instanceof Error ? err.message : t('loadGroupError');
       setGroupError(msg);
     } finally {
       setLoadingGroup(false);
     }
-  }, [slug]);
+  }, [slug, t]);
 
   const loadGroupDiscussions = useCallback(async () => {
     if (!slug) return;
@@ -202,12 +204,12 @@ export const GroupDetailPage: React.FC = () => {
       setPosts(data.posts);
       setTotalPostsPages(data.pagination.totalPages);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to load group discussions.';
+      const msg = err instanceof Error ? err.message : t('loadDiscussionsError');
       setPostsError(msg);
     } finally {
       setLoadingPosts(false);
     }
-  }, [slug, postsPage]);
+  }, [slug, postsPage, t]);
 
   // Load Paginated Member Roster with Stale Protection
   const loadMemberRoster = useCallback(async () => {
@@ -240,14 +242,14 @@ export const GroupDetailPage: React.FC = () => {
       if (currentReqId !== rosterRequestIdRef.current || !isMountedRef.current) {
         return;
       }
-      const msg = err instanceof Error ? err.message : 'Failed to load member roster.';
+      const msg = err instanceof Error ? err.message : t('loadRosterError');
       setRosterError(msg);
     } finally {
       if (currentReqId === rosterRequestIdRef.current && isMountedRef.current) {
         setRosterLoading(false);
       }
     }
-  }, [group, rosterPage, debouncedRosterSearch, rosterRoleFilter, user]);
+  }, [group, rosterPage, debouncedRosterSearch, rosterRoleFilter, user, t]);
 
   useEffect(() => {
     loadGroupDetails();
@@ -271,10 +273,10 @@ export const GroupDetailPage: React.FC = () => {
     setActionError(null);
     try {
       await joinGroupApi(group.id);
-      setSuccessMessage('Joined group successfully!');
+      setSuccessMessage(t('joinedSuccess'));
       await loadGroupDetails();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to join group.';
+      const msg = err instanceof Error ? err.message : t('joinError');
       setActionError(msg);
     } finally {
       setActionLoading(false);
@@ -288,10 +290,10 @@ export const GroupDetailPage: React.FC = () => {
     try {
       await leaveGroupApi(group.id);
       setOpenLeaveDialog(false);
-      setSuccessMessage('You have left the group.');
+      setSuccessMessage(t('leftSuccess'));
       await loadGroupDetails();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to leave group.';
+      const msg = err instanceof Error ? err.message : t('leaveError');
       setActionError(msg);
     } finally {
       setActionLoading(false);
@@ -308,7 +310,7 @@ export const GroupDetailPage: React.FC = () => {
       setOpenDeleteDialog(false);
       navigate('/groups', { replace: true });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete group.';
+      const msg = err instanceof Error ? err.message : t('deleteError');
       setDeleteError(msg);
     } finally {
       setDeletingGroup(false);
@@ -322,12 +324,12 @@ export const GroupDetailPage: React.FC = () => {
 
     const trimmedId = targetUserId.trim();
     if (!trimmedId) {
-      setAddMemberError('User ID is required.');
+      setAddMemberError(t('userIdRequired'));
       return;
     }
 
     if (!UUID_REGEX.test(trimmedId)) {
-      setAddMemberError('Invalid user ID format. Please provide a valid RFC 4122 UUID.');
+      setAddMemberError(t('invalidUuidFormat'));
       return;
     }
 
@@ -337,11 +339,11 @@ export const GroupDetailPage: React.FC = () => {
       await addGroupMemberApi(group.id, trimmedId);
       setOpenAddMemberDialog(false);
       setTargetUserId('');
-      setSuccessMessage('Member successfully added to group.');
+      setSuccessMessage(t('memberAddedSuccess'));
       // Refresh member roster and group details
       await Promise.all([loadMemberRoster(), loadGroupDetails()]);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to add member.';
+      const msg = err instanceof Error ? err.message : t('addMemberError');
       setAddMemberError(msg);
     } finally {
       setAddingMember(false);
@@ -371,11 +373,11 @@ export const GroupDetailPage: React.FC = () => {
     if (!group) return;
     const trimmedName = editName.trim();
     if (trimmedName.length < 3 || trimmedName.length > 100) {
-      setEditError('Group name must be between 3 and 100 characters.');
+      setEditError(t('editNameBounds'));
       return;
     }
     if (editDescription.length > 1000) {
-      setEditError('Description cannot exceed 1000 characters.');
+      setEditError(t('editDescMax'));
       return;
     }
 
@@ -391,10 +393,10 @@ export const GroupDetailPage: React.FC = () => {
         privacy: editPrivacy,
       });
       setOpenEditDialog(false);
-      setSuccessMessage('Group settings updated successfully.');
+      setSuccessMessage(t('settingsUpdatedSuccess'));
       await loadGroupDetails();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update group settings.';
+      const msg = err instanceof Error ? err.message : t('updateSettingsError');
       setEditError(msg);
     } finally {
       setEditSaving(false);
@@ -407,10 +409,10 @@ export const GroupDetailPage: React.FC = () => {
     setActionError(null);
     try {
       await updateMemberRoleApi(group.id, targetUserIdToUpdate, newRole);
-      setSuccessMessage('Member role updated successfully.');
+      setSuccessMessage(t('roleUpdatedSuccess'));
       await Promise.all([loadMemberRoster(), loadGroupDetails()]);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update member role.';
+      const msg = err instanceof Error ? err.message : t('roleUpdateError');
       setActionError(msg);
     } finally {
       setRoleUpdatingUserId(null);
@@ -424,11 +426,11 @@ export const GroupDetailPage: React.FC = () => {
     try {
       await removeMemberApi(group.id, memberToRemove.userId);
       setOpenRemoveMemberDialog(false);
-      setSuccessMessage(`${memberToRemove.fullName} has been removed from the group.`);
+      setSuccessMessage(t('memberRemovedSuccess', { name: memberToRemove.fullName }));
       setMemberToRemove(null);
       await Promise.all([loadMemberRoster(), loadGroupDetails()]);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to remove member.';
+      const msg = err instanceof Error ? err.message : t('removeMemberError');
       setActionError(msg);
     } finally {
       setRemovingMember(false);
@@ -473,13 +475,13 @@ export const GroupDetailPage: React.FC = () => {
         <Alert
           severity="error"
           action={
-            <Button color="inherit" size="small" onClick={() => navigate('/groups')}>
-              Back to Groups
+            <Button color="inherit" size="small" onClick={() => navigate('/groups')} aria-label={t('backToGroupsAria')}>
+              {t('backToGroups')}
             </Button>
           }
           sx={{ borderRadius: 2 }}
         >
-          {groupError || 'Group not found.'}
+          {groupError || t('groupNotFound')}
         </Alert>
       </Container>
     );
@@ -496,8 +498,9 @@ export const GroupDetailPage: React.FC = () => {
         onClick={() => navigate('/groups')}
         sx={{ mb: 2, textTransform: 'none' }}
         color="inherit"
+        aria-label={t('backToGroupsAria')}
       >
-        Back to Groups
+        {t('backToGroups')}
       </Button>
 
       {/* Hero Group Card */}
@@ -560,7 +563,7 @@ export const GroupDetailPage: React.FC = () => {
                       <LockIcon sx={{ fontSize: '15px !important' }} />
                     )
                   }
-                  label={group.privacy}
+                  label={group.privacy === GroupPrivacy.PUBLIC ? t('privacyPublic') : t('privacyPrivate')}
                   size="small"
                   color={group.privacy === GroupPrivacy.PUBLIC ? 'success' : 'default'}
                   variant="outlined"
@@ -568,7 +571,18 @@ export const GroupDetailPage: React.FC = () => {
                 />
                 {group.isMember && (
                   <Chip
-                    label={group.myRole ? `Your Role: ${group.myRole}` : 'Member'}
+                    label={
+                      group.myRole
+                        ? t('yourRole', {
+                            role:
+                              group.myRole === 'ADMIN'
+                                ? t('roleAdmin')
+                                : group.myRole === 'MODERATOR'
+                                ? t('roleModerator')
+                                : t('roleMember'),
+                          })
+                        : t('member')
+                    }
                     size="small"
                     color="primary"
                     sx={{ fontWeight: 'bold' }}
@@ -578,7 +592,9 @@ export const GroupDetailPage: React.FC = () => {
 
               <Typography variant="caption" color="text.secondary" display="flex" alignItems="center" gap={0.5}>
                 <CalendarIcon sx={{ fontSize: 14 }} />
-                Created on {new Date(group.createdAt).toLocaleDateString()}
+                {t('createdOn', {
+                  date: new Date(group.createdAt).toLocaleDateString(i18n.language === 'hi' ? 'hi-IN' : 'en-IN'),
+                })}
               </Typography>
             </Box>
 
@@ -592,7 +608,7 @@ export const GroupDetailPage: React.FC = () => {
                     onClick={handleOpenEditDialog}
                     sx={{ textTransform: 'none', borderRadius: 2 }}
                   >
-                    Edit Group
+                    {t('editGroup')}
                   </Button>
 
                   <Button
@@ -605,7 +621,7 @@ export const GroupDetailPage: React.FC = () => {
                     }}
                     sx={{ textTransform: 'none', borderRadius: 2 }}
                   >
-                    Delete Group
+                    {t('deleteGroup')}
                   </Button>
                 </>
               )}
@@ -618,7 +634,7 @@ export const GroupDetailPage: React.FC = () => {
                   onClick={() => setOpenLeaveDialog(true)}
                   sx={{ textTransform: 'none', borderRadius: 2 }}
                 >
-                  Leave Group
+                  {t('leaveGroup')}
                 </Button>
               ) : group.privacy === GroupPrivacy.PUBLIC ? (
                 <Button
@@ -628,12 +644,12 @@ export const GroupDetailPage: React.FC = () => {
                   onClick={handleJoinGroup}
                   sx={{ textTransform: 'none', borderRadius: 2, px: 3, fontWeight: 'bold' }}
                 >
-                  {actionLoading ? <CircularProgress size={20} color="inherit" /> : 'Join Group'}
+                  {actionLoading ? <CircularProgress size={20} color="inherit" /> : t('joinGroup')}
                 </Button>
               ) : (
                 <Chip
                   icon={<LockIcon />}
-                  label="Private Group (Membership Required)"
+                  label={t('privateMembershipRequired')}
                   color="warning"
                   variant="outlined"
                 />
@@ -643,7 +659,7 @@ export const GroupDetailPage: React.FC = () => {
 
           {/* Description */}
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-            {group.description || 'Welcome to the official discussion circle for this samaj mandal.'}
+            {group.description || t('defaultDescription')}
           </Typography>
 
           {/* Stats Bar */}
@@ -652,14 +668,14 @@ export const GroupDetailPage: React.FC = () => {
             <Box display="flex" alignItems="center" gap={0.75}>
               <PeopleIcon color="action" fontSize="small" />
               <Typography variant="body2" fontWeight="bold">
-                {group.membersCount} Member{group.membersCount === 1 ? '' : 's'}
+                {t('membersCount', { count: group.membersCount })}
               </Typography>
             </Box>
 
             <Box display="flex" alignItems="center" gap={0.75}>
               <DynamicFeedIcon color="action" fontSize="small" />
               <Typography variant="body2" fontWeight="bold">
-                {group.postsCount} Discussion{group.postsCount === 1 ? '' : 's'}
+                {t('discussionsCount', { count: group.postsCount })}
               </Typography>
             </Box>
           </Box>
@@ -675,17 +691,17 @@ export const GroupDetailPage: React.FC = () => {
           textColor="primary"
         >
           <Tab
-            label={`Discussions (${group.postsCount})`}
+            label={t('tabDiscussionsWithCount', { count: group.postsCount })}
             sx={{ textTransform: 'none', fontWeight: 'bold' }}
           />
           <Tab
-            label={`Members (${group.membersCount})`}
+            label={t('tabMembersWithCount', { count: group.membersCount })}
             sx={{ textTransform: 'none', fontWeight: 'bold' }}
           />
           <Tab
             icon={<ChatIcon sx={{ fontSize: '18px !important' }} />}
             iconPosition="start"
-            label="Chat"
+            label={t('tabChat')}
             sx={{ textTransform: 'none', fontWeight: 'bold' }}
           />
         </Tabs>
@@ -713,10 +729,10 @@ export const GroupDetailPage: React.FC = () => {
             >
               <LockIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.6 }} />
               <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Private Group Content
+                {t('privateContentTitle')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 450, mx: 'auto' }}>
-                Discussions in this group are private and only viewable by authorized group members.
+                {t('privateContentDesc')}
               </Typography>
             </Paper>
           ) : (
@@ -742,7 +758,7 @@ export const GroupDetailPage: React.FC = () => {
                   }}
                 >
                   <Typography variant="body2" color="text.secondary">
-                    Join this group to participate in discussions and publish posts.
+                    {t('joinPromptToPost')}
                   </Typography>
                   <Button
                     size="small"
@@ -751,7 +767,7 @@ export const GroupDetailPage: React.FC = () => {
                     disabled={actionLoading}
                     sx={{ textTransform: 'none' }}
                   >
-                    Join to Post
+                    {t('joinToPost')}
                   </Button>
                 </Paper>
               )}
@@ -781,10 +797,10 @@ export const GroupDetailPage: React.FC = () => {
                 >
                   <DynamicFeedIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.5 }} />
                   <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                    No Discussions Yet
+                    {t('noDiscussionsTitle')}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Be the first to start a conversation in this group!
+                    {t('noDiscussionsDesc')}
                   </Typography>
                 </Paper>
               )}
@@ -808,6 +824,7 @@ export const GroupDetailPage: React.FC = () => {
                         onChange={(_, val) => setPostsPage(val)}
                         color="primary"
                         shape="rounded"
+                        aria-label={t('paginationAria')}
                       />
                     </Box>
                   )}
@@ -833,10 +850,10 @@ export const GroupDetailPage: React.FC = () => {
             >
               <LockIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.6 }} />
               <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Private Group Roster
+                {t('privateRosterTitle')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 450, mx: 'auto' }}>
-                The member roster for this private group is hidden from non-members.
+                {t('privateRosterDesc')}
               </Typography>
             </Paper>
           ) : (
@@ -848,10 +865,10 @@ export const GroupDetailPage: React.FC = () => {
                     <TextField
                       fullWidth
                       size="small"
-                      placeholder="Search members by name..."
+                      placeholder={t('searchMembersPlaceholder')}
                       value={rosterSearch}
                       onChange={(e) => setRosterSearch(e.target.value.slice(0, 100))}
-                      inputProps={{ maxLength: 100 }}
+                      inputProps={{ maxLength: 100, 'aria-label': t('searchMembersAria') }}
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
@@ -860,7 +877,7 @@ export const GroupDetailPage: React.FC = () => {
                         ),
                         endAdornment: rosterSearch ? (
                           <InputAdornment position="end">
-                            <IconButton size="small" onClick={() => setRosterSearch('')}>
+                            <IconButton size="small" onClick={() => setRosterSearch('')} aria-label={t('clearRosterSearchAria')}>
                               <ClearIcon fontSize="small" />
                             </IconButton>
                           </InputAdornment>
@@ -871,20 +888,20 @@ export const GroupDetailPage: React.FC = () => {
 
                   <Grid item xs={6} sm={3} md={3}>
                     <FormControl fullWidth size="small">
-                      <InputLabel id="roster-role-filter-label">Role</InputLabel>
+                      <InputLabel id="roster-role-filter-label">{t('roleFilterLabel')}</InputLabel>
                       <Select
                         labelId="roster-role-filter-label"
                         value={rosterRoleFilter}
-                        label="Role"
+                        label={t('roleFilterLabel')}
                         onChange={(e) => {
                           setRosterRoleFilter(e.target.value as any);
                           setRosterPage(1);
                         }}
                       >
-                        <MenuItem value="">All Roles</MenuItem>
-                        <MenuItem value="ADMIN">Admins</MenuItem>
-                        <MenuItem value="MODERATOR">Moderators</MenuItem>
-                        <MenuItem value="MEMBER">Members</MenuItem>
+                        <MenuItem value="">{t('allRoles')}</MenuItem>
+                        <MenuItem value="ADMIN">{t('admins')}</MenuItem>
+                        <MenuItem value="MODERATOR">{t('moderators')}</MenuItem>
+                        <MenuItem value="MEMBER">{t('members')}</MenuItem>
                       </Select>
                     </FormControl>
                   </Grid>
@@ -906,7 +923,7 @@ export const GroupDetailPage: React.FC = () => {
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        Add Member
+                        {t('addMember')}
                       </Button>
                     )}
                   </Grid>
@@ -918,8 +935,8 @@ export const GroupDetailPage: React.FC = () => {
                 <Alert
                   severity="error"
                   action={
-                    <Button color="inherit" size="small" onClick={loadMemberRoster} startIcon={<RefreshIcon />}>
-                      Retry
+                    <Button color="inherit" size="small" onClick={loadMemberRoster} startIcon={<RefreshIcon />} aria-label={t('retryRosterAria')}>
+                      {t('common:retry')}
                     </Button>
                   }
                   sx={{ mb: 3, borderRadius: 2 }}
@@ -948,12 +965,12 @@ export const GroupDetailPage: React.FC = () => {
                 >
                   <PeopleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.5 }} />
                   <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                    No Members Found
+                    {t('noMembersTitle')}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     {rosterSearch || rosterRoleFilter
-                      ? 'No members match the current search or role filter.'
-                      : 'No members are currently enrolled in this group.'}
+                      ? t('noMembersFiltered')
+                      : t('noMembersGeneric')}
                   </Typography>
                   {(rosterSearch || rosterRoleFilter) && (
                     <Button
@@ -966,7 +983,7 @@ export const GroupDetailPage: React.FC = () => {
                       }}
                       sx={{ textTransform: 'none' }}
                     >
-                      Reset Filters
+                      {t('resetFilters')}
                     </Button>
                   )}
                 </Paper>
@@ -1020,7 +1037,7 @@ export const GroupDetailPage: React.FC = () => {
                                   </Typography>
                                   {isSelf && (
                                     <Chip
-                                      label="You"
+                                      label={t('you')}
                                       size="small"
                                       color="info"
                                       variant="outlined"
@@ -1047,14 +1064,14 @@ export const GroupDetailPage: React.FC = () => {
                                     disabled={roleUpdatingUserId === m.userId}
                                     sx={{ height: 32, fontSize: '0.78rem', fontWeight: 600 }}
                                   >
-                                    <MenuItem value="ADMIN">ADMIN</MenuItem>
-                                    <MenuItem value="MODERATOR">MODERATOR</MenuItem>
-                                    <MenuItem value="MEMBER">MEMBER</MenuItem>
+                                    <MenuItem value="ADMIN">{t('roleAdmin')}</MenuItem>
+                                    <MenuItem value="MODERATOR">{t('roleModerator')}</MenuItem>
+                                    <MenuItem value="MEMBER">{t('roleMember')}</MenuItem>
                                   </Select>
                                 </FormControl>
                               ) : (
                                 <Chip
-                                  label={m.role}
+                                  label={m.role === 'ADMIN' ? t('roleAdmin') : m.role === 'MODERATOR' ? t('roleModerator') : t('roleMember')}
                                   size="small"
                                   color={m.role === 'ADMIN' ? 'primary' : m.role === 'MODERATOR' ? 'secondary' : 'default'}
                                   sx={{ height: 26, fontSize: '0.72rem', fontWeight: 600 }}
@@ -1072,9 +1089,10 @@ export const GroupDetailPage: React.FC = () => {
                                     setOpenRemoveMemberDialog(true);
                                   }}
                                   disabled={removingMember}
+                                  aria-label={t('removeMemberAria', { name: m.user.fullName })}
                                   sx={{ textTransform: 'none', height: 30, fontSize: '0.75rem', px: 1.25 }}
                                 >
-                                  Remove
+                                  {t('removeMember')}
                                 </Button>
                               )}
                             </Box>
@@ -1093,6 +1111,7 @@ export const GroupDetailPage: React.FC = () => {
                         onChange={(_, val) => setRosterPage(val)}
                         color="primary"
                         shape="rounded"
+                        aria-label={t('paginationAria')}
                       />
                     </Box>
                   )}
@@ -1114,15 +1133,15 @@ export const GroupDetailPage: React.FC = () => {
 
       {/* Leave Group Confirmation Dialog */}
       <Dialog open={openLeaveDialog} onClose={() => !actionLoading && setOpenLeaveDialog(false)}>
-        <DialogTitle fontWeight="bold">Leave Group?</DialogTitle>
+        <DialogTitle fontWeight="bold">{t('leaveDialogTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to leave <strong>{group.name}</strong>? You can rejoin anytime if the group is public.
+            {t('leaveDialogDesc', { name: group.name })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setOpenLeaveDialog(false)} disabled={actionLoading}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             onClick={handleLeaveGroup}
@@ -1131,7 +1150,7 @@ export const GroupDetailPage: React.FC = () => {
             disabled={actionLoading}
             sx={{ textTransform: 'none' }}
           >
-            {actionLoading ? <CircularProgress size={18} color="inherit" /> : 'Leave Group'}
+            {actionLoading ? <CircularProgress size={18} color="inherit" /> : t('leaveConfirm')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1144,7 +1163,7 @@ export const GroupDetailPage: React.FC = () => {
         fullWidth
       >
         <DialogTitle fontWeight="bold" color="error.main">
-          Delete Group?
+          {t('deleteDialogTitle')}
         </DialogTitle>
         <DialogContent>
           {deleteError && (
@@ -1153,15 +1172,15 @@ export const GroupDetailPage: React.FC = () => {
             </Alert>
           )}
           <DialogContentText>
-            Are you sure you want to permanently delete <strong>{group.name}</strong>?
+            {t('deleteDialogDesc', { name: group.name })}
           </DialogContentText>
           <Typography variant="body2" color="error.main" sx={{ mt: 1.5, fontWeight: 500 }}>
-            This action cannot be undone. All group memberships, discussions, and chat history will be permanently deleted.
+            {t('deleteDialogWarning')}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button onClick={() => setOpenDeleteDialog(false)} disabled={deletingGroup}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             onClick={handleDeleteGroup}
@@ -1170,7 +1189,7 @@ export const GroupDetailPage: React.FC = () => {
             disabled={deletingGroup}
             sx={{ textTransform: 'none', fontWeight: 'bold' }}
           >
-            {deletingGroup ? <CircularProgress size={18} color="inherit" /> : 'Delete Group'}
+            {deletingGroup ? <CircularProgress size={18} color="inherit" /> : t('deleteConfirm')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1182,7 +1201,7 @@ export const GroupDetailPage: React.FC = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle fontWeight="bold">Add Member to Group</DialogTitle>
+        <DialogTitle fontWeight="bold">{t('addMemberDialogTitle')}</DialogTitle>
         <DialogContent dividers>
           {addMemberError && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -1190,13 +1209,12 @@ export const GroupDetailPage: React.FC = () => {
             </Alert>
           )}
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Directly onboard an active verified member into <strong>{group.name}</strong>.
-            New members are strictly assigned the standard <strong>MEMBER</strong> role.
+            {t('addMemberDialogDesc', { name: group.name })}
           </Typography>
           <Box component="form" onSubmit={handleAddMember} display="flex" flexDirection="column" gap={2} pt={1}>
             <TextField
-              label="Member User ID (UUID)"
-              placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000"
+              label={t('memberUserIdLabel')}
+              placeholder={t('memberUserIdPlaceholder')}
               value={targetUserId}
               onChange={(e) => {
                 setTargetUserId(e.target.value.trim());
@@ -1204,14 +1222,14 @@ export const GroupDetailPage: React.FC = () => {
               }}
               fullWidth
               required
-              helperText="Must be a valid 36-character RFC 4122 UUID."
+              helperText={t('memberUserIdHelper')}
               disabled={addingMember}
             />
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setOpenAddMemberDialog(false)} disabled={addingMember}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             variant="contained"
@@ -1219,7 +1237,7 @@ export const GroupDetailPage: React.FC = () => {
             disabled={addingMember || !targetUserId.trim()}
             sx={{ textTransform: 'none', px: 3, fontWeight: 'bold' }}
           >
-            {addingMember ? <CircularProgress size={20} color="inherit" /> : 'Add Member'}
+            {addingMember ? <CircularProgress size={20} color="inherit" /> : t('addMember')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1231,7 +1249,7 @@ export const GroupDetailPage: React.FC = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle fontWeight="bold">Edit Group Settings</DialogTitle>
+        <DialogTitle fontWeight="bold">{t('editDialogTitle')}</DialogTitle>
         <DialogContent dividers>
           {editError && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -1240,28 +1258,28 @@ export const GroupDetailPage: React.FC = () => {
           )}
           <Box component="form" display="flex" flexDirection="column" gap={2.5} pt={1}>
             <TextField
-              label="Group Name"
+              label={t('groupName')}
               value={editName}
               onChange={(e) => setEditName(e.target.value.slice(0, 100))}
               fullWidth
               required
-              helperText="Between 3 and 100 characters"
+              helperText={t('editNameHelper')}
               disabled={editSaving}
               inputProps={{ maxLength: 100 }}
             />
             <TextField
-              label="Description"
+              label={t('description')}
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value.slice(0, 1000))}
               fullWidth
               multiline
               rows={3}
-              helperText={`${editDescription.length}/1000 characters`}
+              helperText={t('editDescHelper', { current: editDescription.length })}
               disabled={editSaving}
               inputProps={{ maxLength: 1000 }}
             />
             <FormControl>
-              <FormLabel sx={{ fontWeight: 'bold', mb: 0.5, fontSize: '0.9rem' }}>Privacy</FormLabel>
+              <FormLabel sx={{ fontWeight: 'bold', mb: 0.5, fontSize: '0.9rem' }}>{t('privacy')}</FormLabel>
               <RadioGroup
                 row
                 value={editPrivacy}
@@ -1270,13 +1288,13 @@ export const GroupDetailPage: React.FC = () => {
                 <FormControlLabel
                   value={GroupPrivacy.PUBLIC}
                   control={<Radio />}
-                  label="Public (Anyone can view & join)"
+                  label={t('editPrivacyPublicLabel')}
                   disabled={editSaving}
                 />
                 <FormControlLabel
                   value={GroupPrivacy.PRIVATE}
                   control={<Radio />}
-                  label="Private (Members only)"
+                  label={t('editPrivacyPrivateLabel')}
                   disabled={editSaving}
                 />
               </RadioGroup>
@@ -1284,7 +1302,7 @@ export const GroupDetailPage: React.FC = () => {
 
             <Box>
               <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                Cover Image
+                {t('coverImageSection')}
               </Typography>
               {editCoverPreview && (
                 <Box
@@ -1308,7 +1326,7 @@ export const GroupDetailPage: React.FC = () => {
                 disabled={editSaving}
                 sx={{ textTransform: 'none' }}
               >
-                {editCoverFile ? 'Change Selected Image' : 'Upload Cover Image'}
+                {editCoverFile ? t('changeSelectedImage') : t('uploadCoverImage')}
                 <input
                   type="file"
                   hidden
@@ -1318,7 +1336,7 @@ export const GroupDetailPage: React.FC = () => {
               </Button>
               {editCoverFile && (
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                  Selected: {editCoverFile.name} ({(editCoverFile.size / 1024).toFixed(0)} KB)
+                  {t('selectedImageInfo', { name: editCoverFile.name, size: (editCoverFile.size / 1024).toFixed(0) })}
                 </Typography>
               )}
             </Box>
@@ -1326,7 +1344,7 @@ export const GroupDetailPage: React.FC = () => {
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setOpenEditDialog(false)} disabled={editSaving}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             variant="contained"
@@ -1334,7 +1352,7 @@ export const GroupDetailPage: React.FC = () => {
             disabled={editSaving}
             sx={{ textTransform: 'none', px: 3, fontWeight: 'bold' }}
           >
-            {editSaving ? <CircularProgress size={20} color="inherit" /> : 'Save Changes'}
+            {editSaving ? <CircularProgress size={20} color="inherit" /> : t('saveChanges')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1344,15 +1362,15 @@ export const GroupDetailPage: React.FC = () => {
         open={openRemoveMemberDialog}
         onClose={() => !removingMember && setOpenRemoveMemberDialog(false)}
       >
-        <DialogTitle fontWeight="bold">Remove Member?</DialogTitle>
+        <DialogTitle fontWeight="bold">{t('removeDialogTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to remove <strong>{memberToRemove?.fullName}</strong> from <strong>{group.name}</strong>?
+            {t('removeDialogDesc', { name: memberToRemove?.fullName, groupName: group.name })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setOpenRemoveMemberDialog(false)} disabled={removingMember}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             onClick={handleConfirmRemove}
@@ -1361,7 +1379,7 @@ export const GroupDetailPage: React.FC = () => {
             disabled={removingMember}
             sx={{ textTransform: 'none' }}
           >
-            {removingMember ? <CircularProgress size={18} color="inherit" /> : 'Remove Member'}
+            {removingMember ? <CircularProgress size={18} color="inherit" /> : t('removeConfirm')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -27,9 +27,11 @@ import {
   PersonOff as PersonOffIcon,
 } from '@mui/icons-material';
 import { PublicMemberProfile, UserRole } from '@apnasamaj/shared-types';
+import { useTranslation } from '@apnasamaj/i18n';
 import { getPublicProfileApi } from '../services/users.service';
 
 export const MemberProfilePage: React.FC = () => {
+  const { t, i18n } = useTranslation(['directory', 'common']);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -39,7 +41,7 @@ export const MemberProfilePage: React.FC = () => {
 
   const loadMemberProfile = useCallback(async () => {
     if (!id || !id.trim()) {
-      setError('Member ID is required to view a profile.');
+      setError(t('profileIdRequired'));
       setIsLoading(false);
       return;
     }
@@ -50,12 +52,12 @@ export const MemberProfilePage: React.FC = () => {
       const data = await getPublicProfileApi(id.trim());
       setMember(data);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Member profile not found or unavailable.';
+      const msg = err instanceof Error ? err.message : t('profileNotFound');
       setError(msg);
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     loadMemberProfile();
@@ -66,7 +68,7 @@ export const MemberProfilePage: React.FC = () => {
       <Container maxWidth="md" sx={{ py: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <CircularProgress size={44} />
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Loading member profile...
+          {t('loadingProfile')}
         </Typography>
       </Container>
     );
@@ -87,10 +89,10 @@ export const MemberProfilePage: React.FC = () => {
         >
           <PersonOffIcon sx={{ fontSize: 56, color: 'text.secondary', mb: 2, opacity: 0.6 }} />
           <Typography variant="h5" component="h1" fontWeight="bold" gutterBottom>
-            Member Profile Unavailable
+            {t('profileUnavailableTitle')}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 480, mx: 'auto', mb: 3 }}>
-            {error || 'This member profile could not be found or is not currently available in this community.'}
+            {error || t('profileUnavailableDesc')}
           </Typography>
           <Box display="flex" justifyContent="center" gap={2} flexWrap="wrap">
             <Button
@@ -99,9 +101,9 @@ export const MemberProfilePage: React.FC = () => {
               onClick={() => navigate('/directory')}
               startIcon={<ArrowBackIcon />}
               sx={{ textTransform: 'none', px: 3 }}
-              aria-label="Return to community directory"
+              aria-label={t('backToDirectoryAria')}
             >
-              Back to Directory
+              {t('backToDirectory')}
             </Button>
             <Button
               variant="outlined"
@@ -109,9 +111,9 @@ export const MemberProfilePage: React.FC = () => {
               onClick={loadMemberProfile}
               startIcon={<RefreshIcon />}
               sx={{ textTransform: 'none', px: 2.5 }}
-              aria-label="Retry loading member profile"
+              aria-label={t('retryProfileAria')}
             >
-              Retry
+              {t('common:retry')}
             </Button>
           </Box>
         </Paper>
@@ -119,10 +121,18 @@ export const MemberProfilePage: React.FC = () => {
     );
   }
 
-  const joinedFormatted = new Date(member.joinedAt).toLocaleDateString('en-IN', {
-    month: 'long',
-    year: 'numeric',
-  });
+  const joinedFormatted = (() => {
+    try {
+      const date = new Date(member.joinedAt);
+      const locale = i18n.language === 'hi' ? 'hi-IN' : 'en-IN';
+      return date.toLocaleDateString(locale, {
+        month: 'long',
+        year: 'numeric',
+      });
+    } catch {
+      return t('recently');
+    }
+  })();
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
@@ -132,9 +142,9 @@ export const MemberProfilePage: React.FC = () => {
         onClick={() => navigate(-1)}
         sx={{ mb: 2.5, textTransform: 'none' }}
         color="inherit"
-        aria-label="Go back to previous page"
+        aria-label={t('backAria')}
       >
-        Back
+        {t('back')}
       </Button>
 
       {/* Main Member Profile Card */}
@@ -188,7 +198,7 @@ export const MemberProfilePage: React.FC = () => {
                   </Typography>
                   <Chip
                     icon={<VerifiedIcon sx={{ fontSize: '15px !important', color: '#2e7d32 !important' }} />}
-                    label="Verified Member"
+                    label={t('verifiedMemberBadge')}
                     size="small"
                     sx={{
                       height: 22,
@@ -204,7 +214,15 @@ export const MemberProfilePage: React.FC = () => {
                   {member.role !== UserRole.MEMBER && (
                     <Chip
                       icon={<ShieldIcon sx={{ fontSize: '14px !important' }} />}
-                      label={member.role}
+                      label={
+                        member.role === UserRole.SUPER_ADMIN
+                          ? t('roleSuperAdmin')
+                          : member.role === UserRole.COMMUNITY_ADMIN
+                            ? t('roleAdmin')
+                            : member.role === UserRole.MODERATOR
+                              ? t('roleModerator')
+                              : t('roleMember')
+                      }
                       color="primary"
                       size="small"
                       variant="outlined"
@@ -212,7 +230,7 @@ export const MemberProfilePage: React.FC = () => {
                     />
                   )}
                   <Typography variant="caption" color="text.secondary">
-                    Member since {joinedFormatted}
+                    {t('memberSince', { date: joinedFormatted })}
                   </Typography>
                 </Box>
               </Box>
@@ -241,7 +259,7 @@ export const MemberProfilePage: React.FC = () => {
 
           {/* Details Section */}
           <Typography variant="h6" component="h2" fontWeight="bold" gutterBottom sx={{ mb: 2 }}>
-            Community Information
+            {t('communityInfo')}
           </Typography>
 
           <Grid container spacing={2}>
@@ -254,10 +272,10 @@ export const MemberProfilePage: React.FC = () => {
                   </Avatar>
                   <Box>
                     <Typography variant="caption" color="text.secondary">
-                      Location
+                      {t('location')}
                     </Typography>
                     <Typography variant="subtitle2" fontWeight="bold">
-                      {[member.city, member.state].filter(Boolean).join(', ') || 'Not specified'}
+                      {[member.city, member.state].filter(Boolean).join(', ') || t('notSpecified')}
                     </Typography>
                   </Box>
                 </CardContent>
@@ -273,10 +291,10 @@ export const MemberProfilePage: React.FC = () => {
                   </Avatar>
                   <Box>
                     <Typography variant="caption" color="text.secondary">
-                      Gotra
+                      {t('gotra')}
                     </Typography>
                     <Typography variant="subtitle2" fontWeight="bold">
-                      {member.gotra || 'Not specified'}
+                      {member.gotra || t('notSpecified')}
                     </Typography>
                   </Box>
                 </CardContent>
@@ -292,10 +310,10 @@ export const MemberProfilePage: React.FC = () => {
                   </Avatar>
                   <Box>
                     <Typography variant="caption" color="text.secondary">
-                      Sub-Caste
+                      {t('subCaste')}
                     </Typography>
                     <Typography variant="subtitle2" fontWeight="bold">
-                      {member.subCaste || 'Not specified'}
+                      {member.subCaste || t('notSpecified')}
                     </Typography>
                   </Box>
                 </CardContent>
@@ -311,10 +329,16 @@ export const MemberProfilePage: React.FC = () => {
                   </Avatar>
                   <Box>
                     <Typography variant="caption" color="text.secondary">
-                      Gender
+                      {t('gender')}
                     </Typography>
                     <Typography variant="subtitle2" fontWeight="bold">
-                      {member.gender || 'Not specified'}
+                      {member.gender
+                        ? member.gender.toUpperCase() === 'MALE'
+                          ? t('genderMale')
+                          : member.gender.toUpperCase() === 'FEMALE'
+                            ? t('genderFemale')
+                            : t('genderOther')
+                        : t('notSpecified')}
                     </Typography>
                   </Box>
                 </CardContent>

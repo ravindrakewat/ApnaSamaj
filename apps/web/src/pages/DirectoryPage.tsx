@@ -31,6 +31,7 @@ import {
   AutoStories as GotraIcon,
 } from '@mui/icons-material';
 import { PublicDirectoryMember } from '@apnasamaj/shared-types';
+import { useTranslation } from '@apnasamaj/i18n';
 import { fetchDirectory } from '../services/directory.service';
 
 interface FilterState {
@@ -65,6 +66,7 @@ function getPageFromParams(params: URLSearchParams): number {
 }
 
 export const DirectoryPage: React.FC = () => {
+  const { t, i18n } = useTranslation(['directory', 'common']);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -210,14 +212,14 @@ export const DirectoryPage: React.FC = () => {
       if (!isMountedRef.current || currentRequestId !== requestIdRef.current) {
         return;
       }
-      const msg = err instanceof Error ? err.message : 'Failed to load community directory.';
+      const msg = err instanceof Error ? err.message : t('loadError');
       setError(msg);
     } finally {
       if (isMountedRef.current && currentRequestId === requestIdRef.current) {
         setLoading(false);
       }
     }
-  }, [page, limit, debouncedFilters]);
+  }, [page, limit, debouncedFilters, t]);
 
   useEffect(() => {
     loadMembers();
@@ -254,12 +256,13 @@ export const DirectoryPage: React.FC = () => {
   const formatDate = (isoString: string) => {
     try {
       const date = new Date(isoString);
-      return date.toLocaleDateString('en-IN', {
+      const locale = i18n.language === 'hi' ? 'hi-IN' : 'en-IN';
+      return date.toLocaleDateString(locale, {
         month: 'short',
         year: 'numeric',
       });
     } catch {
-      return 'Recently';
+      return t('recently');
     }
   };
 
@@ -285,18 +288,18 @@ export const DirectoryPage: React.FC = () => {
           <Box display="flex" alignItems="center" gap={1.5} mb={1}>
             <PeopleIcon sx={{ fontSize: 36, color: '#ff9800' }} />
             <Typography variant="h4" component="h1" fontWeight="bold">
-              Community Member Directory
+              {t('title')}
             </Typography>
           </Box>
           <Typography variant="body1" sx={{ opacity: 0.9, maxWidth: 650 }}>
-            Connect with verified Apna Samaj community members. Discover families, locate local mandals, and explore roots across cities, gotras, and sub-castes.
+            {t('subtitle')}
           </Typography>
         </Box>
 
         <Box sx={{ alignSelf: { xs: 'flex-start', md: 'center' } }}>
           <Chip
             icon={<VerifiedIcon style={{ color: '#ffffff' }} />}
-            label={`${totalMembers} Verified Member${totalMembers === 1 ? '' : 's'}`}
+            label={t('verifiedMembers', { count: totalMembers })}
             sx={{
               bgcolor: 'rgba(255, 255, 255, 0.15)',
               color: '#ffffff',
@@ -322,8 +325,8 @@ export const DirectoryPage: React.FC = () => {
           <TextField
             fullWidth
             size="small"
-            placeholder="Search by name, gotra, city, or sub-caste..."
-            aria-label="Search members by name, gotra, city, or sub-caste"
+            placeholder={t('searchPlaceholder')}
+            aria-label={t('searchAria')}
             value={inputs.search}
             onChange={handleInputChange('search')}
             inputProps={{ maxLength: 100 }}
@@ -337,7 +340,7 @@ export const DirectoryPage: React.FC = () => {
                 <InputAdornment position="end">
                   <IconButton
                     size="small"
-                    aria-label="Clear search text"
+                    aria-label={t('clearSearchAria')}
                     onClick={handleInputClear('search')}
                   >
                     <ClearIcon fontSize="small" />
@@ -356,7 +359,7 @@ export const DirectoryPage: React.FC = () => {
               startIcon={<ClearIcon />}
               sx={{ textTransform: 'none', whiteSpace: 'nowrap', height: 40, minWidth: 130 }}
             >
-              Reset Filters
+              {t('resetFilters')}
             </Button>
           )}
         </Box>
@@ -368,8 +371,8 @@ export const DirectoryPage: React.FC = () => {
             <TextField
               fullWidth
               size="small"
-              placeholder="Filter by city..."
-              aria-label="Filter by city"
+              placeholder={t('filterCity')}
+              aria-label={t('filterCityAria')}
               value={inputs.city}
               onChange={handleInputChange('city')}
               inputProps={{ maxLength: 100 }}
@@ -383,7 +386,7 @@ export const DirectoryPage: React.FC = () => {
                   <InputAdornment position="end">
                     <IconButton
                       size="small"
-                      aria-label="Clear city filter"
+                      aria-label={t('clearCityAria')}
                       onClick={handleInputClear('city')}
                     >
                       <ClearIcon fontSize="small" />
@@ -399,8 +402,8 @@ export const DirectoryPage: React.FC = () => {
             <TextField
               fullWidth
               size="small"
-              placeholder="Filter by state..."
-              aria-label="Filter by state"
+              placeholder={t('filterState')}
+              aria-label={t('filterStateAria')}
               value={inputs.state}
               onChange={handleInputChange('state')}
               inputProps={{ maxLength: 100 }}
@@ -409,7 +412,7 @@ export const DirectoryPage: React.FC = () => {
                   <InputAdornment position="end">
                     <IconButton
                       size="small"
-                      aria-label="Clear state filter"
+                      aria-label={t('clearStateAria')}
                       onClick={handleInputClear('state')}
                     >
                       <ClearIcon fontSize="small" />
@@ -425,8 +428,8 @@ export const DirectoryPage: React.FC = () => {
             <TextField
               fullWidth
               size="small"
-              placeholder="Filter by sub-caste..."
-              aria-label="Filter by sub-caste"
+              placeholder={t('filterSubCaste')}
+              aria-label={t('filterSubCasteAria')}
               value={inputs.subCaste}
               onChange={handleInputChange('subCaste')}
               inputProps={{ maxLength: 100 }}
@@ -440,7 +443,7 @@ export const DirectoryPage: React.FC = () => {
                   <InputAdornment position="end">
                     <IconButton
                       size="small"
-                      aria-label="Clear sub-caste filter"
+                      aria-label={t('clearSubCasteAria')}
                       onClick={handleInputClear('subCaste')}
                     >
                       <ClearIcon fontSize="small" />
@@ -456,8 +459,8 @@ export const DirectoryPage: React.FC = () => {
             <TextField
               fullWidth
               size="small"
-              placeholder="Filter by gotra..."
-              aria-label="Filter by gotra"
+              placeholder={t('filterGotra')}
+              aria-label={t('filterGotraAria')}
               value={inputs.gotra}
               onChange={handleInputChange('gotra')}
               inputProps={{ maxLength: 100 }}
@@ -471,7 +474,7 @@ export const DirectoryPage: React.FC = () => {
                   <InputAdornment position="end">
                     <IconButton
                       size="small"
-                      aria-label="Clear gotra filter"
+                      aria-label={t('clearGotraAria')}
                       onClick={handleInputClear('gotra')}
                     >
                       <ClearIcon fontSize="small" />
@@ -493,7 +496,7 @@ export const DirectoryPage: React.FC = () => {
             borderTop="1px solid rgba(0, 0, 0, 0.08)"
           >
             <Typography variant="body2" color="text.secondary">
-              Active filters applied. Showing matching community members.
+              {t('activeFiltersNotice')}
             </Typography>
             <Button
               size="small"
@@ -502,7 +505,7 @@ export const DirectoryPage: React.FC = () => {
               startIcon={<ClearIcon />}
               sx={{ textTransform: 'none' }}
             >
-              Reset Filters
+              {t('resetFilters')}
             </Button>
           </Box>
         )}
@@ -518,9 +521,9 @@ export const DirectoryPage: React.FC = () => {
               size="small"
               onClick={loadMembers}
               startIcon={<RefreshIcon />}
-              aria-label="Retry loading directory"
+              aria-label={t('retryAria')}
             >
-              Retry
+              {t('common:retry')}
             </Button>
           }
           sx={{ mb: 4, borderRadius: 2 }}
@@ -565,12 +568,12 @@ export const DirectoryPage: React.FC = () => {
         >
           <AccountCircleIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
           <Typography variant="h6" fontWeight="bold" gutterBottom>
-            No Community Members Found
+            {t('emptyTitle')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 450, mx: 'auto', mb: 3 }}>
             {hasActiveFilters
-              ? 'No active members match your current filter criteria. Try clearing search filters or broadening location terms.'
-              : 'There are currently no verified active members registered in the community directory.'}
+              ? t('emptyFilteredDesc')
+              : t('emptyGenericDesc')}
           </Typography>
           {hasActiveFilters && (
             <Button
@@ -578,9 +581,9 @@ export const DirectoryPage: React.FC = () => {
               color="primary"
               onClick={handleClearFilters}
               sx={{ textTransform: 'none' }}
-              aria-label="Clear all directory filters"
+              aria-label={t('clearAllFilters')}
             >
-              Clear All Filters
+              {t('clearAllFilters')}
             </Button>
           )}
         </Paper>
@@ -645,7 +648,7 @@ export const DirectoryPage: React.FC = () => {
                         </Typography>
                         <Chip
                           icon={<VerifiedIcon sx={{ fontSize: '14px !important', color: '#2e7d32 !important' }} />}
-                          label="Verified Member"
+                          label={t('verifiedMemberBadge')}
                           size="small"
                           sx={{
                             height: 22,
@@ -674,7 +677,7 @@ export const DirectoryPage: React.FC = () => {
                       {member.gotra && (
                         <Chip
                           icon={<GotraIcon fontSize="small" />}
-                          label={`Gotra: ${member.gotra}`}
+                          label={t('gotraLabel', { gotra: member.gotra })}
                           size="small"
                           color="primary"
                           variant="outlined"
@@ -719,7 +722,7 @@ export const DirectoryPage: React.FC = () => {
                       <Box display="flex" alignItems="center" gap={0.75}>
                         <CalendarIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
                         <Typography variant="caption" color="text.secondary">
-                          Joined {formatDate(member.joinedAt)}
+                          {t('memberSince', { date: formatDate(member.joinedAt) })}
                         </Typography>
                       </Box>
                       {member.gender && (
@@ -745,7 +748,7 @@ export const DirectoryPage: React.FC = () => {
                 shape="rounded"
                 showFirstButton
                 showLastButton
-                aria-label="Community directory member pagination"
+                aria-label={t('paginationAria')}
               />
             </Box>
           )}

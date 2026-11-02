@@ -3,12 +3,18 @@ import navHi from './locales/hi/nav.json';
 import authHi from './locales/hi/auth.json';
 import notificationsHi from './locales/hi/notifications.json';
 import feedHi from './locales/hi/feed.json';
+import directoryHi from './locales/hi/directory.json';
+import groupsHi from './locales/hi/groups.json';
+import matrimonialHi from './locales/hi/matrimonial.json';
 
 import commonEn from './locales/en/common.json';
 import navEn from './locales/en/nav.json';
 import authEn from './locales/en/auth.json';
 import notificationsEn from './locales/en/notifications.json';
 import feedEn from './locales/en/feed.json';
+import directoryEn from './locales/en/directory.json';
+import groupsEn from './locales/en/groups.json';
+import matrimonialEn from './locales/en/matrimonial.json';
 
 export const resources = {
   hi: {
@@ -17,6 +23,9 @@ export const resources = {
     auth: authHi,
     notifications: notificationsHi,
     feed: feedHi,
+    directory: directoryHi,
+    groups: groupsHi,
+    matrimonial: matrimonialHi,
   },
   en: {
     common: commonEn,
@@ -24,5 +33,8 @@ export const resources = {
     auth: authEn,
     notifications: notificationsEn,
     feed: feedEn,
+    directory: directoryEn,
+    groups: groupsEn,
+    matrimonial: matrimonialEn,
   },
 } as const;

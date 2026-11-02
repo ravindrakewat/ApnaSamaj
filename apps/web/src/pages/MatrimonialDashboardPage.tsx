@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from '@apnasamaj/i18n';
 import {
   Container,
   Box,
@@ -128,6 +129,74 @@ const HABIT_OPTIONS: { value: HabitFrequency; label: string }[] = [
 
 export const MatrimonialDashboardPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useTranslation('matrimonial');
+
+  const maritalStatusOptions = useMemo(
+    () => [
+      { value: 'NEVER_MARRIED' as MaritalStatus, label: t('maritalNeverMarried') },
+      { value: 'DIVORCED' as MaritalStatus, label: t('maritalDivorced') },
+      { value: 'WIDOWED' as MaritalStatus, label: t('maritalWidowed') },
+      { value: 'AWAITING_DIVORCE' as MaritalStatus, label: t('maritalAwaitingDivorce') },
+    ],
+    [t]
+  );
+
+  const manglikOptions = useMemo(
+    () => [
+      { value: 'DONT_KNOW' as ManglikStatus, label: t('manglikDontKnow') },
+      { value: 'NON_MANGLIK' as ManglikStatus, label: t('manglikNonManglik') },
+      { value: 'MANGLIK' as ManglikStatus, label: t('manglikManglik') },
+      { value: 'ANSHIK' as ManglikStatus, label: t('manglikAnshik') },
+    ],
+    [t]
+  );
+
+  const employmentOptions = useMemo(
+    () => [
+      { value: 'PRIVATE_SECTOR' as EmploymentSector, label: t('sectorPrivate') },
+      { value: 'GOVERNMENT_PSU' as EmploymentSector, label: t('sectorGovernment') },
+      { value: 'BUSINESS_SELF_EMPLOYED' as EmploymentSector, label: t('sectorBusiness') },
+      { value: 'DEFENSE' as EmploymentSector, label: t('sectorGovernment') },
+      { value: 'NOT_WORKING' as EmploymentSector, label: t('sectorNotEmployed') },
+    ],
+    [t]
+  );
+
+  const familyTypeOptions = useMemo(
+    () => [
+      { value: 'NUCLEAR' as FamilyType, label: t('familyTypeNuclear') },
+      { value: 'JOINT' as FamilyType, label: t('familyTypeJoint') },
+    ],
+    [t]
+  );
+
+  const familyValuesOptions = useMemo(
+    () => [
+      { value: 'TRADITIONAL' as FamilyValues, label: t('valuesTraditional') },
+      { value: 'MODERATE' as FamilyValues, label: t('valuesModerate') },
+      { value: 'LIBERAL' as FamilyValues, label: t('valuesLiberal') },
+    ],
+    [t]
+  );
+
+  const dietOptions = useMemo(
+    () => [
+      { value: 'VEGETARIAN' as DietType, label: t('dietVegetarian') },
+      { value: 'NON_VEGETARIAN' as DietType, label: t('dietNonVegetarian') },
+      { value: 'EGGETARIAN' as DietType, label: t('dietEggetarian') },
+      { value: 'JAIN' as DietType, label: t('dietJain') },
+    ],
+    [t]
+  );
+
+  const habitOptions = useMemo(
+    () => [
+      { value: 'NO' as HabitFrequency, label: t('habitNever') },
+      { value: 'OCCASIONALLY' as HabitFrequency, label: t('habitOccasionally') },
+      { value: 'YES' as HabitFrequency, label: t('habitRegularly') },
+    ],
+    [t]
+  );
   const getInitialTab = (): number => {
     const t = searchParams.get('tab');
     if (t === 'received') return 5;
@@ -387,7 +456,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
       const updated = await updateMyMatrimonialProfileApi(validation.data);
       setProfile(updated);
       populateFields(updated);
-      setSuccessMessage('Matrimonial profile saved successfully!');
+      setSuccessMessage(t('profileSaveSuccess'));
     } catch (err: unknown) {
       const apiErr = err as MatrimonialApiError;
       if (apiErr.isMigrationPending) {
@@ -531,7 +600,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
         }
         setProfile({ ...profile, photos: remaining });
       }
-      setSuccessMessage('Photo removed from gallery.');
+      setSuccessMessage(t('photoRemovedSuccess'));
     } catch (err: unknown) {
       const apiErr = err as MatrimonialApiError;
       if (apiErr.isMigrationPending) {
@@ -549,7 +618,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
       return (
         <Chip
           icon={<HourglassEmptyIcon fontSize="small" />}
-          label="Draft — Not Visible in Discovery"
+          label={t('statusDraft')}
           color="default"
           variant="outlined"
           sx={{ fontWeight: 600 }}
@@ -560,7 +629,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
       return (
         <Chip
           icon={<HourglassEmptyIcon fontSize="small" />}
-          label="Pending Samaj Admin Approval"
+          label={t('statusPendingApproval')}
           color="warning"
           sx={{ fontWeight: 600 }}
         />
@@ -570,7 +639,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
       return (
         <Chip
           icon={<CheckCircleIcon fontSize="small" />}
-          label="Approved & Visible in Discovery"
+          label={t('statusApproved')}
           color="success"
           sx={{ fontWeight: 600 }}
         />
@@ -580,7 +649,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
       return (
         <Chip
           icon={<CancelIcon fontSize="small" />}
-          label="Changes Requested / Rejected"
+          label={t('statusRejected')}
           color="error"
           sx={{ fontWeight: 600 }}
         />
@@ -590,7 +659,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
       return (
         <Chip
           icon={<VisibilityOffIcon fontSize="small" />}
-          label="Hidden"
+          label={t('statusHidden')}
           color="default"
           sx={{ fontWeight: 600 }}
         />
@@ -606,7 +675,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
           <CircularProgress size={44} />
           <Typography variant="body1" color="text.secondary">
-            Loading your matrimonial profile...
+            {t('loadingProfile')}
           </Typography>
         </Box>
       </Container>
@@ -632,14 +701,13 @@ export const MatrimonialDashboardPage: React.FC = () => {
             <InfoIcon sx={{ fontSize: 56, color: 'warning.main' }} />
           </Box>
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Matrimonial Service Unavailable
+            {t('serviceUnavailableTitle')}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto', mb: 3 }}>
-            Matrimonial service is not available yet; database setup is pending. Our community engineering team
-            is preparing the matrimonial database tables. Please check back shortly.
+            {t('serviceUnavailableDiscoveryDesc')}
           </Typography>
           <Button variant="outlined" color="primary" onClick={loadProfile}>
-            Retry Connection
+            {t('retryConnectionBtn')}
           </Button>
         </Paper>
       </Container>
@@ -653,10 +721,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
           <Box>
             <Typography variant="h4" fontWeight="bold" color="text.primary">
-              My Matrimonial Profile
+              {t('dashboardTitle')}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Manage your personal bio, family background, partner expectations, and matrimonial photos.
+              {t('dashboardSubtitle')}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
@@ -670,7 +738,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 onClick={() => setIsSubmitDialogOpen(true)}
                 sx={{ fontWeight: 600, textTransform: 'none' }}
               >
-                {profile.status === 'REJECTED' ? 'Resubmit for Approval' : 'Submit for Approval'}
+                {profile.status === 'REJECTED' ? t('resubmitForApproval') : t('submitForApproval')}
               </Button>
             )}
           </Box>
@@ -680,23 +748,22 @@ export const MatrimonialDashboardPage: React.FC = () => {
         {profile?.status === 'REJECTED' && profile.rejectionReason && (
           <Alert severity="error" sx={{ mt: 2 }}>
             <Typography variant="subtitle2" fontWeight="bold">
-              Administrator Feedback:
+              {t('adminFeedbackTitle')}
             </Typography>
             <Typography variant="body2">{profile.rejectionReason}</Typography>
             <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-              Please update your profile according to the feedback above, save your changes, and click "Resubmit for Approval".
+              {t('adminFeedbackInstructions')}
             </Typography>
           </Alert>
         )}
 
         <Alert severity="info" sx={{ mt: 2 }}>
-          Community profiles are reviewed and moderated by Samaj administrators prior to publication. Members
-          cannot approve their own profiles. Sensitive contact information is strictly protected and never shown in discovery.
+          {t('dashboardModerationNotice')}
         </Alert>
 
         {!profile && (
           <Alert severity="warning" sx={{ mt: 2 }}>
-            You have not created your matrimonial profile yet. Complete the details below and click Save Profile to create your draft profile.
+            {t('dashboardDraftNotice')}
           </Alert>
         )}
       </Box>
@@ -712,24 +779,24 @@ export const MatrimonialDashboardPage: React.FC = () => {
           textColor="primary"
           sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
         >
-          <Tab icon={<PersonIcon />} iconPosition="start" label="Personal Details" />
-          <Tab icon={<WorkIcon />} iconPosition="start" label="Education & Career" />
-          <Tab icon={<FamilyRestroomIcon />} iconPosition="start" label="Family & Lifestyle" />
-          <Tab icon={<TuneIcon />} iconPosition="start" label="Partner Preferences" />
+          <Tab icon={<PersonIcon />} iconPosition="start" label={t('tabPersonal')} />
+          <Tab icon={<WorkIcon />} iconPosition="start" label={t('tabEducationCareer')} />
+          <Tab icon={<FamilyRestroomIcon />} iconPosition="start" label={t('tabFamilyLifestyle')} />
+          <Tab icon={<TuneIcon />} iconPosition="start" label={t('tabPartnerPreferences')} />
           <Tab
             icon={<PhotoLibraryIcon />}
             iconPosition="start"
-            label={`Gallery (${profile?.photos?.length || 0}/5)`}
+            label={t('tabGallery', { current: profile?.photos?.length || 0, max: 5 })}
           />
           <Tab
             icon={<CallReceivedIcon />}
             iconPosition="start"
-            label="Received Interests"
+            label={t('tabReceivedInterests')}
           />
           <Tab
             icon={<CallMadeIcon />}
             iconPosition="start"
-            label="Sent Interests"
+            label={t('tabSentInterests')}
           />
         </Tabs>
 
@@ -739,20 +806,20 @@ export const MatrimonialDashboardPage: React.FC = () => {
         {activeTab === 0 && (
           <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
-              Personal Background & Astrology
+              {t('sectionPersonalAstrology')}
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
                 <TextField
                   select
                   fullWidth
-                  label="Marital Status"
+                  label={t('maritalStatusLabel')}
                   value={maritalStatus}
                   onChange={(e) => setMaritalStatus(e.target.value as MaritalStatus)}
                   error={Boolean(formErrors.maritalStatus)}
                   helperText={formErrors.maritalStatus}
                 >
-                  {MARITAL_STATUS_OPTIONS.map((opt) => (
+                  {maritalStatusOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </MenuItem>
@@ -764,11 +831,11 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Height (cm)"
+                  label={t('heightLabel')}
                   value={heightCm}
                   onChange={(e) => setHeightCm(e.target.value)}
                   error={Boolean(formErrors.heightCm)}
-                  helperText={formErrors.heightCm || 'Between 120 - 250 cm'}
+                  helperText={formErrors.heightCm || t('heightHelperText')}
                 />
               </Grid>
 
@@ -776,7 +843,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Weight (kg, optional)"
+                  label={t('weightLabel')}
                   value={weightKg}
                   onChange={(e) => setWeightKg(e.target.value)}
                   error={Boolean(formErrors.weightKg)}
@@ -787,7 +854,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Mother Tongue"
+                  label={t('motherTongueLabel')}
                   value={motherTongue}
                   onChange={(e) => setMotherTongue(e.target.value)}
                   error={Boolean(formErrors.motherTongue)}
@@ -798,7 +865,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Religion"
+                  label={t('religionLabel')}
                   value={religion}
                   onChange={(e) => setReligion(e.target.value)}
                   error={Boolean(formErrors.religion)}
@@ -809,7 +876,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Caste / Community"
+                  label={t('casteCommunityLabel')}
                   value={caste}
                   onChange={(e) => setCaste(e.target.value)}
                   error={Boolean(formErrors.caste)}
@@ -820,7 +887,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Sub-Caste (optional)"
+                  label={t('subCasteLabel')}
                   value={subCaste}
                   onChange={(e) => setSubCaste(e.target.value)}
                   error={Boolean(formErrors.subCaste)}
@@ -831,7 +898,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Gotra (optional)"
+                  label={t('gotraLabel')}
                   value={gotra}
                   onChange={(e) => setGotra(e.target.value)}
                   error={Boolean(formErrors.gotra)}
@@ -843,13 +910,13 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   select
                   fullWidth
-                  label="Manglik Status"
+                  label={t('manglikDoshaLabel')}
                   value={manglik}
                   onChange={(e) => setManglik(e.target.value as ManglikStatus)}
                   error={Boolean(formErrors.manglik)}
                   helperText={formErrors.manglik}
                 >
-                  {MANGLIK_OPTIONS.map((opt) => (
+                  {manglikOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </MenuItem>
@@ -860,10 +927,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Birth Time (HH:MM format, optional)"
+                  label={t('birthTimeLabel')}
                   value={birthTime}
                   onChange={(e) => setBirthTime(e.target.value)}
-                  placeholder="e.g. 14:30"
+                  placeholder={t('birthTimePlaceholder')}
                   error={Boolean(formErrors.birthTime)}
                   helperText={formErrors.birthTime}
                 />
@@ -872,7 +939,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Birth City (optional)"
+                  label={t('birthCityLabel')}
                   value={birthCity}
                   onChange={(e) => setBirthCity(e.target.value)}
                   error={Boolean(formErrors.birthCity)}
@@ -883,7 +950,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Rashi (optional)"
+                  label={t('rashiLabel')}
                   value={rashi}
                   onChange={(e) => setRashi(e.target.value)}
                   error={Boolean(formErrors.rashi)}
@@ -894,7 +961,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Nakshatra (optional)"
+                  label={t('nakshatraLabel')}
                   value={nakshatra}
                   onChange={(e) => setNakshatra(e.target.value)}
                   error={Boolean(formErrors.nakshatra)}
@@ -907,10 +974,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
                   fullWidth
                   multiline
                   rows={4}
-                  label="About Me (Personal Bio)"
+                  label={t('aboutMeLabel')}
                   value={aboutMe}
                   onChange={(e) => setAboutMe(e.target.value)}
-                  placeholder="Tell prospective matches about your personality, interests, values, and life goals..."
+                  placeholder={t('aboutMePlaceholder')}
                   error={Boolean(formErrors.aboutMe)}
                   helperText={formErrors.aboutMe || `${aboutMe.length}/3000 characters`}
                 />
@@ -925,7 +992,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 disabled={isSavingProfile}
                 startIcon={isSavingProfile ? <CircularProgress size={20} color="inherit" /> : null}
               >
-                {isSavingProfile ? 'Saving...' : 'Save Personal Details'}
+                {isSavingProfile ? t('saving') : t('savePersonalDetails')}
               </Button>
             </Box>
           </Box>
@@ -937,17 +1004,17 @@ export const MatrimonialDashboardPage: React.FC = () => {
         {activeTab === 1 && (
           <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
-              Education & Professional Career
+              {t('sectionEducationCareer')}
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   required
-                  label="Highest Education"
+                  label={t('highestEducationLabel')}
                   value={highestEducation}
                   onChange={(e) => setHighestEducation(e.target.value)}
-                  placeholder="e.g. B.Tech in Computer Science, MBA, MBBS"
+                  placeholder={t('highestEducationPlaceholder')}
                   error={Boolean(formErrors.highestEducation)}
                   helperText={formErrors.highestEducation}
                 />
@@ -956,7 +1023,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Education Details (College / University, optional)"
+                  label={t('educationDetailsLabel')}
                   value={educationDetails}
                   onChange={(e) => setEducationDetails(e.target.value)}
                   error={Boolean(formErrors.educationDetails)}
@@ -998,7 +1065,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Company / Business Name (optional)"
+                  label={t('companyNameLabel')}
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   error={Boolean(formErrors.companyName)}
@@ -1010,10 +1077,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   required
-                  label="Annual Income"
+                  label={t('annualIncomeLabel')}
                   value={annualIncome}
                   onChange={(e) => setAnnualIncome(e.target.value)}
-                  placeholder="e.g. 10 - 15 LPA, 5 - 7 Lakhs"
+                  placeholder={t('annualIncomePlaceholder')}
                   error={Boolean(formErrors.annualIncome)}
                   helperText={formErrors.annualIncome}
                 />
@@ -1022,7 +1089,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Work City (optional)"
+                  label={t('workCityLabel')}
                   value={workCity}
                   onChange={(e) => setWorkCity(e.target.value)}
                   error={Boolean(formErrors.workCity)}
@@ -1033,7 +1100,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Work State (optional)"
+                  label={t('workStateLabel')}
                   value={workState}
                   onChange={(e) => setWorkState(e.target.value)}
                   error={Boolean(formErrors.workState)}
@@ -1044,7 +1111,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Work Country"
+                  label={t('workCountryLabel')}
                   value={workCountry}
                   onChange={(e) => setWorkCountry(e.target.value)}
                   error={Boolean(formErrors.workCountry)}
@@ -1061,7 +1128,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 disabled={isSavingProfile}
                 startIcon={isSavingProfile ? <CircularProgress size={20} color="inherit" /> : null}
               >
-                {isSavingProfile ? 'Saving...' : 'Save Education & Career'}
+                {isSavingProfile ? t('saving') : t('saveEducationCareer')}
               </Button>
             </Box>
           </Box>
@@ -1073,20 +1140,20 @@ export const MatrimonialDashboardPage: React.FC = () => {
         {activeTab === 2 && (
           <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
-              Family Background & Lifestyle Habits
+              {t('sectionFamilyLifestyle')}
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
                 <TextField
                   select
                   fullWidth
-                  label="Family Type"
+                  label={t('familyTypeLabel')}
                   value={familyType}
                   onChange={(e) => setFamilyType(e.target.value as FamilyType)}
                   error={Boolean(formErrors.familyType)}
                   helperText={formErrors.familyType}
                 >
-                  {FAMILY_TYPE_OPTIONS.map((opt) => (
+                  {familyTypeOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </MenuItem>
@@ -1098,13 +1165,13 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   select
                   fullWidth
-                  label="Family Values"
+                  label={t('familyValuesLabel')}
                   value={familyValues}
                   onChange={(e) => setFamilyValues(e.target.value as FamilyValues)}
                   error={Boolean(formErrors.familyValues)}
                   helperText={formErrors.familyValues}
                 >
-                  {FAMILY_VALUES_OPTIONS.map((opt) => (
+                  {familyValuesOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </MenuItem>
@@ -1115,7 +1182,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Father's Name (optional)"
+                  label={t('fatherNameLabel')}
                   value={fatherName}
                   onChange={(e) => setFatherName(e.target.value)}
                   error={Boolean(formErrors.fatherName)}
@@ -1126,7 +1193,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Father's Occupation (optional)"
+                  label={t('fatherOccupationLabel')}
                   value={fatherOccupation}
                   onChange={(e) => setFatherOccupation(e.target.value)}
                   error={Boolean(formErrors.fatherOccupation)}
@@ -1137,7 +1204,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Mother's Name (optional)"
+                  label={t('motherNameLabel')}
                   value={motherName}
                   onChange={(e) => setMotherName(e.target.value)}
                   error={Boolean(formErrors.motherName)}
@@ -1148,7 +1215,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Mother's Occupation (optional)"
+                  label={t('motherOccupationLabel')}
                   value={motherOccupation}
                   onChange={(e) => setMotherOccupation(e.target.value)}
                   error={Boolean(formErrors.motherOccupation)}
@@ -1160,7 +1227,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Total Brothers"
+                  label={t('totalBrothersLabel')}
                   value={brothersCount}
                   onChange={(e) => setBrothersCount(e.target.value)}
                   error={Boolean(formErrors.brothersCount)}
@@ -1172,7 +1239,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Married Brothers"
+                  label={t('marriedBrothersLabel')}
                   value={brothersMarried}
                   onChange={(e) => setBrothersMarried(e.target.value)}
                   error={Boolean(formErrors.brothersMarried)}
@@ -1184,7 +1251,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Total Sisters"
+                  label={t('totalSistersLabel')}
                   value={sistersCount}
                   onChange={(e) => setSistersCount(e.target.value)}
                   error={Boolean(formErrors.sistersCount)}
@@ -1196,7 +1263,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Married Sisters"
+                  label={t('marriedSistersLabel')}
                   value={sistersMarried}
                   onChange={(e) => setSistersMarried(e.target.value)}
                   error={Boolean(formErrors.sistersMarried)}
@@ -1207,10 +1274,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Ancestral / Native Place (optional)"
+                  label={t('ancestralPlaceLabel')}
                   value={familyNativePlace}
                   onChange={(e) => setFamilyNativePlace(e.target.value)}
-                  placeholder="Village / Town"
+                  placeholder={t('ancestralPlacePlaceholder')}
                   error={Boolean(formErrors.familyNativePlace)}
                   helperText={formErrors.familyNativePlace}
                 />
@@ -1220,13 +1287,13 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   select
                   fullWidth
-                  label="Diet Preference"
+                  label={t('dietPreferencePrefLabel')}
                   value={diet}
                   onChange={(e) => setDiet(e.target.value as DietType)}
                   error={Boolean(formErrors.diet)}
                   helperText={formErrors.diet}
                 >
-                  {DIET_OPTIONS.map((opt) => (
+                  {dietOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </MenuItem>
@@ -1238,13 +1305,13 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   select
                   fullWidth
-                  label="Smoking Habit"
+                  label={t('smokingHabitLabel')}
                   value={smoking}
                   onChange={(e) => setSmoking(e.target.value as HabitFrequency)}
                   error={Boolean(formErrors.smoking)}
                   helperText={formErrors.smoking}
                 >
-                  {HABIT_OPTIONS.map((opt) => (
+                  {habitOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </MenuItem>
@@ -1256,13 +1323,13 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   select
                   fullWidth
-                  label="Drinking Habit"
+                  label={t('drinkingHabitLabel')}
                   value={drinking}
                   onChange={(e) => setDrinking(e.target.value as HabitFrequency)}
                   error={Boolean(formErrors.drinking)}
                   helperText={formErrors.drinking}
                 >
-                  {HABIT_OPTIONS.map((opt) => (
+                  {habitOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </MenuItem>
@@ -1275,10 +1342,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
                   fullWidth
                   multiline
                   rows={3}
-                  label="About Family (optional)"
+                  label={t('aboutFamilyLabel')}
                   value={aboutFamily}
                   onChange={(e) => setAboutFamily(e.target.value)}
-                  placeholder="Share a brief overview of your family background, values, and traditions..."
+                  placeholder={t('aboutFamilyPlaceholder')}
                   error={Boolean(formErrors.aboutFamily)}
                   helperText={formErrors.aboutFamily}
                 />
@@ -1293,7 +1360,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 disabled={isSavingProfile}
                 startIcon={isSavingProfile ? <CircularProgress size={20} color="inherit" /> : null}
               >
-                {isSavingProfile ? 'Saving...' : 'Save Family & Lifestyle'}
+                {isSavingProfile ? t('saving') : t('saveFamilyLifestyle')}
               </Button>
             </Box>
           </Box>
@@ -1305,15 +1372,15 @@ export const MatrimonialDashboardPage: React.FC = () => {
         {activeTab === 3 && (
           <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
-              Partner Preferences & Expectations
+              {t('sectionPartnerPreferences')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Specify the criteria and attributes you are looking for in an ideal life partner.
+              {t('sectionPartnerPreferencesSubtitle')}
             </Typography>
 
             {!profile && (
               <Alert severity="warning" sx={{ mb: 3 }}>
-                Please create your matrimonial profile first before configuring partner preferences.
+                {t('createProfileFirstNotice')}
               </Alert>
             )}
 
@@ -1322,11 +1389,11 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Min Age"
+                  label={t('prefMinAgeLabel')}
                   value={prefMinAge}
                   onChange={(e) => setPrefMinAge(e.target.value)}
                   error={Boolean(formErrors.minAge)}
-                  helperText={formErrors.minAge || 'At least 18'}
+                  helperText={formErrors.minAge || t('prefMinAgeHelper')}
                 />
               </Grid>
 
@@ -1334,11 +1401,11 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Max Age"
+                  label={t('prefMaxAgeLabel')}
                   value={prefMaxAge}
                   onChange={(e) => setPrefMaxAge(e.target.value)}
                   error={Boolean(formErrors.maxAge)}
-                  helperText={formErrors.maxAge || 'Up to 80'}
+                  helperText={formErrors.maxAge || t('prefMaxAgeHelper')}
                 />
               </Grid>
 
@@ -1346,11 +1413,11 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Min Height (cm)"
+                  label={t('prefMinHeightLabel')}
                   value={prefMinHeight}
                   onChange={(e) => setPrefMinHeight(e.target.value)}
                   error={Boolean(formErrors.minHeightCm)}
-                  helperText={formErrors.minHeightCm || 'Min 120 cm'}
+                  helperText={formErrors.minHeightCm || t('prefMinHeightHelper')}
                 />
               </Grid>
 
@@ -1358,17 +1425,17 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   fullWidth
                   type="number"
-                  label="Max Height (cm)"
+                  label={t('prefMaxHeightLabel')}
                   value={prefMaxHeight}
                   onChange={(e) => setPrefMaxHeight(e.target.value)}
                   error={Boolean(formErrors.maxHeightCm)}
-                  helperText={formErrors.maxHeightCm || 'Max 250 cm'}
+                  helperText={formErrors.maxHeightCm || t('prefMaxHeightHelper')}
                 />
               </Grid>
 
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
-                  <InputLabel id="marital-status-pref-label">Acceptable Marital Statuses</InputLabel>
+                  <InputLabel id="marital-status-pref-label">{t('acceptableMaritalStatuses')}</InputLabel>
                   <Select
                     labelId="marital-status-pref-label"
                     multiple
@@ -1379,20 +1446,20 @@ export const MatrimonialDashboardPage: React.FC = () => {
                         typeof val === 'string' ? (val.split(',') as MaritalStatus[]) : val
                       );
                     }}
-                    input={<OutlinedInput label="Acceptable Marital Statuses" />}
+                    input={<OutlinedInput label={t('acceptableMaritalStatuses')} />}
                     renderValue={(selected) => (
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                         {selected.map((val) => (
                           <Chip
                             key={val}
-                            label={MARITAL_STATUS_OPTIONS.find((o) => o.value === val)?.label || val}
+                            label={maritalStatusOptions.find((o) => o.value === val)?.label || val}
                             size="small"
                           />
                         ))}
                       </Box>
                     )}
                   >
-                    {MARITAL_STATUS_OPTIONS.map((opt) => (
+                    {maritalStatusOptions.map((opt) => (
                       <MenuItem key={opt.value} value={opt.value}>
                         <Checkbox checked={prefMaritalStatuses.indexOf(opt.value) > -1} />
                         <ListItemText primary={opt.label} />
@@ -1406,13 +1473,13 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   select
                   fullWidth
-                  label="Manglik Preference"
+                  label={t('manglikPreferenceLabel')}
                   value={prefManglik}
                   onChange={(e) => setPrefManglik(e.target.value as ManglikStatus)}
                   error={Boolean(formErrors.manglik)}
                   helperText={formErrors.manglik}
                 >
-                  {MANGLIK_OPTIONS.map((opt) => (
+                  {manglikOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </MenuItem>
@@ -1424,13 +1491,13 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 <TextField
                   select
                   fullWidth
-                  label="Diet Preference"
+                  label={t('dietPreferencePrefLabel')}
                   value={prefDiet}
                   onChange={(e) => setPrefDiet(e.target.value as DietType)}
                   error={Boolean(formErrors.diet)}
                   helperText={formErrors.diet}
                 >
-                  {DIET_OPTIONS.map((opt) => (
+                  {dietOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </MenuItem>
@@ -1441,10 +1508,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Preferred Cities (comma-separated, optional)"
+                  label={t('preferredCitiesLabel')}
                   value={prefCities}
                   onChange={(e) => setPrefCities(e.target.value)}
-                  placeholder="e.g. Indore, Bhopal, Mumbai, Delhi"
+                  placeholder={t('preferredCitiesPlaceholder')}
                   error={Boolean(formErrors.preferredCities)}
                   helperText={formErrors.preferredCities}
                 />
@@ -1453,10 +1520,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Preferred States (comma-separated, optional)"
+                  label={t('preferredStatesLabel')}
                   value={prefStates}
                   onChange={(e) => setPrefStates(e.target.value)}
-                  placeholder="e.g. Madhya Pradesh, Maharashtra"
+                  placeholder={t('preferredStatesPlaceholder')}
                   error={Boolean(formErrors.preferredStates)}
                   helperText={formErrors.preferredStates}
                 />
@@ -1465,10 +1532,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Preferred Educations (comma-separated, optional)"
+                  label={t('preferredEducationsLabel')}
                   value={prefEducations}
                   onChange={(e) => setPrefEducations(e.target.value)}
-                  placeholder="e.g. B.Tech, MBA, MCA, CA"
+                  placeholder={t('preferredEducationsPlaceholder')}
                   error={Boolean(formErrors.preferredEducations)}
                   helperText={formErrors.preferredEducations}
                 />
@@ -1477,10 +1544,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Preferred Occupations (comma-separated, optional)"
+                  label={t('preferredOccupationsLabel')}
                   value={prefOccupations}
                   onChange={(e) => setPrefOccupations(e.target.value)}
-                  placeholder="e.g. Software Engineer, Doctor, Banking"
+                  placeholder={t('preferredOccupationsPlaceholder')}
                   error={Boolean(formErrors.preferredOccupations)}
                   helperText={formErrors.preferredOccupations}
                 />
@@ -1489,10 +1556,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Minimum Expected Income (optional)"
+                  label={t('minExpectedIncomeLabel')}
                   value={prefMinIncome}
                   onChange={(e) => setPrefMinIncome(e.target.value)}
-                  placeholder="e.g. 6 LPA"
+                  placeholder={t('minExpectedIncomePlaceholder')}
                   error={Boolean(formErrors.minIncome)}
                   helperText={formErrors.minIncome}
                 />
@@ -1503,10 +1570,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
                   fullWidth
                   multiline
                   rows={3}
-                  label="Partner Expectations & Notes (optional)"
+                  label={t('partnerExpectationsNotesLabel')}
                   value={prefNotes}
                   onChange={(e) => setPrefNotes(e.target.value)}
-                  placeholder="Describe your expectations regarding education, cultural background, and values in a partner..."
+                  placeholder={t('partnerExpectationsNotesPlaceholder')}
                   error={Boolean(formErrors.notes)}
                   helperText={formErrors.notes}
                 />
@@ -1521,7 +1588,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 disabled={isSavingPreferences || !profile}
                 startIcon={isSavingPreferences ? <CircularProgress size={20} color="inherit" /> : null}
               >
-                {isSavingPreferences ? 'Saving...' : 'Save Partner Preferences'}
+                {isSavingPreferences ? t('saving') : t('savePartnerPreferences')}
               </Button>
             </Box>
           </Box>
@@ -1535,10 +1602,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 3 }}>
               <Box>
                 <Typography variant="h6" fontWeight="bold">
-                  Matrimonial Photos ({profile?.photos?.length || 0} / 5)
+                  {t('galleryTitle', { current: profile?.photos?.length || 0, max: 5 })}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Add up to 5 clear photos. The first photo is automatically designated as your primary profile photo.
+                  {t('gallerySubtitle')}
                 </Typography>
               </Box>
 
@@ -1549,7 +1616,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                 startIcon={isUploadingPhoto ? <CircularProgress size={20} color="inherit" /> : <AddPhotoAlternateIcon />}
                 disabled={isUploadingPhoto || !profile || (profile.photos?.length || 0) >= 5}
               >
-                {isUploadingPhoto ? 'Uploading...' : 'Upload Photo'}
+                {isUploadingPhoto ? t('uploading') : t('uploadPhotoBtn')}
                 <input
                   type="file"
                   hidden
@@ -1561,13 +1628,13 @@ export const MatrimonialDashboardPage: React.FC = () => {
 
             {(profile?.photos?.length || 0) >= 5 && (
               <Alert severity="info" sx={{ mb: 3 }}>
-                You have reached the maximum limit of 5 matrimonial gallery photos. To upload a different photo, please delete one first.
+                {t('maxPhotosNotice')}
               </Alert>
             )}
 
             {!profile && (
               <Alert severity="warning" sx={{ mb: 3 }}>
-                Please create your matrimonial profile first before uploading gallery photos.
+                {t('createProfileForGalleryNotice')}
               </Alert>
             )}
 
@@ -1606,7 +1673,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
                         >
                           <Chip
                             icon={<StarIcon fontSize="small" />}
-                            label="Primary Photo"
+                            label={t('primaryPhotoBadge')}
                             color="primary"
                             size="small"
                             sx={{ fontWeight: 'bold' }}
@@ -1616,9 +1683,9 @@ export const MatrimonialDashboardPage: React.FC = () => {
 
                       <CardActions sx={{ justifyContent: 'space-between', bgcolor: 'background.paper', px: 2, py: 1 }}>
                         <Typography variant="caption" color="text.secondary">
-                          Photo #{index + 1}
+                          {t('photoNumber', { index: index + 1 })}
                         </Typography>
-                        <Tooltip title="Delete photo">
+                        <Tooltip title={t('deletePhotoTooltip')}>
                           <IconButton
                             size="small"
                             color="error"
@@ -1645,10 +1712,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
               >
                 <PhotoLibraryIcon sx={{ fontSize: 56, color: 'text.secondary', mb: 1.5 }} />
                 <Typography variant="subtitle1" fontWeight="bold">
-                  No Photos Uploaded Yet
+                  {t('noPhotosTitle')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 450, mx: 'auto', mt: 0.5 }}>
-                  Add genuine, recent photos to improve responses and discovery connections within the community.
+                  {t('noPhotosDesc')}
                 </Typography>
               </Box>
             )}
@@ -1676,19 +1743,18 @@ export const MatrimonialDashboardPage: React.FC = () => {
 
       {/* Delete Photo Confirmation Dialog */}
       <Dialog open={Boolean(photoToDelete)} onClose={() => setPhotoToDelete(null)}>
-        <DialogTitle>Delete Gallery Photo?</DialogTitle>
+        <DialogTitle>{t('deletePhotoDialogTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this matrimonial photo? This action cannot be undone.
-            If this was your primary photo, another photo from your gallery will automatically be selected as primary.
+            {t('deletePhotoDialogDesc')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPhotoToDelete(null)} color="inherit">
-            Cancel
+            {t('common:cancel', { defaultValue: 'Cancel' })}
           </Button>
           <Button onClick={handleDeletePhoto} color="error" variant="contained">
-            Delete Photo
+            {t('deletePhotoConfirmBtn')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1711,7 +1777,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions sx={{ bgcolor: 'background.paper' }}>
-          <Button onClick={() => setPreviewPhotoUrl(null)}>Close Preview</Button>
+          <Button onClick={() => setPreviewPhotoUrl(null)}>{t('closePreview')}</Button>
         </DialogActions>
       </Dialog>
 
@@ -1726,15 +1792,15 @@ export const MatrimonialDashboardPage: React.FC = () => {
         <DialogTitle id="submit-profile-dialog-title" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <SendIcon color="primary" />
           {profile?.status === 'REJECTED'
-            ? 'Resubmit Profile for Review?'
-            : 'Submit Matrimonial Profile for Approval?'}
+            ? t('resubmitDialogTitle')
+            : t('submitDialogTitle')}
         </DialogTitle>
         <DialogContent dividers>
           <DialogContentText sx={{ color: 'text.primary', mb: 1.5 }}>
-            Your matrimonial profile will be submitted to community administrators for verification. Once approved, your profile will become visible to verified members in discovery.
+            {t('submitDialogText1')}
           </DialogContentText>
           <Typography variant="body2" color="text.secondary">
-            Please make sure you have saved your personal details, education, occupation, and partner preferences accurately before submitting.
+            {t('submitDialogText2')}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
@@ -1742,7 +1808,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
             onClick={() => setIsSubmitDialogOpen(false)}
             disabled={isSubmittingForApproval}
           >
-            Cancel
+            {t('common:cancel', { defaultValue: 'Cancel' })}
           </Button>
           <Button
             onClick={handleSubmitForApproval}
@@ -1751,7 +1817,7 @@ export const MatrimonialDashboardPage: React.FC = () => {
             disabled={isSubmittingForApproval}
             startIcon={isSubmittingForApproval ? <CircularProgress size={18} color="inherit" /> : <CheckCircleIcon />}
           >
-            {isSubmittingForApproval ? 'Submitting...' : 'Confirm & Submit'}
+            {isSubmittingForApproval ? t('submitting') : t('confirmAndSubmit')}
           </Button>
         </DialogActions>
       </Dialog>
