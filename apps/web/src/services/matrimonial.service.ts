@@ -6,6 +6,9 @@ import {
   PublicMatrimonialProfileDetail,
   MatrimonialInterestItem,
   PaginatedMatrimonialInterestsResponse,
+  MatrimonialDocumentItem,
+  MatrimonialBlockItem,
+  MatrimonialDocumentType,
 } from '@apnasamaj/shared-types';
 import {
   UpsertMatrimonialProfileInput,
@@ -13,6 +16,7 @@ import {
   ListMatrimonialProfilesQueryInput,
   SendMatrimonialInterestInput,
   RespondMatrimonialInterestInput,
+  CreateMatrimonialReportInput,
 } from '@apnasamaj/validation';
 import { apiFetch } from './api.client';
 
@@ -350,6 +354,140 @@ export async function respondMatrimonialInterestApi(
     ) {
       err.isForbidden = true;
     }
+    throw err;
+  }
+
+  return response.data;
+}
+
+
+/**
+ * Uploads a verification document for the current member's matrimonial profile.
+ */
+export async function uploadMatrimonialDocumentApi(
+  file: File,
+  documentType: MatrimonialDocumentType,
+  documentName: string
+): Promise<MatrimonialDocumentItem> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('documentType', documentType);
+  formData.append('documentName', documentName);
+
+  const response = await apiFetch<MatrimonialDocumentItem>('/api/v1/matrimonial/me/documents', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.success || !response.data) {
+    const errorMsg = response.error || 'Failed to upload verification document.';
+    const err: MatrimonialApiError = new Error(errorMsg);
+    if (checkMigrationPending(errorMsg)) err.isMigrationPending = true;
+    throw err;
+  }
+
+  return response.data;
+}
+
+/**
+ * Lists verification documents submitted by the current member.
+ */
+export async function fetchMyMatrimonialDocumentsApi(): Promise<MatrimonialDocumentItem[]> {
+  const response = await apiFetch<MatrimonialDocumentItem[]>('/api/v1/matrimonial/me/documents', {
+    method: 'GET',
+  });
+
+  if (!response.success || !response.data) {
+    const errorMsg = response.error || 'Failed to fetch verification documents.';
+    const err: MatrimonialApiError = new Error(errorMsg);
+    if (checkMigrationPending(errorMsg)) err.isMigrationPending = true;
+    throw err;
+  }
+
+  return response.data;
+}
+
+/**
+ * Deletes a submitted verification document.
+ */
+export async function deleteMyMatrimonialDocumentApi(documentId: string): Promise<void> {
+  const response = await apiFetch('/api/v1/matrimonial/me/documents/' + documentId, {
+    method: 'DELETE',
+  });
+
+  if (!response.success) {
+    const errorMsg = response.error || 'Failed to delete verification document.';
+    const err: MatrimonialApiError = new Error(errorMsg);
+    if (checkMigrationPending(errorMsg)) err.isMigrationPending = true;
+    throw err;
+  }
+}
+
+/**
+ * Reports a profile for inappropriate, fake, or harassing behavior.
+ */
+export async function reportMatrimonialProfileApi(
+  profileId: string,
+  data: CreateMatrimonialReportInput
+): Promise<void> {
+  const response = await apiFetch('/api/v1/matrimonial/profiles/' + profileId + '/report', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+  if (!response.success) {
+    const errorMsg = response.error || 'Failed to submit profile report.';
+    const err: MatrimonialApiError = new Error(errorMsg);
+    if (checkMigrationPending(errorMsg)) err.isMigrationPending = true;
+    if (errorMsg.includes('already') || errorMsg.includes('conflict')) err.isConflict = true;
+    throw err;
+  }
+}
+
+/**
+ * Blocks a matrimonial profile from discovery and interactions.
+ */
+export async function blockMatrimonialProfileApi(profileId: string): Promise<void> {
+  const response = await apiFetch('/api/v1/matrimonial/profiles/' + profileId + '/block', {
+    method: 'POST',
+  });
+
+  if (!response.success) {
+    const errorMsg = response.error || 'Failed to block matrimonial profile.';
+    const err: MatrimonialApiError = new Error(errorMsg);
+    if (checkMigrationPending(errorMsg)) err.isMigrationPending = true;
+    throw err;
+  }
+}
+
+/**
+ * Unblocks a matrimonial profile.
+ */
+export async function unblockMatrimonialProfileApi(profileId: string): Promise<void> {
+  const response = await apiFetch('/api/v1/matrimonial/profiles/' + profileId + '/block', {
+    method: 'DELETE',
+  });
+
+  if (!response.success) {
+    const errorMsg = response.error || 'Failed to unblock matrimonial profile.';
+    const err: MatrimonialApiError = new Error(errorMsg);
+    if (checkMigrationPending(errorMsg)) err.isMigrationPending = true;
+    throw err;
+  }
+}
+
+/**
+ * Fetches the list of blocked users.
+ */
+export async function fetchMyBlockedUsersApi(): Promise<MatrimonialBlockItem[]> {
+  const response = await apiFetch<MatrimonialBlockItem[]>('/api/v1/matrimonial/blocks', {
+    method: 'GET',
+  });
+
+  if (!response.success || !response.data) {
+    const errorMsg = response.error || 'Failed to fetch blocked users.';
+    const err: MatrimonialApiError = new Error(errorMsg);
+    if (checkMigrationPending(errorMsg)) err.isMigrationPending = true;
     throw err;
   }
 

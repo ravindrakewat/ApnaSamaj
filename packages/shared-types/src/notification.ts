@@ -8,7 +8,10 @@ export type NotificationType =
   | 'MATRIMONIAL_INTEREST_RECEIVED'
   | 'MATRIMONIAL_INTEREST_ACCEPTED'
   | 'MATRIMONIAL_PROFILE_APPROVED'
-  | 'MATRIMONIAL_PROFILE_REJECTED';
+  | 'MATRIMONIAL_PROFILE_REJECTED'
+  | 'MATRIMONIAL_PROFILE_SUSPENDED'
+  | 'MATRIMONIAL_DOCUMENT_APPROVED'
+  | 'MATRIMONIAL_DOCUMENT_REJECTED';
 
 export const NotificationType = {
   POST_LIKE: 'POST_LIKE' as const,
@@ -21,6 +24,9 @@ export const NotificationType = {
   MATRIMONIAL_INTEREST_ACCEPTED: 'MATRIMONIAL_INTEREST_ACCEPTED' as const,
   MATRIMONIAL_PROFILE_APPROVED: 'MATRIMONIAL_PROFILE_APPROVED' as const,
   MATRIMONIAL_PROFILE_REJECTED: 'MATRIMONIAL_PROFILE_REJECTED' as const,
+  MATRIMONIAL_PROFILE_SUSPENDED: 'MATRIMONIAL_PROFILE_SUSPENDED' as const,
+  MATRIMONIAL_DOCUMENT_APPROVED: 'MATRIMONIAL_DOCUMENT_APPROVED' as const,
+  MATRIMONIAL_DOCUMENT_REJECTED: 'MATRIMONIAL_DOCUMENT_REJECTED' as const,
 };
 
 export interface NotificationActorInfo {
@@ -63,7 +69,7 @@ export interface NotificationsResponseData {
 export interface MarkNotificationReadResponse {
   id: string;
   isRead: boolean;
-  readAt: string;
+  readAt: string | null;
 }
 
 export interface MarkAllNotificationsReadResponse {

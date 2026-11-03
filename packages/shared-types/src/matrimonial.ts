@@ -8,7 +8,8 @@ export type MatrimonialProfileStatus =
   | 'PENDING_APPROVAL'
   | 'APPROVED'
   | 'REJECTED'
-  | 'HIDDEN';
+  | 'HIDDEN'
+  | 'SUSPENDED';
 
 /**
  * Marital status options.
@@ -66,6 +67,43 @@ export type MatrimonialInterestStatus =
   | 'ACCEPTED'
   | 'DECLINED'
   | 'WITHDRAWN';
+
+/**
+ * Verification document types.
+ */
+export type MatrimonialDocumentType =
+  | 'GOVERNMENT_ID'
+  | 'EDUCATION_PROOF'
+  | 'OCCUPATION_PROOF'
+  | 'OTHER';
+
+/**
+ * Verification document status.
+ */
+export type MatrimonialDocumentStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED';
+
+/**
+ * Matrimonial report categories.
+ */
+export type MatrimonialReportReason =
+  | 'FAKE_PROFILE'
+  | 'INCORRECT_INFORMATION'
+  | 'MISLEADING_PHOTOS'
+  | 'SUSPICIOUS_ACTIVITY'
+  | 'HARASSMENT'
+  | 'OTHER';
+
+/**
+ * Matrimonial report resolution status.
+ */
+export type MatrimonialReportStatus =
+  | 'PENDING'
+  | 'UNDER_INVESTIGATION'
+  | 'RESOLVED'
+  | 'DISMISSED';
 
 /**
  * Representation of a matrimonial gallery photo.
@@ -129,6 +167,11 @@ export interface PublicMatrimonialProfileListItem {
   diet: DietType;
   photosCount: number;
   interestStatus?: MatrimonialInterestStatus | null;
+  isVerified?: boolean;
+  isIdentityVerified?: boolean;
+  isEducationVerified?: boolean;
+  isProfessionVerified?: boolean;
+  isPhotoReviewed?: boolean;
   createdAt: string;
 }
 
@@ -149,8 +192,8 @@ export interface PublicMatrimonialProfileDetail extends PublicMatrimonialProfile
   nakshatra: string | null;
   educationDetails: string | null;
   companyName: string | null;
-  workCity: string | null;
-  workState: string | null;
+  workCity?: string | null;
+  workState?: string | null;
   workCountry: string;
   familyType: FamilyType;
   familyValues: FamilyValues;
@@ -172,6 +215,7 @@ export interface PublicMatrimonialProfileDetail extends PublicMatrimonialProfile
     phone: string;
     isMutualAccepted: boolean;
   } | null;
+  isBlockedByViewer?: boolean;
 }
 
 /**
@@ -182,6 +226,12 @@ export interface OwnMatrimonialProfile {
   userId: string;
   status: MatrimonialProfileStatus;
   rejectionReason: string | null;
+  isVerified?: boolean;
+  isIdentityVerified?: boolean;
+  isEducationVerified?: boolean;
+  isProfessionVerified?: boolean;
+  isPhotoReviewed?: boolean;
+  verifiedAt?: string | null;
   maritalStatus: MaritalStatus;
   heightCm: number;
   weightKg: number | null;
@@ -272,6 +322,75 @@ export interface PaginatedMatrimonialInterestsResponse {
 }
 
 /**
+ * Submitted verification document representation.
+ */
+export interface MatrimonialDocumentItem {
+  id: string;
+  profileId: string;
+  documentType: MatrimonialDocumentType;
+  documentName: string;
+  fileSize: number;
+  mimeType: string;
+  status: MatrimonialDocumentStatus;
+  rejectionReason?: string | null;
+  reviewedAt?: string | null;
+  reviewedBy?: {
+    id: string;
+    fullName: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Profile report item for admin review.
+ */
+export interface MatrimonialReportItem {
+  id: string;
+  reporterId: string;
+  reporterName?: string;
+  reportedProfileId: string;
+  reportedUserId?: string;
+  reportedUserName?: string;
+  reportedUserPhone?: string;
+  reason: MatrimonialReportReason;
+  explanation?: string | null;
+  status: MatrimonialReportStatus;
+  adminNotes?: string | null;
+  resolvedAt?: string | null;
+  resolvedBy?: {
+    id: string;
+    fullName: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Blocked matrimonial user representation.
+ */
+export interface MatrimonialBlockItem {
+  id: string;
+  blockedUserId: string;
+  blockedUserName?: string;
+  createdAt: string;
+}
+
+/**
+ * High-level counts for admin matrimonial moderation overview.
+ */
+export interface MatrimonialModerationMetrics {
+  totalProfiles: number;
+  pendingApprovals: number;
+  approvedProfiles: number;
+  rejectedProfiles: number;
+  suspendedProfiles: number;
+  pendingDocuments: number;
+  openReports: number;
+  resolvedReports: number;
+}
+
+/**
  * Summary of a matrimonial profile for administrative moderation queue.
  */
 export interface AdminMatrimonialProfileListItem {
@@ -290,6 +409,12 @@ export interface AdminMatrimonialProfileListItem {
   occupation: string;
   status: MatrimonialProfileStatus;
   rejectionReason: string | null;
+  isVerified?: boolean;
+  isIdentityVerified?: boolean;
+  isEducationVerified?: boolean;
+  isProfessionVerified?: boolean;
+  isPhotoReviewed?: boolean;
+  verifiedAt?: string | null;
   approvedAt: string | null;
   approvedBy?: {
     id: string;
@@ -324,6 +449,8 @@ export interface AdminMatrimonialProfileDetail extends OwnMatrimonialProfile {
     id: string;
     fullName: string;
   } | null;
+  documents?: MatrimonialDocumentItem[];
+  reports?: MatrimonialReportItem[];
 }
 
 /**
@@ -331,6 +458,38 @@ export interface AdminMatrimonialProfileDetail extends OwnMatrimonialProfile {
  */
 export interface PaginatedAdminMatrimonialProfilesResponse {
   profiles: AdminMatrimonialProfileListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+}
+
+/**
+ * Paginated response shape for admin verification documents queue.
+ */
+export interface PaginatedAdminMatrimonialDocumentsResponse {
+  documents: (MatrimonialDocumentItem & {
+    userFullName: string;
+    userPhone: string;
+    profileStatus: MatrimonialProfileStatus;
+  })[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+}
+
+/**
+ * Paginated response shape for admin reports queue.
+ */
+export interface PaginatedAdminMatrimonialReportsResponse {
+  reports: MatrimonialReportItem[];
   pagination: {
     page: number;
     limit: number;

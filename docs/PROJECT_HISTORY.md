@@ -58,10 +58,11 @@ The following milestone checkpoint commits have been independently inspected in 
 | `e02c6f2` | `e02c6f272a2ceca805e75da76814631377a06c8b` | `feat(feed): implement post title and structured content with backward compatibility` | Post Title & Structured Content | **Confirmed** | **Confirmed (Pushed)** |
 | `6a9795b` | `6a9795b36bb032c5890c291244349e5d4cb0d82d` | `feat(i18n): localize member directory, community groups, and matrimonial modules in hindi and english` | Batch 15H.1, 15H.2, 15H.3 | **Confirmed** | **Confirmed (Pushed)** |
 | `b114d26` | `b114d26f5e70b287547824aebbe99cf2d9830dfa` | `feat(i18n): localize member directory, community groups, and matrimonial modules in hindi and english` | Batch 15H Checkpoint | **Confirmed** | **Confirmed (Pushed)** |
+| `3ed38e5` | `3ed38e5ee1dc4ae068f90b03cf2a7bdaf6a84f08` | `fix(feed): resolve post image upload failure, add composer retry ux, and tune database connection pool` | Post Image Fix | **Confirmed** | **Confirmed (Pushed)** |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current HEAD:** `b114d26f5e70b287547824aebbe99cf2d9830dfa` (`b114d26`)
+- **Current HEAD:** `3ed38e5ee1dc4ae068f90b03cf2a7bdaf6a84f08` (`3ed38e5`)
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
 - **Upstream Sync Status:** Synchronized with `origin/main` following user push request.
 
@@ -198,22 +199,46 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **15H.2** | Groups & Mandals Localization (Hindi/English) | Registered `groups` i18n namespace with 138 translation keys (1:1 Hindi/English parity), localized `GroupsPage.tsx` and `GroupDetailPage.tsx` (headers, filters, privacy chips, tabs, membership badges, dialogs, member roster, role management), preserved raw user data (group names, member names, discussions, descriptions), added 15 automated UX tests. | BATCH_15H_2_GROUPS_LOCALIZATION_REPORT.md | Verified Pass (15 groups UX + 57 groups frontend UX + 14 directory UX + 25 feed UX = 111 tests, clean monorepo typecheck across 8 workspaces & Vite build) | 6a9795b | Confirmed (Pushed) | Committed & pushed in Batch 15H checkpoint. |
 | **Post Title** | Post Title & Structured Content | Added optional title for GENERAL posts, required title for ANNOUNCEMENT and EVENT posts, updated Prisma schema (`title String?`), created migration SQL artifact (`20261102193000_add_post_title`), updated shared types, Zod schemas, posts service with title persistence & search filter, 10 new i18n keys with 100% Hindi/English parity, UI inputs in composer and card/detail views, and 26 automated tests. | BATCH_POST_TITLE_IMPLEMENTATION_REPORT.md | Verified Pass (26 post title UX + 25 feed UX + 14 directory UX + 15 groups UX + 35 video = 115 tests, clean monorepo typecheck across 8 workspaces & Vite build) | e02c6f2 | Local main (ahead 3) | Clean commit verified. |
 | **15H.3** | Matrimonial Module Localization (Hindi/English) | Registered `matrimonial` i18n namespace with 165 translation keys (100% Hindi/English parity), localized `MatrimonialDiscoveryPage.tsx`, `MatrimonialDashboardPage.tsx` (7 tabs, forms, options, dialogs), `MatrimonialProfileDetailPage.tsx`, `ReceivedInterestsList.tsx`, and `SentInterestsList.tsx`. Preserved raw user data (names, bios, gotras), enforced phone number privacy boundaries, added 13 automated UX tests. | BATCH_15H_3_MATRIMONIAL_LOCALIZATION_REPORT.md | Verified Pass (13 matrimonial UX + 38 matrimonial tests + 26 post title UX + 25 feed UX + 15 groups UX + 35 video = 152 tests, clean monorepo typecheck across 8 workspaces & Vite build) | 6a9795b | Confirmed (Pushed) | Committed & pushed in Batch 15H checkpoint. |
-| **Post Image Fix** | Post Image Upload Failure & Connection Pool Resiliency | Resolved feed image upload failures, added single-click retry UX with localized errors in `CreatePostComposer.tsx`, hardened `uploadPostMedia` in `storage.service.ts` with Supabase exception wrapping and mock fallback, tuned Prisma default & tenant connection pool limits to 10 (timeout 20s) to prevent concurrent auth connection starvation, added 31 image UX regression tests. | BATCH_POST_IMAGE_UPLOAD_FIX_REPORT.md | Verified Pass (136/136 tests: 25 post media + 31 image UX + 45 video UX + 35 direct video, clean monorepo typecheck across 8 workspaces) | Pending Push | Staged and committed per user request |
+| **Post Image Fix** | Post Image Upload Failure & Connection Pool Resiliency | Resolved feed image upload failures, added single-click retry UX with localized errors in `CreatePostComposer.tsx`, hardened `uploadPostMedia` in `storage.service.ts` with Supabase exception wrapping and mock fallback, tuned Prisma default & tenant connection pool limits to 10 (timeout 20s) to prevent concurrent auth connection starvation, added 31 image UX regression tests. | BATCH_POST_IMAGE_UPLOAD_FIX_REPORT.md | Verified Pass (136/136 tests: 25 post media + 31 image UX + 45 video UX + 35 direct video, clean monorepo typecheck across 8 workspaces) | 3ed38e5 | Confirmed (Committed) | Committed checkpoint on main |
+| **15I.2** | Complete Matrimonial Moderation & Profile Verification System | Implemented profile approval/rejection/suspension with mandatory reasons, document verification system with private storage and 5-min signed URLs, report profile workflows with duplicate guards and admin investigation, bi-directional member blocking across discovery/views/interests, 8-metric admin dashboard with 7 management tabs, real-time suspension & document notifications, 100% key parity Hindi/English localization, and tenant DB isolation (`req.db`, `assertDb`). Added 22 automated verification tests. | BATCH_15I_2_MATRIMONIAL_MODERATION_REPORT.md | Verified Pass (22 matrimonial moderation + 13 matrimonial localization UX + 26 post title UX + 23 admin matrimonial + 25 post media = 109 tests, 0 errors typecheck across 8 workspaces, Vite builds for admin & web passed) | Working Tree | Modified files ready for audit and commit |
+| **15I.2.1** | Matrimonial Security & Privacy Remediation | Hardened verification document storage to dedicated private bucket `matrimonial-documents` (`public: false`, 5MB limit, PDF/image magic bytes) with 0 orphaned public docs; restricted `isVerified` exclusively to approved `GOVERNMENT_ID` with granular badge support (Identity, Education, Profession, Photo) and immediate revocation; added bi-directional block checks to `sendInterest` and `respondToInterest` (HTTP 403); sanitized public suspension reasons separating internal `adminNotes`; replaced dead-end fallback with 503 error; expanded test suite to 27 tests (all passing). | BATCH_15I_2_1_MATRIMONIAL_SECURITY_REMEDIATION_REPORT.md | Verified Pass (27 matrimonial moderation + 77 matrimonial core + 23 admin matrimonial = 127 tests, 0 typecheck errors across all 8 workspaces, Vite builds for admin & web passed) | Working Tree | Ready for user staging/commit audit |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `b114d26f5e70b287547824aebbe99cf2d9830dfa` (`b114d26`)
-- **Upstream Tracking:** Synchronized with `origin/main`.
+- **Current HEAD:** `3ed38e5ee1dc4ae068f90b03cf2a7bdaf6a84f08` (`3ed38e5`)
+- **Upstream Tracking:** Synchronized with `origin/main` (at `3ed38e5`).
 - **Actual `git status --short`:**
   ```text
-  Working tree 100% clean. All work committed and pushed to origin/main.
+  M apps/admin/src/pages/MatrimonialModerationPage.tsx
+  M apps/admin/src/services/admin.matrimonial.service.ts
+  M apps/api/src/middleware/upload.middleware.ts
+  M apps/api/src/modules/admin/matrimonial/admin.matrimonial.controller.ts
+  M apps/api/src/modules/admin/matrimonial/admin.matrimonial.routes.ts
+  M apps/api/src/modules/admin/matrimonial/admin.matrimonial.service.ts
+  M apps/api/src/modules/matrimonial/matrimonial.controller.ts
+  M apps/api/src/modules/matrimonial/matrimonial.routes.ts
+  M apps/api/src/modules/matrimonial/matrimonial.service.ts
+  M apps/api/src/services/storage.service.ts
+  M apps/web/src/pages/MatrimonialDashboardPage.tsx
+  M apps/web/src/pages/MatrimonialDiscoveryPage.tsx
+  M apps/web/src/pages/MatrimonialProfileDetailPage.tsx
+  M apps/web/src/services/matrimonial.service.ts
+  M packages/database/prisma/schema.prisma
+  M packages/i18n/src/locales/en/matrimonial.json
+  M packages/i18n/src/locales/hi/matrimonial.json
+  M packages/shared-types/src/matrimonial.ts
+  M packages/shared-types/src/notification.ts
+  M packages/validation/src/matrimonial.ts
+  ?? BATCH_15I_2_MATRIMONIAL_MODERATION_REPORT.md
+  ?? apps/api/src/tests/matrimonial-moderation.test.ts
+  ?? packages/database/prisma/migrations/20261103150000_add_matrimonial_moderation_verification/
   ```
-- **Latest Completed Batch:** **Post Image Upload Failure & Connection Pool Resiliency Fix**.
-- **Current In-Progress Batch:** Committed and pushed to `origin/main` for multi-machine synchronization.
-- **Exact Next Recommended Batch:** **Batch 15H.4 — Matrimonial Admin Moderation & Appeals Localization**.
+- **Latest Completed Batch:** **Batch 15I.2.1 — Matrimonial Security & Privacy Remediation**.
+- **Current In-Progress Batch:** Batch 15I.2.1 completed and verified; awaiting user staging/commit approval.
+- **Exact Next Recommended Batch:** **Batch 15I.3 — Member Appeals & Matrimonial Report Notifications Hardening**.
 
 ---
 

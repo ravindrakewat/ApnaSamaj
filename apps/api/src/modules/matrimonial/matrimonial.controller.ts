@@ -8,6 +8,8 @@ import {
   MatrimonialInterestItem,
   PaginatedMatrimonialProfilesResponse,
   PaginatedMatrimonialInterestsResponse,
+  MatrimonialDocumentItem,
+  MatrimonialBlockItem,
 } from '@apnasamaj/shared-types';
 import {
   upsertMatrimonialProfileSchema,
@@ -17,6 +19,8 @@ import {
   sendMatrimonialInterestSchema,
   respondMatrimonialInterestSchema,
   paginationSchema,
+  uploadMatrimonialDocumentSchema,
+  createMatrimonialReportSchema,
 } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
@@ -32,6 +36,13 @@ import {
   listReceivedInterests,
   listSentInterests,
   respondToInterest,
+  uploadVerificationDocument,
+  listMyVerificationDocuments,
+  deleteMyVerificationDocument,
+  reportMatrimonialProfile,
+  blockMatrimonialProfile,
+  unblockMatrimonialProfile,
+  listMyBlockedUsers,
   MatrimonialServiceError,
   MatrimonialNotFoundError,
   MatrimonialValidationError,
@@ -659,5 +670,326 @@ export async function respondInterestHandler(
     res.status(200).json(response);
   } catch (err: unknown) {
     handleMatrimonialError(err, res, 'Failed to update interest request.');
+  }
+}
+
+
+/**
+ * POST /api/v1/matrimonial/me/documents
+ * Uploads a verification document (PDF, PNG, JPG, WebP) for the member's profile.
+ */
+export async function uploadDocumentHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    if (!req.file || !req.file.buffer) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Please select a document file to upload (PDF, PNG, JPG, WebP up to 5MB).',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedBody = uploadMatrimonialDocumentSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      const issue = parsedBody.error.issues[0]?.message || 'Invalid document metadata.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const doc = await uploadVerificationDocument(
+      userId,
+      parsedBody.data,
+      req.file.buffer,
+      req.file.originalname,
+      req.db
+    );
+
+    const response: ApiResponse<MatrimonialDocumentItem> = {
+      success: true,
+      message: 'Verification document uploaded successfully and submitted for review.',
+      data: doc,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(201).json(response);
+  } catch (err: unknown) {
+    handleMatrimonialError(err, res, 'Failed to upload verification document.');
+  }
+}
+
+/**
+ * GET /api/v1/matrimonial/me/documents
+ * Lists verification documents submitted by the member.
+ */
+export async function listMyDocumentsHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const docs = await listMyVerificationDocuments(userId, req.db);
+
+    const response: ApiResponse<MatrimonialDocumentItem[]> = {
+      success: true,
+      data: docs,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleMatrimonialError(err, res, 'Failed to fetch verification documents.');
+  }
+}
+
+/**
+ * DELETE /api/v1/matrimonial/me/documents/:id
+ * Deletes a submitted verification document if pending or rejected.
+ */
+export async function deleteMyDocumentHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      const issue = parsedParams.error.issues[0]?.message || 'Invalid document ID parameter.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    await deleteMyVerificationDocument(userId, parsedParams.data.id, req.db);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Verification document removed successfully.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleMatrimonialError(err, res, 'Failed to delete verification document.');
+  }
+}
+
+/**
+ * POST /api/v1/matrimonial/profiles/:id/report
+ * Reports a matrimonial profile for administrative investigation.
+ */
+export async function reportProfileHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      const issue = parsedParams.error.issues[0]?.message || 'Invalid profile ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedBody = createMatrimonialReportSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      const issue = parsedBody.error.issues[0]?.message || 'Invalid report reason or content.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    await reportMatrimonialProfile(userId, parsedParams.data.id, parsedBody.data, req.db);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Profile report submitted successfully. Our moderation team will investigate.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(201).json(response);
+  } catch (err: unknown) {
+    handleMatrimonialError(err, res, 'Failed to submit profile report.');
+  }
+}
+
+/**
+ * POST /api/v1/matrimonial/profiles/:id/block
+ * Blocks a matrimonial profile from discovery and interactions.
+ */
+export async function blockProfileHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      const issue = parsedParams.error.issues[0]?.message || 'Invalid profile ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    await blockMatrimonialProfile(userId, parsedParams.data.id, req.db);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Profile blocked successfully. This member will no longer appear in your discovery.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleMatrimonialError(err, res, 'Failed to block matrimonial profile.');
+  }
+}
+
+/**
+ * DELETE /api/v1/matrimonial/profiles/:id/block
+ * Unblocks a matrimonial profile.
+ */
+export async function unblockProfileHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      const issue = parsedParams.error.issues[0]?.message || 'Invalid profile ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    await unblockMatrimonialProfile(userId, parsedParams.data.id, req.db);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Profile unblocked successfully.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleMatrimonialError(err, res, 'Failed to unblock matrimonial profile.');
+  }
+}
+
+/**
+ * GET /api/v1/matrimonial/blocks
+ * Lists users blocked by the authenticated member.
+ */
+export async function listBlockedUsersHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const blocks = await listMyBlockedUsers(userId, req.db);
+
+    const response: ApiResponse<MatrimonialBlockItem[]> = {
+      success: true,
+      data: blocks,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleMatrimonialError(err, res, 'Failed to fetch blocked users.');
   }
 }

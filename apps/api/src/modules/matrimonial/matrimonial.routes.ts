@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticateToken } from '../../middleware/authenticate';
 import { requireActiveUser } from '../../middleware/authorize';
 import { requireTenantContext } from '../../middleware/tenant.middleware';
-import { singleImageUpload } from '../../middleware/upload.middleware';
+import { singleImageUpload, singleDocumentUpload } from '../../middleware/upload.middleware';
 import {
   getMyProfileHandler,
   upsertProfileHandler,
@@ -16,6 +16,13 @@ import {
   listReceivedInterestsHandler,
   listSentInterestsHandler,
   respondInterestHandler,
+  uploadDocumentHandler,
+  listMyDocumentsHandler,
+  deleteMyDocumentHandler,
+  reportProfileHandler,
+  blockProfileHandler,
+  unblockProfileHandler,
+  listBlockedUsersHandler,
 } from './matrimonial.controller';
 
 export const matrimonialRouter = Router();
@@ -46,17 +53,46 @@ matrimonialRouter.post('/me/photos', singleImageUpload, uploadPhotoHandler);
 matrimonialRouter.delete('/me/photos/:id', deletePhotoHandler);
 
 // ---------------------------------------------------------------------------
-// 2. Discovery & Search Profiles (/profiles)
+// 2. Identity & Verification Documents (/me/documents)
 // ---------------------------------------------------------------------------
 
-// GET /api/v1/matrimonial/profiles - Paginated discovery with filters (APPROVED profiles only)
+// POST /api/v1/matrimonial/me/documents - Upload verification document (PDF, PNG, JPG, WebP)
+matrimonialRouter.post('/me/documents', singleDocumentUpload, uploadDocumentHandler);
+
+// GET /api/v1/matrimonial/me/documents - List submitted verification documents
+matrimonialRouter.get('/me/documents', listMyDocumentsHandler);
+
+// DELETE /api/v1/matrimonial/me/documents/:id - Delete pending or rejected document
+matrimonialRouter.delete('/me/documents/:id', deleteMyDocumentHandler);
+
+// ---------------------------------------------------------------------------
+// 3. Discovery & Search Profiles (/profiles)
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/matrimonial/profiles - Paginated discovery with filters (APPROVED profiles only, blocked excluded)
 matrimonialRouter.get('/profiles', listProfilesHandler);
 
-// GET /api/v1/matrimonial/profiles/:id - Safe profile details (contact revealed only on mutual accept)
+// GET /api/v1/matrimonial/profiles/:id - Safe profile details
 matrimonialRouter.get('/profiles/:id', getProfileByIdHandler);
 
+// POST /api/v1/matrimonial/profiles/:id/report - Report a suspicious or abusive profile
+matrimonialRouter.post('/profiles/:id/report', reportProfileHandler);
+
+// POST /api/v1/matrimonial/profiles/:id/block - Block a matrimonial profile
+matrimonialRouter.post('/profiles/:id/block', blockProfileHandler);
+
+// DELETE /api/v1/matrimonial/profiles/:id/block - Unblock a matrimonial profile
+matrimonialRouter.delete('/profiles/:id/block', unblockProfileHandler);
+
 // ---------------------------------------------------------------------------
-// 3. Interest Requests (/interests)
+// 4. Privacy Blocks (/blocks)
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/matrimonial/blocks - List members blocked by the current user
+matrimonialRouter.get('/blocks', listBlockedUsersHandler);
+
+// ---------------------------------------------------------------------------
+// 5. Interest Requests (/interests)
 // ---------------------------------------------------------------------------
 
 // POST /api/v1/matrimonial/interests - Express / send interest to another member

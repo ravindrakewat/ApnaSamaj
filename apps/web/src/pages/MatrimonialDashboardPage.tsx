@@ -53,10 +53,14 @@ import {
   CallReceived as CallReceivedIcon,
   CallMade as CallMadeIcon,
   Send as SendIcon,
+  Description as DescriptionIcon,
+  Verified as VerifiedIcon,
 } from '@mui/icons-material';
 import {
   OwnMatrimonialProfile,
   MatrimonialProfileStatus,
+  MatrimonialDocumentItem,
+  MatrimonialDocumentType,
   MaritalStatus,
   ManglikStatus,
   EmploymentSector,
@@ -76,6 +80,9 @@ import {
   uploadMatrimonialPhotoApi,
   deleteMatrimonialPhotoApi,
   submitMyMatrimonialProfileApi,
+  uploadMatrimonialDocumentApi,
+  fetchMyMatrimonialDocumentsApi,
+  deleteMyMatrimonialDocumentApi,
   MatrimonialApiError,
 } from '../services/matrimonial.service';
 import { ReceivedInterestsList } from '../components/matrimonial/ReceivedInterestsList';
@@ -209,6 +216,15 @@ export const MatrimonialDashboardPage: React.FC = () => {
   };
 
   const [activeTab, setActiveTab] = useState<number>(getInitialTab);
+
+  // Document Verification State
+  const [documentsList, setDocumentsList] = useState<MatrimonialDocumentItem[]>([]);
+  const [isLoadingDocs, setIsLoadingDocs] = useState<boolean>(false);
+  const [isUploadDocModalOpen, setIsUploadDocModalOpen] = useState<boolean>(false);
+  const [selectedDocType, setSelectedDocType] = useState<MatrimonialDocumentType>('GOVERNMENT_ID');
+  const [docNameInput, setDocNameInput] = useState<string>('');
+  const [docFileInput, setDocFileInput] = useState<File | null>(null);
+  const [isUploadingDoc, setIsUploadingDoc] = useState<boolean>(false);
 
   const handleTabChange = (_: React.SyntheticEvent, val: number) => {
     setActiveTab(val);
@@ -367,6 +383,48 @@ export const MatrimonialDashboardPage: React.FC = () => {
     }
   }, []);
 
+  const handleLoadDocuments = useCallback(async () => {
+    setIsLoadingDocs(true);
+    try {
+      const docs = await fetchMyMatrimonialDocumentsApi();
+      setDocumentsList(docs);
+    } catch {
+      // Ignored
+    } finally {
+      setIsLoadingDocs(false);
+    }
+  }, []);
+
+  const handleUploadDocument = async () => {
+    if (!docFileInput || !docNameInput.trim()) {
+      setErrorMessage('Please select a document file and enter a document name.');
+      return;
+    }
+    setIsUploadingDoc(true);
+    try {
+      await uploadMatrimonialDocumentApi(docFileInput, selectedDocType, docNameInput.trim());
+      setSuccessMessage('Document uploaded successfully for review.');
+      setIsUploadDocModalOpen(false);
+      setDocFileInput(null);
+      setDocNameInput('');
+      await handleLoadDocuments();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to upload document.');
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDocument = async (id: string) => {
+    try {
+      await deleteMyMatrimonialDocumentApi(id);
+      setSuccessMessage('Document removed.');
+      await handleLoadDocuments();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to delete document.');
+    }
+  };
+
   const loadProfile = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
@@ -391,6 +449,10 @@ export const MatrimonialDashboardPage: React.FC = () => {
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+
+  useEffect(() => {
+    if (activeTab === 7) handleLoadDocuments();
+  }, [activeTab, handleLoadDocuments]);
 
   // Handle saving personal & career & family profile details
   const handleSaveProfile = async () => {
@@ -744,6 +806,18 @@ export const MatrimonialDashboardPage: React.FC = () => {
           </Box>
         </Box>
 
+        {/* Suspended Profile Banner */}
+        {profile?.status === 'SUSPENDED' && (
+          <Alert severity="error" sx={{ mt: 2, mb: 1 }}>
+            <Typography variant="subtitle2" fontWeight="bold">
+              {t('suspendedAlertTitle')}
+            </Typography>
+            <Typography variant="body2">
+              {t('suspendedAlertDesc', { reason: profile.rejectionReason || 'Under administrative review' })}
+            </Typography>
+          </Alert>
+        )}
+
         {/* Read-only Moderation Feedback & Guidelines */}
         {profile?.status === 'REJECTED' && profile.rejectionReason && (
           <Alert severity="error" sx={{ mt: 2 }}>
@@ -797,6 +871,11 @@ export const MatrimonialDashboardPage: React.FC = () => {
             icon={<CallMadeIcon />}
             iconPosition="start"
             label={t('tabSentInterests')}
+          />
+          <Tab
+            icon={<DescriptionIcon />}
+            iconPosition="start"
+            label={t('tabVerification')}
           />
         </Tabs>
 
@@ -1739,6 +1818,87 @@ export const MatrimonialDashboardPage: React.FC = () => {
             <SentInterestsList onSuccessNotice={(msg) => setSuccessMessage(msg)} />
           </Box>
         )}
+
+        {/* ============================================================== */}
+        {/* TAB 7: IDENTITY & QUALIFICATION VERIFICATION */}
+        {/* ============================================================== */}
+        {activeTab === 7 && (
+          <Box sx={{ p: { xs: 2, sm: 3.5 } }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="h6" fontWeight="bold">
+                    {t('verificationTitle')}
+                  </Typography>
+                  {profile?.isVerified && (
+                    <Chip size="small" icon={<VerifiedIcon fontSize="small" />} label={t('verificationBadge')} color="success" />
+                  )}
+                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  {t('verificationDesc')}
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                startIcon={<DescriptionIcon />}
+                onClick={() => setIsUploadDocModalOpen(true)}
+              >
+                {t('uploadDocumentBtn')}
+              </Button>
+            </Box>
+
+            <Alert severity="info" sx={{ mb: 3 }}>
+              {t('privacyNotice')}
+            </Alert>
+
+            {isLoadingDocs ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+                <CircularProgress />
+              </Box>
+            ) : documentsList.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 2 }}>
+                <Typography color="text.secondary">{t('noDocumentsUploaded')}</Typography>
+              </Paper>
+            ) : (
+              <Grid container spacing={2}>
+                {documentsList.map((doc) => (
+                  <Grid item xs={12} sm={6} key={doc.id}>
+                    <Paper sx={{ p: 2, borderRadius: 2, border: 1, borderColor: 'divider' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                        <Box>
+                          <Typography variant="subtitle2" fontWeight="bold">{doc.documentName}</Typography>
+                          <Chip size="small" label={doc.documentType} sx={{ mt: 0.5 }} />
+                        </Box>
+                        {doc.status === 'APPROVED' ? (
+                          <Chip size="small" color="success" label={t('docStatusApproved')} />
+                        ) : doc.status === 'REJECTED' ? (
+                          <Chip size="small" color="error" label={t('docStatusRejected')} />
+                        ) : (
+                          <Chip size="small" color="warning" label={t('docStatusPending')} />
+                        )}
+                      </Box>
+                      {doc.rejectionReason && (
+                        <Alert severity="error" sx={{ my: 1, py: 0.5 }}>
+                          {doc.rejectionReason}
+                        </Alert>
+                      )}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {(doc.fileSize / 1024).toFixed(0)} KB • {doc.mimeType}
+                        </Typography>
+                        {doc.status !== 'APPROVED' && (
+                          <IconButton size="small" color="error" onClick={() => handleDeleteDocument(doc.id)}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                      </Box>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            )}
+          </Box>
+        )}
       </Paper>
 
       {/* Delete Photo Confirmation Dialog */}
@@ -1818,6 +1978,73 @@ export const MatrimonialDashboardPage: React.FC = () => {
             startIcon={isSubmittingForApproval ? <CircularProgress size={18} color="inherit" /> : <CheckCircleIcon />}
           >
             {isSubmittingForApproval ? t('submitting') : t('confirmAndSubmit')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Upload Document Modal */}
+      <Dialog
+        open={isUploadDocModalOpen}
+        onClose={() => !isUploadingDoc && setIsUploadDocModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{t('uploadDocumentBtn')}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
+            <TextField
+              select
+              fullWidth
+              label={t('documentTypeLabel')}
+              value={selectedDocType}
+              onChange={(e) => setSelectedDocType(e.target.value as MatrimonialDocumentType)}
+            >
+              <MenuItem value="GOVERNMENT_ID">{t('docTypeGovId')}</MenuItem>
+              <MenuItem value="EDUCATION_PROOF">{t('docTypeEducation')}</MenuItem>
+              <MenuItem value="OCCUPATION_PROOF">{t('docTypeOccupation')}</MenuItem>
+              <MenuItem value="OTHER">{t('docTypeOther')}</MenuItem>
+            </TextField>
+
+            <TextField
+              fullWidth
+              label={t('documentNameLabel')}
+              placeholder={t('documentNamePlaceholder')}
+              value={docNameInput}
+              onChange={(e) => setDocNameInput(e.target.value)}
+            />
+
+            <Button
+              variant="outlined"
+              component="label"
+              startIcon={<DescriptionIcon />}
+              fullWidth
+              sx={{ py: 1.5 }}
+            >
+              {docFileInput ? docFileInput.name : 'Select PDF or Image File (Max 5MB)'}
+              <input
+                type="file"
+                hidden
+                accept=".pdf,image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    setDocFileInput(e.target.files[0]);
+                  }
+                }}
+              />
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsUploadDocModalOpen(false)} disabled={isUploadingDoc}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleUploadDocument}
+            disabled={isUploadingDoc || !docFileInput || !docNameInput.trim()}
+          >
+            {isUploadingDoc ? <CircularProgress size={20} /> : t('uploadDocumentBtn')}
           </Button>
         </DialogActions>
       </Dialog>

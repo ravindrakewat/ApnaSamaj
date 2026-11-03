@@ -6,6 +6,7 @@ export const matrimonialProfileStatusSchema = z.enum([
   'APPROVED',
   'REJECTED',
   'HIDDEN',
+  'SUSPENDED',
 ]);
 
 export const maritalStatusSchema = z.enum([
@@ -48,6 +49,35 @@ export const matrimonialInterestStatusSchema = z.enum([
   'ACCEPTED',
   'DECLINED',
   'WITHDRAWN',
+]);
+
+export const matrimonialDocumentTypeSchema = z.enum([
+  'GOVERNMENT_ID',
+  'EDUCATION_PROOF',
+  'OCCUPATION_PROOF',
+  'OTHER',
+]);
+
+export const matrimonialDocumentStatusSchema = z.enum([
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+]);
+
+export const matrimonialReportReasonSchema = z.enum([
+  'FAKE_PROFILE',
+  'INCORRECT_INFORMATION',
+  'MISLEADING_PHOTOS',
+  'SUSPICIOUS_ACTIVITY',
+  'HARASSMENT',
+  'OTHER',
+]);
+
+export const matrimonialReportStatusSchema = z.enum([
+  'PENDING',
+  'UNDER_INVESTIGATION',
+  'RESOLVED',
+  'DISMISSED',
 ]);
 
 /**
@@ -196,18 +226,18 @@ export type ListMatrimonialProfilesQueryInput = z.infer<typeof listMatrimonialPr
  */
 export const adminModerateMatrimonialProfileSchema = z
   .object({
-    status: z.enum(['APPROVED', 'REJECTED', 'HIDDEN']),
+    status: z.enum(['APPROVED', 'REJECTED', 'HIDDEN', 'SUSPENDED']),
     rejectionReason: z.string().trim().min(5).max(500).optional().nullable(),
   })
   .refine(
     (data) => {
-      if (data.status === 'REJECTED') {
+      if (data.status === 'REJECTED' || data.status === 'SUSPENDED') {
         return Boolean(data.rejectionReason && data.rejectionReason.length >= 5);
       }
       return true;
     },
     {
-      message: 'Rejection reason is required when rejecting a matrimonial profile',
+      message: 'Reason of at least 5 characters is required when rejecting or suspending a matrimonial profile',
       path: ['rejectionReason'],
     }
   );
@@ -219,7 +249,7 @@ export type AdminModerateMatrimonialProfileInput = z.infer<typeof adminModerateM
  */
 export const listAdminMatrimonialProfilesQuerySchema = z.object({
   status: z
-    .enum(['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'HIDDEN', 'ALL'])
+    .enum(['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'HIDDEN', 'SUSPENDED', 'ALL'])
     .optional()
     .default('PENDING_APPROVAL'),
   page: z.coerce.number().int().min(1).default(1),
@@ -240,4 +270,91 @@ export const adminModerateMatrimonialPhotoSchema = z.object({
 
 export type AdminModerateMatrimonialPhotoInput = z.infer<
   typeof adminModerateMatrimonialPhotoSchema
+>;
+
+/**
+ * Validation schema for member uploading a verification document metadata.
+ */
+export const uploadMatrimonialDocumentSchema = z.object({
+  documentType: matrimonialDocumentTypeSchema,
+  documentName: z.string().trim().min(2, 'Document name is required').max(100),
+});
+
+export type UploadMatrimonialDocumentInput = z.infer<typeof uploadMatrimonialDocumentSchema>;
+
+/**
+ * Validation schema for admin moderation of a verification document.
+ */
+export const adminModerateMatrimonialDocumentSchema = z
+  .object({
+    status: z.enum(['APPROVED', 'REJECTED']),
+    rejectionReason: z.string().trim().min(5).max(500).optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      if (data.status === 'REJECTED') {
+        return Boolean(data.rejectionReason && data.rejectionReason.length >= 5);
+      }
+      return true;
+    },
+    {
+      message: 'Rejection reason of at least 5 characters is required when rejecting a document',
+      path: ['rejectionReason'],
+    }
+  );
+
+export type AdminModerateMatrimonialDocumentInput = z.infer<
+  typeof adminModerateMatrimonialDocumentSchema
+>;
+
+/**
+ * Validation schema for querying verification documents in admin queue.
+ */
+export const listAdminMatrimonialDocumentsQuerySchema = z.object({
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'ALL']).optional().default('PENDING'),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+export type ListAdminMatrimonialDocumentsQueryInput = z.infer<
+  typeof listAdminMatrimonialDocumentsQuerySchema
+>;
+
+/**
+ * Validation schema for reporting a matrimonial profile.
+ */
+export const createMatrimonialReportSchema = z.object({
+  reason: matrimonialReportReasonSchema,
+  explanation: z.string().trim().max(1000).optional().nullable(),
+});
+
+export type CreateMatrimonialReportInput = z.infer<typeof createMatrimonialReportSchema>;
+
+/**
+ * Validation schema for admin resolution of a matrimonial report.
+ */
+export const adminModerateMatrimonialReportSchema = z.object({
+  status: z.enum(['PENDING', 'UNDER_INVESTIGATION', 'RESOLVED', 'DISMISSED']),
+  adminNotes: z.string().trim().max(1000).optional().nullable(),
+  action: z.enum(['NONE', 'SUSPEND_PROFILE', 'REJECT_PROFILE']).optional().default('NONE'),
+});
+
+export type AdminModerateMatrimonialReportInput = z.infer<
+  typeof adminModerateMatrimonialReportSchema
+>;
+
+/**
+ * Validation schema for querying matrimonial reports in admin queue.
+ */
+export const listAdminMatrimonialReportsQuerySchema = z.object({
+  status: z
+    .enum(['PENDING', 'UNDER_INVESTIGATION', 'RESOLVED', 'DISMISSED', 'ALL'])
+    .optional()
+    .default('PENDING'),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+export type ListAdminMatrimonialReportsQueryInput = z.infer<
+  typeof listAdminMatrimonialReportsQuerySchema
 >;

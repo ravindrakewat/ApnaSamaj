@@ -19,6 +19,7 @@ export interface AppConfig {
   supabaseUrl: string;
   supabaseSecretKey: string;
   supabaseStorageBucket: string;
+  supabasePrivateStorageBucket: string;
   maxMediaFileSizeBytes: number;
   maxVideoFileSizeBytes: number;
   maxPostMediaCount: number;
@@ -43,6 +44,8 @@ export function validateAndGetConfig(): AppConfig {
   const supabaseUrl = process.env.SUPABASE_URL || '';
   const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || '';
   const supabaseStorageBucket = process.env.SUPABASE_STORAGE_BUCKET || 'post-media';
+  const supabasePrivateStorageBucket =
+    process.env.SUPABASE_PRIVATE_DOCUMENTS_BUCKET || 'matrimonial-documents';
   const maxMediaFileSizeBytes = parseInt(process.env.MAX_MEDIA_FILE_SIZE_BYTES || '5242880', 10); // 5MB
   const maxVideoFileSizeBytes = parseInt(process.env.MAX_VIDEO_FILE_SIZE_BYTES || '31457280', 10); // 30MB
   const maxPostMediaCount = parseInt(process.env.MAX_POST_MEDIA_COUNT || '4', 10); // 4 images
@@ -58,6 +61,7 @@ export function validateAndGetConfig(): AppConfig {
     supabaseUrl,
     supabaseSecretKey,
     supabaseStorageBucket,
+    supabasePrivateStorageBucket,
     maxMediaFileSizeBytes: isNaN(maxMediaFileSizeBytes) ? 5242880 : maxMediaFileSizeBytes,
     maxVideoFileSizeBytes: isNaN(maxVideoFileSizeBytes) ? 31457280 : maxVideoFileSizeBytes,
     maxPostMediaCount: isNaN(maxPostMediaCount) ? 4 : maxPostMediaCount,

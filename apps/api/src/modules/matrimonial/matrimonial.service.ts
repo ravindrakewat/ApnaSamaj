@@ -18,6 +18,13 @@ import {
   PaginatedMatrimonialProfilesResponse,
   PaginatedMatrimonialInterestsResponse,
   Gender,
+  MatrimonialDocumentItem,
+  MatrimonialReportItem,
+  MatrimonialBlockItem,
+  MatrimonialDocumentType,
+  MatrimonialDocumentStatus,
+  MatrimonialReportReason,
+  MatrimonialReportStatus,
 } from '@apnasamaj/shared-types';
 import {
   UpsertMatrimonialProfileInput,
@@ -25,10 +32,14 @@ import {
   ListMatrimonialProfilesQueryInput,
   SendMatrimonialInterestInput,
   RespondMatrimonialInterestInput,
+  UploadMatrimonialDocumentInput,
+  CreateMatrimonialReportInput,
 } from '@apnasamaj/validation';
 import {
   uploadMatrimonialMedia,
+  uploadMatrimonialVerificationDocument,
   deleteStorageObjects,
+  deleteMatrimonialDocumentObject,
   extractStoragePathFromUrl,
 } from '../../services/storage.service';
 import { sendNotificationSafely } from '../notifications/notifications.service';
@@ -108,6 +119,11 @@ function mapToOwnMatrimonialProfile(raw: RawMatrimonialProfile): OwnMatrimonialP
     userId: raw.userId,
     status: raw.status as MatrimonialProfileStatus,
     rejectionReason: raw.rejectionReason,
+    isVerified: (raw as any).isVerified ?? false,
+    isIdentityVerified: (raw as any).isVerified ?? false,
+    isEducationVerified: ((raw as any).documents || []).some((d: any) => d.documentType === 'EDUCATION_PROOF'),
+    isProfessionVerified: ((raw as any).documents || []).some((d: any) => d.documentType === 'OCCUPATION_PROOF'),
+    isPhotoReviewed: (raw.photos || []).some((ph: any) => ph.isApproved),
     maritalStatus: raw.maritalStatus as MaritalStatus,
     heightCm: raw.heightCm,
     weightKg: raw.weightKg,
@@ -759,6 +775,26 @@ export async function listDiscoveryProfiles(
     },
   };
 
+  // Exclude blocked users (either user blocked them or they blocked current user)
+  try {
+    const blockedRecords = await (client as any).matrimonialBlock.findMany({
+      where: {
+        OR: [{ blockerId: currentUserId }, { blockedUserId: currentUserId }],
+      },
+      select: { blockerId: true, blockedUserId: true },
+    });
+    const excludedUserIds = new Set<string>();
+    for (const b of blockedRecords) {
+      if (b.blockerId === currentUserId) excludedUserIds.add(b.blockedUserId);
+      if (b.blockedUserId === currentUserId) excludedUserIds.add(b.blockerId);
+    }
+    if (excludedUserIds.size > 0) {
+      where.userId = { notIn: Array.from(excludedUserIds) };
+    }
+  } catch (blockErr) {
+    // Graceful fallback if table does not exist
+  }
+
   if (gender) {
     where.user = {
       ...(where.user as Prisma.UserWhereInput),
@@ -919,6 +955,7 @@ export async function listDiscoveryProfiles(
         manglik: raw.manglik as ManglikStatus,
         diet: raw.diet as DietType,
         photosCount: raw.photos.length,
+        isVerified: (raw as any).isVerified ?? false,
         interestStatus: interestMap.get(raw.user.id) || null,
         createdAt: raw.createdAt.toISOString(),
       };
@@ -995,6 +1032,25 @@ export async function getDiscoveryProfileById(
       throw new MatrimonialNotFoundError('Matrimonial profile not found or not approved.');
     }
 
+    // Check if privacy block exists between viewer and target
+    if (raw.userId !== currentUserId) {
+      try {
+        const isBlocked = await (client as any).matrimonialBlock.findFirst({
+          where: {
+            OR: [
+              { blockerId: currentUserId, blockedUserId: raw.userId },
+              { blockerId: raw.userId, blockedUserId: currentUserId },
+            ],
+          },
+        });
+        if (isBlocked) {
+          throw new MatrimonialNotFoundError('Matrimonial profile not found.');
+        }
+      } catch (blockErr) {
+        if (blockErr instanceof MatrimonialNotFoundError) throw blockErr;
+      }
+    }
+
     // Check contact visibility via mutually accepted interest
     let interestStatus: MatrimonialInterestStatus | null = null;
     let unlockedContact: { phone: string; isMutualAccepted: boolean } | null = null;
@@ -1039,6 +1095,7 @@ export async function getDiscoveryProfileById(
       state: raw.workState || p?.state || null,
       avatarUrl: p?.avatarUrl || null,
       primaryPhotoUrl,
+      isVerified: (raw as any).isVerified ?? false,
       maritalStatus: raw.maritalStatus as MaritalStatus,
       heightCm: raw.heightCm,
       weightKg: raw.weightKg,
@@ -1141,8 +1198,22 @@ export async function sendInterest(
   if (receiverId === currentUserId) {
     throw new MatrimonialServiceError('You cannot send an interest request to yourself.', 400);
   }
-
   try {
+    // 0. Verify no active block exists between sender and receiver in either direction
+    const isBlocked = await (client as any).matrimonialBlock.findFirst({
+      where: {
+        OR: [
+          { blockerId: currentUserId, blockedUserId: receiverId },
+          { blockerId: receiverId, blockedUserId: currentUserId },
+        ],
+      },
+    });
+    if (isBlocked) {
+      throw new MatrimonialServiceError(
+        'Cannot send interest request; interaction between these profiles is blocked.',
+        403
+      );
+    }
     // 1. Verify receiver exists, is ACTIVE, and has an APPROVED matrimonial profile
     const receiver = await client.user.findUnique({
       where: { id: receiverId },
@@ -1553,6 +1624,22 @@ export async function respondToInterest(
       throw new MatrimonialNotFoundError('Interest request not found.');
     }
 
+    if (status === 'ACCEPTED') {
+      const isBlocked = await (client as any).matrimonialBlock.findFirst({
+        where: {
+          OR: [
+            { blockerId: interest.senderId, blockedUserId: interest.receiverId },
+            { blockerId: interest.receiverId, blockedUserId: interest.senderId },
+          ],
+        },
+      });
+      if (isBlocked) {
+        throw new MatrimonialServiceError(
+          'Cannot accept interest request; interaction between these profiles is blocked.',
+          403
+        );
+      }
+    }
     if (status === 'ACCEPTED' || status === 'DECLINED') {
       if (interest.receiverId !== currentUserId) {
         throw new MatrimonialServiceError(
@@ -1624,4 +1711,289 @@ export async function respondToInterest(
     }
     throw err;
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// 4. Verification Documents Management
+// ---------------------------------------------------------------------------
+
+/**
+ * Uploads a verification document for member's matrimonial profile.
+ */
+export async function uploadVerificationDocument(
+  userId: string,
+  input: UploadMatrimonialDocumentInput,
+  fileBuffer: Buffer,
+  originalName: string,
+  db?: PrismaClient
+): Promise<MatrimonialDocumentItem> {
+  const client = assertDb(db);
+  const profile = await client.matrimonialProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!profile) {
+    throw new MatrimonialNotFoundError('Matrimonial profile not found. Please create your profile first.');
+  }
+
+  // Enforce max 5 documents
+  const docCount = await (client as any).matrimonialDocument.count({
+    where: { profileId: profile.id },
+  });
+  if (docCount >= 5) {
+    throw new MatrimonialServiceError('You can upload a maximum of 5 verification documents.', 400);
+  }
+
+  const uploadResult = await uploadMatrimonialVerificationDocument(userId, fileBuffer, originalName);
+
+  const doc = await (client as any).matrimonialDocument.create({
+    data: {
+      profileId: profile.id,
+      documentType: input.documentType,
+      documentName: input.documentName,
+      storagePath: uploadResult.storagePath,
+      fileSize: uploadResult.fileSizeBytes,
+      mimeType: uploadResult.mimeType,
+      status: 'PENDING',
+    },
+  });
+
+  return {
+    id: doc.id,
+    profileId: doc.profileId,
+    documentType: doc.documentType as MatrimonialDocumentType,
+    documentName: doc.documentName,
+    fileSize: doc.fileSize,
+    mimeType: doc.mimeType,
+    status: doc.status as MatrimonialDocumentStatus,
+    rejectionReason: doc.rejectionReason,
+    reviewedAt: doc.reviewedAt ? doc.reviewedAt.toISOString() : null,
+    createdAt: doc.createdAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+  };
+}
+
+/**
+ * Lists submitted verification documents for current member's matrimonial profile.
+ */
+export async function listMyVerificationDocuments(
+  userId: string,
+  db?: PrismaClient
+): Promise<MatrimonialDocumentItem[]> {
+  const client = assertDb(db);
+  const profile = await client.matrimonialProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!profile) {
+    return [];
+  }
+
+  const docs = await (client as any).matrimonialDocument.findMany({
+    where: { profileId: profile.id },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return docs.map((d: any) => ({
+    id: d.id,
+    profileId: d.profileId,
+    documentType: d.documentType as MatrimonialDocumentType,
+    documentName: d.documentName,
+    fileSize: d.fileSize,
+    mimeType: d.mimeType,
+    status: d.status as MatrimonialDocumentStatus,
+    rejectionReason: d.rejectionReason,
+    reviewedAt: d.reviewedAt ? d.reviewedAt.toISOString() : null,
+    createdAt: d.createdAt.toISOString(),
+    updatedAt: d.updatedAt.toISOString(),
+  }));
+}
+
+/**
+ * Deletes a submitted verification document if pending or rejected.
+ */
+export async function deleteMyVerificationDocument(
+  userId: string,
+  documentId: string,
+  db?: PrismaClient
+): Promise<void> {
+  const client = assertDb(db);
+  const profile = await client.matrimonialProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!profile) {
+    throw new MatrimonialNotFoundError('Profile not found.');
+  }
+
+  const doc = await (client as any).matrimonialDocument.findFirst({
+    where: { id: documentId, profileId: profile.id },
+  });
+  if (!doc) {
+    throw new MatrimonialNotFoundError('Document not found.');
+  }
+
+  if (doc.status === 'APPROVED') {
+    throw new MatrimonialServiceError('Approved verification documents cannot be deleted. Please contact support.', 400);
+  }
+
+  await (client as any).matrimonialDocument.delete({
+    where: { id: documentId },
+  });
+
+  if (doc.storagePath) {
+    await deleteMatrimonialDocumentObject(doc.storagePath);
+  try {
+    const approvedGovId = await (client as any).matrimonialDocument.findFirst({
+      where: {
+        profileId: profile.id,
+        status: 'APPROVED',
+        documentType: 'GOVERNMENT_ID',
+      },
+    });
+    if (!approvedGovId) {
+      await (client as any).matrimonialProfile.update({
+        where: { id: profile.id },
+        data: { isVerified: false, verifiedAt: null, verifiedById: null },
+      });
+    }
+  } catch {
+    // Graceful fallback
+  }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Reporting & Blocking Profiles
+// ---------------------------------------------------------------------------
+
+/**
+ * Reports a matrimonial profile with categorized reason and optional description.
+ */
+export async function reportMatrimonialProfile(
+  reporterId: string,
+  profileId: string,
+  input: CreateMatrimonialReportInput,
+  db?: PrismaClient
+): Promise<void> {
+  const client = assertDb(db);
+  const target = await client.matrimonialProfile.findUnique({
+    where: { id: profileId },
+    select: { id: true, userId: true },
+  });
+  if (!target) {
+    throw new MatrimonialNotFoundError('Target matrimonial profile not found.');
+  }
+
+  if (target.userId === reporterId) {
+    throw new MatrimonialServiceError('You cannot report your own profile.', 400);
+  }
+
+  const existing = await (client as any).matrimonialReport.findFirst({
+    where: { reporterId, reportedProfileId: profileId },
+  });
+  if (existing) {
+    throw new MatrimonialServiceError('You have already submitted a report for this profile.', 409);
+  }
+
+  await (client as any).matrimonialReport.create({
+    data: {
+      reporterId,
+      reportedProfileId: profileId,
+      reason: input.reason,
+      explanation: input.explanation || null,
+      status: 'PENDING',
+    },
+  });
+}
+
+/**
+ * Blocks another member's profile, hiding them from discovery and interactions.
+ */
+export async function blockMatrimonialProfile(
+  userId: string,
+  profileId: string,
+  db?: PrismaClient
+): Promise<void> {
+  const client = assertDb(db);
+  const target = await client.matrimonialProfile.findUnique({
+    where: { id: profileId },
+    select: { userId: true },
+  });
+  if (!target) {
+    throw new MatrimonialNotFoundError('Matrimonial profile not found.');
+  }
+
+  if (target.userId === userId) {
+    throw new MatrimonialServiceError('You cannot block yourself.', 400);
+  }
+
+  await (client as any).matrimonialBlock.upsert({
+    where: {
+      blockerId_blockedUserId: {
+        blockerId: userId,
+        blockedUserId: target.userId,
+      },
+    },
+    create: {
+      blockerId: userId,
+      blockedUserId: target.userId,
+    },
+    update: {},
+  });
+}
+
+/**
+ * Unblocks a previously blocked member.
+ */
+export async function unblockMatrimonialProfile(
+  userId: string,
+  profileId: string,
+  db?: PrismaClient
+): Promise<void> {
+  const client = assertDb(db);
+  const target = await client.matrimonialProfile.findUnique({
+    where: { id: profileId },
+    select: { userId: true },
+  });
+  if (!target) {
+    throw new MatrimonialNotFoundError('Matrimonial profile not found.');
+  }
+
+  await (client as any).matrimonialBlock.deleteMany({
+    where: {
+      blockerId: userId,
+      blockedUserId: target.userId,
+    },
+  });
+}
+
+/**
+ * Lists members currently blocked by the requesting user.
+ */
+export async function listMyBlockedUsers(
+  userId: string,
+  db?: PrismaClient
+): Promise<MatrimonialBlockItem[]> {
+  const client = assertDb(db);
+  const blocks = await (client as any).matrimonialBlock.findMany({
+    where: { blockerId: userId },
+    include: {
+      blockedUser: {
+        select: {
+          id: true,
+          profile: { select: { fullName: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return blocks.map((b: any) => ({
+    id: b.id,
+    blockedUserId: b.blockedUserId,
+    blockedUserName: b.blockedUser?.profile?.fullName || 'Community Member',
+    createdAt: b.createdAt.toISOString(),
+  }));
 }

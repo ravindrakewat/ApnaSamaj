@@ -768,6 +768,18 @@ export const MatrimonialDiscoveryPage: React.FC = () => {
                           </Box>
                         )}
 
+                        {/* Verified Member Badge */}
+                        {p.isVerified && (
+                          <Box sx={{ position: 'absolute', top: 10, right: 10 }}>
+                            <Chip
+                              size="small"
+                              icon={<CheckCircleIcon fontSize="small" sx={{ color: 'white !important' }} />}
+                              label={t('identityVerifiedBadge')}
+                              sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 'bold' }}
+                            />
+                          </Box>
+                        )}
+
                         {/* Existing connection status badge */}
                         {p.interestStatus && (
                           <Box sx={{ position: 'absolute', top: 10, left: 10 }}>

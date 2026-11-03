@@ -606,3 +606,180 @@ export function extractStoragePathFromUrl(url: string): string | null {
   }
   return null;
 }
+
+
+// -----------------------------------------------------------------------------
+// MATRIMONIAL VERIFICATION DOCUMENTS (DEDICATED PRIVATE BUCKET)
+// -----------------------------------------------------------------------------
+
+export type SupportedDocumentMime = 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp';
+
+export const MATRIMONIAL_DOCUMENTS_BUCKET =
+  config.supabasePrivateStorageBucket || 'matrimonial-documents';
+
+/**
+ * Ensures that the dedicated private storage bucket exists for verification documents.
+ * Configured as strictly non-public (public: false) with a 5MB limit.
+ */
+export async function ensurePrivateDocumentBucketExists(): Promise<void> {
+  if (!config.supabaseUrl || !config.supabaseSecretKey) {
+    return;
+  }
+  let supabase;
+  try {
+    supabase = getSupabaseClient();
+  } catch {
+    return;
+  }
+
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+  if (listError) {
+    console.warn('[Storage Service] Could not verify private document bucket list:', listError.message);
+    return;
+  }
+
+  const exists = buckets?.some((b) => b.name === MATRIMONIAL_DOCUMENTS_BUCKET);
+  if (!exists) {
+    const { error: createError } = await supabase.storage.createBucket(MATRIMONIAL_DOCUMENTS_BUCKET, {
+      public: false, // STRICTLY PRIVATE
+      fileSizeLimit: 5242880, // 5MB limit
+      allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+    });
+
+    if (createError && !createError.message.includes('already exists')) {
+      console.error('[Storage Service] Failed to create private document bucket:', createError.message);
+    }
+  }
+}
+
+/**
+ * Validates document magic bytes (PDF header or supported image signatures).
+ */
+export function detectDocumentMimeType(buffer: Buffer): SupportedDocumentMime | null {
+  if (!buffer || buffer.length < 4) return null;
+  // Check PDF (%PDF-)
+  if (
+    buffer[0] === 0x25 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x44 &&
+    buffer[3] === 0x46
+  ) {
+    return 'application/pdf';
+  }
+  // Check Image signatures
+  const imgMime = detectImageMimeType(buffer);
+  if (imgMime && imgMime !== 'image/gif') {
+    return imgMime;
+  }
+  return null;
+}
+
+export interface UploadDocumentResponseData {
+  storagePath: string;
+  mimeType: SupportedDocumentMime;
+  fileSizeBytes: number;
+}
+
+/**
+ * Securely uploads a verification document to private storage.
+ * Strictly avoids generating public URLs.
+ */
+export async function uploadMatrimonialVerificationDocument(
+  userId: string,
+  fileBuffer: Buffer,
+  originalName: string
+): Promise<UploadDocumentResponseData> {
+  if (fileBuffer.length > 5 * 1024 * 1024) {
+    throw new StorageError('Document file size exceeds maximum allowed limit (5MB).', 400);
+  }
+  const detectedMime = detectDocumentMimeType(fileBuffer);
+  if (!detectedMime) {
+    throw new InvalidMimeTypeError(
+      'Unsupported document format. Allowed formats: PDF, JPEG, PNG, WebP.'
+    );
+  }
+  const ext = detectedMime === 'application/pdf' ? 'pdf' : (detectedMime === 'image/jpeg' ? 'jpg' : detectedMime.split('/')[1]);
+  const storagePath = `matrimonial-docs/${userId}/${crypto.randomUUID()}.${ext}`;
+
+  if (config.supabaseUrl && config.supabaseSecretKey) {
+    const supabase = getSupabaseClient();
+    let { error: uploadError } = await supabase.storage
+      .from(MATRIMONIAL_DOCUMENTS_BUCKET)
+      .upload(storagePath, fileBuffer, {
+        contentType: detectedMime,
+        upsert: false,
+      });
+
+    if (
+      uploadError &&
+      (uploadError.message.toLowerCase().includes('not found') ||
+        uploadError.message.toLowerCase().includes('bucket'))
+    ) {
+      try {
+        await ensurePrivateDocumentBucketExists();
+        const retry = await supabase.storage
+          .from(MATRIMONIAL_DOCUMENTS_BUCKET)
+          .upload(storagePath, fileBuffer, {
+            contentType: detectedMime,
+            upsert: false,
+          });
+        uploadError = retry.error;
+      } catch (retryErr) {
+        console.warn('[Storage Service] Private bucket auto-creation retry failed:', retryErr);
+      }
+    }
+
+    if (uploadError) {
+      console.error('[Storage Service] Supabase private document upload failed:', uploadError.message);
+      throw new StorageError(`Failed to upload document: ${uploadError.message}`, 500);
+    }
+  }
+
+  return {
+    storagePath,
+    mimeType: detectedMime,
+    fileSizeBytes: fileBuffer.length,
+  };
+}
+
+/**
+ * Generates a temporary, short-lived signed URL for an authorized admin to view a document.
+ * Requires configured remote storage; never exposes local file paths.
+ */
+export async function createTemporarySignedDocumentUrl(
+  storagePath: string,
+  expiresInSeconds: number = 300
+): Promise<string> {
+  if (config.supabaseUrl && config.supabaseSecretKey) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.storage
+      .from(MATRIMONIAL_DOCUMENTS_BUCKET)
+      .createSignedUrl(storagePath, expiresInSeconds);
+
+    if (error) {
+      console.error('[Storage Service] Failed to create signed URL:', error.message);
+      throw new StorageError('Failed to generate document signed URL.', 500);
+    }
+    return data.signedUrl;
+  }
+
+  throw new StorageError(
+    'Secure storage service is not configured. Temporary signed URLs cannot be generated.',
+    503
+  );
+}
+
+/**
+ * Safely removes a private verification document from the dedicated private bucket.
+ */
+export async function deleteMatrimonialDocumentObject(storagePath: string): Promise<void> {
+  if (!storagePath || !config.supabaseUrl || !config.supabaseSecretKey) {
+    return;
+  }
+  try {
+    const supabase = getSupabaseClient();
+    await supabase.storage.from(MATRIMONIAL_DOCUMENTS_BUCKET).remove([storagePath]);
+  } catch (err) {
+    console.warn('[Storage Service] Failed to delete document from private bucket:', err);
+  }
+}

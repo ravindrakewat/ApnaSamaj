@@ -198,3 +198,92 @@ export const singleVideoUpload = (
     next();
   });
 };
+
+
+const allowedDocumentMimes = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
+
+function documentFileFilter(
+  _req: Request,
+  file: Express.Multer.File,
+  callback: FileFilterCallback
+): void {
+  if (allowedDocumentMimes.includes(file.mimetype)) {
+    callback(null, true);
+  } else {
+    callback(new Error('INVALID_MIME_TYPE'));
+  }
+}
+
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+    files: 1,
+  },
+  fileFilter: documentFileFilter,
+});
+
+export const singleDocumentUpload = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  documentUpload.single('file')(req, res, (err: unknown) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          const response: ApiResponse = {
+            success: false,
+            error: 'File size exceeds the maximum limit of 5MB.',
+            timestamp: new Date().toISOString(),
+          };
+          res.status(400).json(response);
+          return;
+        }
+
+        const response: ApiResponse = {
+          success: false,
+          error: `Upload error: ${err.message}`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      if ((err as Error)?.message === 'INVALID_MIME_TYPE') {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Invalid file format. Only PDF, JPEG, PNG, and WebP documents are allowed.',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      const response: ApiResponse = {
+        success: false,
+        error: (err as Error)?.message || 'Failed to process document file upload.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!req.file) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'No file was provided in the request.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    next();
+  });
+};

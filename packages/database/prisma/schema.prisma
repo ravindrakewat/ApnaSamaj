@@ -73,6 +73,9 @@ enum NotificationType {
   MATRIMONIAL_INTEREST_ACCEPTED
   MATRIMONIAL_PROFILE_APPROVED
   MATRIMONIAL_PROFILE_REJECTED
+  MATRIMONIAL_PROFILE_SUSPENDED
+  MATRIMONIAL_DOCUMENT_APPROVED
+  MATRIMONIAL_DOCUMENT_REJECTED
 }
 
 enum MatrimonialProfileStatus {
@@ -81,6 +84,36 @@ enum MatrimonialProfileStatus {
   APPROVED
   REJECTED
   HIDDEN
+  SUSPENDED
+}
+
+enum MatrimonialDocumentType {
+  GOVERNMENT_ID
+  EDUCATION_PROOF
+  OCCUPATION_PROOF
+  OTHER
+}
+
+enum MatrimonialDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MatrimonialReportReason {
+  FAKE_PROFILE
+  INCORRECT_INFORMATION
+  MISLEADING_PHOTOS
+  SUSPICIOUS_ACTIVITY
+  HARASSMENT
+  OTHER
+}
+
+enum MatrimonialReportStatus {
+  PENDING
+  UNDER_INVESTIGATION
+  RESOLVED
+  DISMISSED
 }
 
 enum MaritalStatus {
@@ -170,6 +203,12 @@ model User {
   approvedMatrimonialProfiles  MatrimonialProfile[]  @relation("MatrimonialProfileApprover")
   authoredPostAppeals          PostAppeal[]          @relation("PostAppealAuthor")
   reviewedPostAppeals          PostAppeal[]          @relation("PostAppealReviewer")
+  verifiedMatrimonialProfiles  MatrimonialProfile[]  @relation("MatrimonialProfileVerifier")
+  reviewedMatrimonialDocuments MatrimonialDocument[] @relation("MatrimonialDocumentReviewer")
+  reportedMatrimonialProfiles  MatrimonialReport[]   @relation("MatrimonialReportReporter")
+  resolvedMatrimonialReports   MatrimonialReport[]   @relation("MatrimonialReportResolver")
+  blockedMatrimonialUsers      MatrimonialBlock[]    @relation("MatrimonialBlocker")
+  blockedByMatrimonialUsers    MatrimonialBlock[]    @relation("MatrimonialBlockedUser")
 
   @@index([role])
   @@index([status])
@@ -469,11 +508,17 @@ model MatrimonialProfile {
   approvedAt          DateTime?
   approvedById        String?
   approvedBy          User?                     @relation("MatrimonialProfileApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  isVerified          Boolean                   @default(false)
+  verifiedAt          DateTime?
+  verifiedById        String?
+  verifiedBy          User?                     @relation("MatrimonialProfileVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
 
   photos              MatrimonialPhoto[]
   partnerPreference   MatrimonialPartnerPreference?
+  documents           MatrimonialDocument[]
+  reports             MatrimonialReport[]
 
   @@index([status])
   @@index([maritalStatus])
@@ -535,6 +580,61 @@ model MatrimonialInterest {
   @@unique([senderId, receiverId])
   @@index([senderId, status])
   @@index([receiverId, status])
+}
+
+model MatrimonialDocument {
+  id              String                    @id @default(uuid())
+  profileId       String
+  profile         MatrimonialProfile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  documentType    MatrimonialDocumentType
+  documentName    String
+  storagePath     String
+  fileSize        Int
+  mimeType        String
+  status          MatrimonialDocumentStatus @default(PENDING)
+  rejectionReason String?
+  reviewedAt      DateTime?
+  reviewedById    String?
+  reviewedBy      User?                     @relation("MatrimonialDocumentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@index([profileId])
+  @@index([status])
+}
+
+model MatrimonialReport {
+  id                String                  @id @default(uuid())
+  reporterId        String
+  reporter          User                    @relation("MatrimonialReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedProfileId String
+  reportedProfile   MatrimonialProfile      @relation(fields: [reportedProfileId], references: [id], onDelete: Cascade)
+  reason            MatrimonialReportReason
+  explanation       String?
+  status            MatrimonialReportStatus @default(PENDING)
+  adminNotes        String?
+  resolvedAt        DateTime?
+  resolvedById      String?
+  resolvedBy        User?                   @relation("MatrimonialReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@unique([reporterId, reportedProfileId])
+  @@index([reportedProfileId])
+  @@index([status])
+}
+
+model MatrimonialBlock {
+  id            String   @id @default(uuid())
+  blockerId     String
+  blocker       User     @relation("MatrimonialBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedUserId String
+  blockedUser   User     @relation("MatrimonialBlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@unique([blockerId, blockedUserId])
+  @@index([blockerId])
+  @@index([blockedUserId])
 }
 
 // --------------------------------------------------------

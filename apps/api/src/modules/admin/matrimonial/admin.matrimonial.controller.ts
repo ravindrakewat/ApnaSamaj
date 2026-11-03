@@ -3,12 +3,22 @@ import {
   ApiResponse,
   AdminMatrimonialProfileDetail,
   PaginatedAdminMatrimonialProfilesResponse,
+  MatrimonialModerationMetrics,
+  MatrimonialDocumentItem,
+  MatrimonialReportItem,
+  PaginatedAdminMatrimonialDocumentsResponse,
+  PaginatedAdminMatrimonialReportsResponse,
 } from '@apnasamaj/shared-types';
 import {
   listAdminMatrimonialProfilesQuerySchema,
   adminModerateMatrimonialProfileSchema,
   adminModerateMatrimonialPhotoSchema,
   idParamSchema,
+  adminModerateMatrimonialDocumentSchema,
+  listAdminMatrimonialDocumentsQuerySchema,
+  adminModerateMatrimonialReportSchema,
+  listAdminMatrimonialReportsQuerySchema,
+  paginationSchema,
 } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../../middleware/authenticate';
 import {
@@ -16,6 +26,13 @@ import {
   getAdminMatrimonialProfileDetails,
   moderateMatrimonialProfile,
   moderateMatrimonialPhoto,
+  getAdminMatrimonialMetrics,
+  listAdminMatrimonialDocuments,
+  getAdminMatrimonialDocumentSignedUrl,
+  moderateAdminMatrimonialDocument,
+  listAdminMatrimonialReports,
+  moderateAdminMatrimonialReport,
+  listAdminMatrimonialAuditLogs,
 } from './admin.matrimonial.service';
 import {
   MatrimonialMigrationPendingError,
@@ -316,5 +333,292 @@ export async function moderatePhotoHandler(
     res.status(200).json(response);
   } catch (err: unknown) {
     handleAdminMatrimonialError(err, res, 'Failed to moderate photo.');
+  }
+}
+
+
+/**
+ * GET /api/v1/admin/matrimonial/metrics
+ * Returns aggregate metrics for matrimonial moderation.
+ */
+export async function getMetricsHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const metrics = await getAdminMatrimonialMetrics(req.db);
+    const response: ApiResponse<MatrimonialModerationMetrics> = {
+      success: true,
+      data: metrics,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleAdminMatrimonialError(err, res, 'Failed to fetch matrimonial metrics.');
+  }
+}
+
+/**
+ * GET /api/v1/admin/matrimonial/documents
+ * Lists verification documents for admin review.
+ */
+export async function listDocumentsHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const parsedQuery = listAdminMatrimonialDocumentsQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      const issue = parsedQuery.error.issues[0]?.message || 'Invalid query parameters.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const result = await listAdminMatrimonialDocuments(parsedQuery.data, req.db);
+    const response: ApiResponse<PaginatedAdminMatrimonialDocumentsResponse> = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleAdminMatrimonialError(err, res, 'Failed to fetch verification documents.');
+  }
+}
+
+/**
+ * GET /api/v1/admin/matrimonial/documents/:id/signed-url
+ * Generates a short-lived temporary signed URL to view a verification document.
+ */
+export async function getDocumentSignedUrlHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const actor = req.user;
+    if (!actor) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      const issue = parsedParams.error.issues[0]?.message || 'Invalid document ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const result = await getAdminMatrimonialDocumentSignedUrl(parsedParams.data.id, actor, req.db);
+    const response: ApiResponse<{ signedUrl: string; documentName: string; mimeType: string }> = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleAdminMatrimonialError(err, res, 'Failed to generate document signed URL.');
+  }
+}
+
+/**
+ * PATCH /api/v1/admin/matrimonial/documents/:id/moderation
+ * Approves or rejects a verification document.
+ */
+export async function moderateDocumentHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const actor = req.user;
+    if (!actor) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      const issue = parsedParams.error.issues[0]?.message || 'Invalid document ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedBody = adminModerateMatrimonialDocumentSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      const issue = parsedBody.error.issues[0]?.message || 'Invalid document moderation payload.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const updated = await moderateAdminMatrimonialDocument(
+      parsedParams.data.id,
+      actor,
+      parsedBody.data,
+      req.ip,
+      req.headers['user-agent'],
+      req.db
+    );
+
+    const response: ApiResponse<MatrimonialDocumentItem> = {
+      success: true,
+      message: `Document ${parsedBody.data.status === 'APPROVED' ? 'approved' : 'rejected'} successfully.`,
+      data: updated,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleAdminMatrimonialError(err, res, 'Failed to moderate verification document.');
+  }
+}
+
+/**
+ * GET /api/v1/admin/matrimonial/reports
+ * Lists profile reports for administrative investigation.
+ */
+export async function listReportsHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const parsedQuery = listAdminMatrimonialReportsQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      const issue = parsedQuery.error.issues[0]?.message || 'Invalid query parameters.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const result = await listAdminMatrimonialReports(parsedQuery.data, req.db);
+    const response: ApiResponse<PaginatedAdminMatrimonialReportsResponse> = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleAdminMatrimonialError(err, res, 'Failed to fetch matrimonial reports.');
+  }
+}
+
+/**
+ * PATCH /api/v1/admin/matrimonial/reports/:id/moderation
+ * Resolves or dismisses a matrimonial profile report.
+ */
+export async function moderateReportHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const actor = req.user;
+    if (!actor) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      const issue = parsedParams.error.issues[0]?.message || 'Invalid report ID.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedBody = adminModerateMatrimonialReportSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      const issue = parsedBody.error.issues[0]?.message || 'Invalid report resolution payload.';
+      const response: ApiResponse = {
+        success: false,
+        error: issue,
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const updated = await moderateAdminMatrimonialReport(
+      parsedParams.data.id,
+      actor,
+      parsedBody.data,
+      req.ip,
+      req.headers['user-agent'],
+      req.db
+    );
+
+    const response: ApiResponse<MatrimonialReportItem> = {
+      success: true,
+      message: 'Report resolved successfully.',
+      data: updated,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleAdminMatrimonialError(err, res, 'Failed to resolve matrimonial report.');
+  }
+}
+
+/**
+ * GET /api/v1/admin/matrimonial/audit-logs
+ * Lists immutable audit log history for matrimonial actions.
+ */
+export async function listAuditLogsHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const parsedQuery = paginationSchema.safeParse(req.query);
+    const page = parsedQuery.success ? parsedQuery.data.page : 1;
+    const limit = parsedQuery.success ? parsedQuery.data.limit : 20;
+
+    const result = await listAdminMatrimonialAuditLogs(page, limit, req.db);
+    const response: ApiResponse = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleAdminMatrimonialError(err, res, 'Failed to fetch matrimonial audit logs.');
   }
 }

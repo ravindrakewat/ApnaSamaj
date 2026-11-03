@@ -22,6 +22,7 @@ import {
   Card,
   Avatar,
   Snackbar,
+  MenuItem,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -40,11 +41,15 @@ import {
   PhotoLibrary as PhotoLibraryIcon,
   Info as InfoIcon,
   Edit as EditIcon,
+  Report as ReportIcon,
+  Block as BlockIcon,
 } from '@mui/icons-material';
 import { PublicMatrimonialProfileDetail } from '@apnasamaj/shared-types';
 import {
   getDiscoveryProfileByIdApi,
   sendMatrimonialInterestApi,
+  reportMatrimonialProfileApi,
+  blockMatrimonialProfileApi,
   MatrimonialApiError,
 } from '../services/matrimonial.service';
 import { useAuth } from '../context/AuthContext';
@@ -59,6 +64,15 @@ export const MatrimonialProfileDetailPage: React.FC = () => {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
   const [photoLoadErrors, setPhotoLoadErrors] = useState<Record<string, boolean>>({});
+
+  // Report & Block Dialog states
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState<boolean>(false);
+  const [reportReason, setReportReason] = useState<any>('FAKE_PROFILE');
+  const [reportExplanation, setReportExplanation] = useState<string>('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState<boolean>(false);
+
+  const [isBlockDialogOpen, setIsBlockDialogOpen] = useState<boolean>(false);
+  const [isSubmittingBlock, setIsSubmittingBlock] = useState<boolean>(false);
 
   // Interest Dialog states
   const [isInterestDialogOpen, setIsInterestDialogOpen] = useState<boolean>(false);
@@ -96,6 +110,37 @@ export const MatrimonialProfileDetailPage: React.FC = () => {
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
+
+  const handleReportProfile = async () => {
+    if (!profile) return;
+    setIsSubmittingReport(true);
+    try {
+      await reportMatrimonialProfileApi(profile.id, {
+        reason: reportReason,
+        explanation: reportExplanation.trim() || undefined,
+      });
+      setIsReportDialogOpen(false);
+      setReportExplanation('');
+      setSuccessMessage(t('reportSuccess'));
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to submit report.');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
+  const handleBlockProfile = async () => {
+    if (!profile) return;
+    setIsSubmittingBlock(true);
+    try {
+      await blockMatrimonialProfileApi(profile.id);
+      setIsBlockDialogOpen(false);
+      navigate('/matrimonial', { replace: true });
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to block member.');
+      setIsSubmittingBlock(false);
+    }
+  };
 
   const handleSendInterest = async () => {
     if (!profile) return;
@@ -246,6 +291,29 @@ export const MatrimonialProfileDetailPage: React.FC = () => {
           >
             {t('sendInterestBtn')}
           </Button>
+        )}
+
+        {!isOwnProfile && (
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              startIcon={<ReportIcon />}
+              onClick={() => setIsReportDialogOpen(true)}
+            >
+              {t('reportProfileBtn')}
+            </Button>
+            <Button
+              variant="outlined"
+              color="inherit"
+              size="small"
+              startIcon={<BlockIcon />}
+              onClick={() => setIsBlockDialogOpen(true)}
+            >
+              {t('blockProfileBtn')}
+            </Button>
+          </Box>
         )}
       </Box>
 
@@ -444,9 +512,19 @@ export const MatrimonialProfileDetailPage: React.FC = () => {
         <Grid item xs={12} md={7.5}>
           {/* Main Title & Bio Card */}
           <Paper elevation={1} sx={{ p: 4, borderRadius: 3, mb: 3 }}>
-            <Typography variant="h4" fontWeight="bold" gutterBottom>
-              {profile.fullName}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+              <Typography variant="h4" fontWeight="bold">
+                {profile.fullName}
+              </Typography>
+              {profile.isVerified && (
+                <Chip
+                  size="small"
+                  icon={<CheckCircleIcon fontSize="small" sx={{ color: 'white !important' }} />}
+                  label={t('verificationBadge')}
+                  sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 'bold' }}
+                />
+              )}
+            </Box>
 
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2.5 }}>
               {profile.age !== null && (
