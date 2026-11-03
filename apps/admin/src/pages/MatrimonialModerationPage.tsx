@@ -34,6 +34,7 @@ import {
   Snackbar,
   Tooltip,
   MenuItem,
+  Stack,
 } from '@mui/material';
 import {
   Search as SearchIcon,
