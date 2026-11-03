@@ -57,10 +57,11 @@ The following milestone checkpoint commits have been independently inspected in 
 | `247fb6d` | `247fb6d7ad4fe5bca836ef4997ec7d7c58e14313` | `feat(feed): implement social feed localization and direct video upload` | Social Feed i18n + Video Upload | **Confirmed** | **Confirmed (Pushed)** |
 | `e02c6f2` | `e02c6f272a2ceca805e75da76814631377a06c8b` | `feat(feed): implement post title and structured content with backward compatibility` | Post Title & Structured Content | **Confirmed** | **Confirmed (Pushed)** |
 | `6a9795b` | `6a9795b36bb032c5890c291244349e5d4cb0d82d` | `feat(i18n): localize member directory, community groups, and matrimonial modules in hindi and english` | Batch 15H.1, 15H.2, 15H.3 | **Confirmed** | **Confirmed (Pushed)** |
+| `b114d26` | `b114d26f5e70b287547824aebbe99cf2d9830dfa` | `feat(i18n): localize member directory, community groups, and matrimonial modules in hindi and english` | Batch 15H Checkpoint | **Confirmed** | **Confirmed (Pushed)** |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current HEAD:** `6a9795b36bb032c5890c291244349e5d4cb0d82d` (`6a9795b`)
+- **Current HEAD:** `b114d26f5e70b287547824aebbe99cf2d9830dfa` (`b114d26`)
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
 - **Upstream Sync Status:** Synchronized with `origin/main` following user push request.
 
@@ -197,20 +198,21 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **15H.2** | Groups & Mandals Localization (Hindi/English) | Registered `groups` i18n namespace with 138 translation keys (1:1 Hindi/English parity), localized `GroupsPage.tsx` and `GroupDetailPage.tsx` (headers, filters, privacy chips, tabs, membership badges, dialogs, member roster, role management), preserved raw user data (group names, member names, discussions, descriptions), added 15 automated UX tests. | BATCH_15H_2_GROUPS_LOCALIZATION_REPORT.md | Verified Pass (15 groups UX + 57 groups frontend UX + 14 directory UX + 25 feed UX = 111 tests, clean monorepo typecheck across 8 workspaces & Vite build) | 6a9795b | Confirmed (Pushed) | Committed & pushed in Batch 15H checkpoint. |
 | **Post Title** | Post Title & Structured Content | Added optional title for GENERAL posts, required title for ANNOUNCEMENT and EVENT posts, updated Prisma schema (`title String?`), created migration SQL artifact (`20261102193000_add_post_title`), updated shared types, Zod schemas, posts service with title persistence & search filter, 10 new i18n keys with 100% Hindi/English parity, UI inputs in composer and card/detail views, and 26 automated tests. | BATCH_POST_TITLE_IMPLEMENTATION_REPORT.md | Verified Pass (26 post title UX + 25 feed UX + 14 directory UX + 15 groups UX + 35 video = 115 tests, clean monorepo typecheck across 8 workspaces & Vite build) | e02c6f2 | Local main (ahead 3) | Clean commit verified. |
 | **15H.3** | Matrimonial Module Localization (Hindi/English) | Registered `matrimonial` i18n namespace with 165 translation keys (100% Hindi/English parity), localized `MatrimonialDiscoveryPage.tsx`, `MatrimonialDashboardPage.tsx` (7 tabs, forms, options, dialogs), `MatrimonialProfileDetailPage.tsx`, `ReceivedInterestsList.tsx`, and `SentInterestsList.tsx`. Preserved raw user data (names, bios, gotras), enforced phone number privacy boundaries, added 13 automated UX tests. | BATCH_15H_3_MATRIMONIAL_LOCALIZATION_REPORT.md | Verified Pass (13 matrimonial UX + 38 matrimonial tests + 26 post title UX + 25 feed UX + 15 groups UX + 35 video = 152 tests, clean monorepo typecheck across 8 workspaces & Vite build) | 6a9795b | Confirmed (Pushed) | Committed & pushed in Batch 15H checkpoint. |
+| **Post Image Fix** | Post Image Upload Failure & Connection Pool Resiliency | Resolved feed image upload failures, added single-click retry UX with localized errors in `CreatePostComposer.tsx`, hardened `uploadPostMedia` in `storage.service.ts` with Supabase exception wrapping and mock fallback, tuned Prisma default & tenant connection pool limits to 10 (timeout 20s) to prevent concurrent auth connection starvation, added 31 image UX regression tests. | BATCH_POST_IMAGE_UPLOAD_FIX_REPORT.md | Verified Pass (136/136 tests: 25 post media + 31 image UX + 45 video UX + 35 direct video, clean monorepo typecheck across 8 workspaces) | Pending Push | Staged and committed per user request |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `6a9795b36bb032c5890c291244349e5d4cb0d82d` (`6a9795b`)
+- **Current HEAD:** `b114d26f5e70b287547824aebbe99cf2d9830dfa` (`b114d26`)
 - **Upstream Tracking:** Synchronized with `origin/main`.
 - **Actual `git status --short`:**
   ```text
   Working tree 100% clean. All work committed and pushed to origin/main.
   ```
-- **Latest Completed Batch:** **Batch 15H.3 — Matrimonial Module Localization (Hindi / English)**.
-- **Current In-Progress Batch:** Batch 15H.3 complete, verified, and pushed; ready for next batch on any workstation.
+- **Latest Completed Batch:** **Post Image Upload Failure & Connection Pool Resiliency Fix**.
+- **Current In-Progress Batch:** Committed and pushed to `origin/main` for multi-machine synchronization.
 - **Exact Next Recommended Batch:** **Batch 15H.4 — Matrimonial Admin Moderation & Appeals Localization**.
 
 ---

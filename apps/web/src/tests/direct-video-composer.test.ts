@@ -118,6 +118,7 @@ async function runComposerTests() {
   // -----------------------------------------------------------------
   await test('Post creation allows single direct video attachment with .mp4 extension', () => {
     const valid = createPostSchema.safeParse({
+      title: 'Community Video Event',
       content: 'Here is our community event video!',
       type: 'EVENT',
       media: [
@@ -184,6 +185,7 @@ async function runComposerTests() {
 
   await test('Post creation allows 1 direct video + 3 photos (total 4 items)', () => {
     const valid = createPostSchema.safeParse({
+      title: 'Annual Gathering Highlights',
       content: 'Annual community gathering highlights',
       type: 'EVENT',
       media: [

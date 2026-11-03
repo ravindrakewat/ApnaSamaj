@@ -172,5 +172,7 @@
   "postTypeLabel": "Post Type",
   "postTitleOptionalHint": "Optional",
   "postTitleRequiredHint": "Required",
-  "postTitleCharsLeft": "{{count}} chars left"
+  "postTitleCharsLeft": "{{count}} chars left",
+  "imagesUploadFailed": "One or more images failed to upload. Please retry or remove them before publishing.",
+  "waitImagesUploading": "Please wait for all images to finish uploading."
 }

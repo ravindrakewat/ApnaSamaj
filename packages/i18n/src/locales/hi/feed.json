@@ -172,5 +172,7 @@
   "postTypeLabel": "पोस्ट प्रकार",
   "postTitleOptionalHint": "वैकल्पिक",
   "postTitleRequiredHint": "अनिवार्य",
-  "postTitleCharsLeft": "{{count}} अक्षर शेष"
+  "postTitleCharsLeft": "{{count}} अक्षर शेष",
+  "imagesUploadFailed": "एक या अधिक फ़ोटो अपलोड करने में विफल रही। कृपया पुनः प्रयास करें या हटाने के बाद प्रकाशित करें।",
+  "waitImagesUploading": "कृपया सभी फ़ोटो अपलोड होने की प्रतीक्षा करें।"
 }

@@ -68,9 +68,10 @@ export function getVideoDuration(file: File): Promise<number> {
   });
 }
 
-interface UploadedMediaItem {
+export interface UploadedMediaItem {
   url: string;
   previewUrl: string;
+  file: File;
   isUploading: boolean;
   error?: string;
 }
@@ -262,6 +263,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       const tempItem: UploadedMediaItem = {
         url: '',
         previewUrl,
+        file,
         isUploading: true,
       };
 
@@ -272,7 +274,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
         setMediaList((prev) =>
           prev.map((item) =>
             item.previewUrl === previewUrl
-              ? { ...item, url: uploadResult.url, isUploading: false }
+              ? { ...item, url: uploadResult.url, isUploading: false, error: undefined }
               : item
           )
         );
@@ -299,6 +301,39 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     });
   };
 
+  const handleRetryMediaUpload = async (previewUrl: string) => {
+    const targetItem = mediaList.find((m) => m.previewUrl === previewUrl);
+    if (!targetItem || !targetItem.file) return;
+
+    setMediaList((prev) =>
+      prev.map((item) =>
+        item.previewUrl === previewUrl
+          ? { ...item, isUploading: true, error: undefined }
+          : item
+      )
+    );
+
+    try {
+      const uploadResult = await uploadPostMediaApi(targetItem.file);
+      setMediaList((prev) =>
+        prev.map((item) =>
+          item.previewUrl === previewUrl
+            ? { ...item, url: uploadResult.url, isUploading: false, error: undefined }
+            : item
+        )
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('uploadFailedGeneral');
+      setMediaList((prev) =>
+        prev.map((item) =>
+          item.previewUrl === previewUrl
+            ? { ...item, isUploading: false, error: msg }
+            : item
+        )
+      );
+    }
+  };
+
   const isAnyMediaUploading = mediaList.some((m) => m.isUploading);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -306,13 +341,14 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     setErrorMessage(null);
 
     if (isAnyMediaUploading) {
-      setErrorMessage('Please wait for all images to finish uploading.');
+      setErrorMessage(t('waitImagesUploading', { defaultValue: 'Please wait for all images to finish uploading.' }));
       return;
     }
 
     const failedMedia = mediaList.find((m) => m.error);
     if (failedMedia) {
-      setErrorMessage('One or more images failed to upload. Please remove them before publishing.');
+      const specificError = failedMedia.error || t('imagesUploadFailed', { defaultValue: 'One or more images failed to upload. Please retry or remove them before publishing.' });
+      setErrorMessage(specificError);
       return;
     }
 
@@ -802,15 +838,41 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      bgcolor: 'rgba(211, 47, 47, 0.85)',
+                      bgcolor: 'rgba(211, 47, 47, 0.9)',
                       color: 'white',
                       fontSize: '0.65rem',
                       px: 0.5,
                       py: 0.25,
-                      textAlign: 'center',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
                     }}
                   >
-                    {t('uploadFailed')}
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontSize: '0.62rem',
+                        lineHeight: 1.1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flex: 1,
+                      }}
+                      title={item.error}
+                    >
+                      {item.error || t('uploadFailed')}
+                    </Typography>
+                    <Tooltip title={t('retryUpload')}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleRetryMediaUpload(item.previewUrl)}
+                        disabled={isSubmitting}
+                        sx={{ color: 'white', p: 0.25, ml: 0.25 }}
+                        aria-label={t('retryUpload')}
+                      >
+                        <RefreshIcon sx={{ fontSize: 13 }} />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 )}
 

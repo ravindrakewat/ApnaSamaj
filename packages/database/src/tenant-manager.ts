@@ -245,12 +245,28 @@ export class TenantDatabaseManager {
       throw new UnknownCommunityTenantError(normalizedSlug);
     }
 
-    // Tune pool limit to prevent exhausting database connection limits
+    // Tune pool limit and timeout to prevent connection starvation under concurrent requests
     let finalUrl = config.databaseUrl;
-    if (config.connectionLimit && !finalUrl.includes('connection_limit=')) {
-      finalUrl += finalUrl.includes('?')
-        ? `&connection_limit=${config.connectionLimit}`
-        : `?connection_limit=${config.connectionLimit}`;
+    try {
+      const parsedUrl = new URL(finalUrl);
+      const targetLimit = config.connectionLimit || 10;
+      const currentLimit = parsedUrl.searchParams.get('connection_limit');
+      // If connection_limit is missing or set to 1 (single-connection starvation), apply target limit
+      if (!currentLimit || currentLimit === '1') {
+        parsedUrl.searchParams.set('connection_limit', String(targetLimit));
+      } else if (config.connectionLimit && Number(currentLimit) !== config.connectionLimit) {
+        parsedUrl.searchParams.set('connection_limit', String(config.connectionLimit));
+      }
+      if (!parsedUrl.searchParams.has('pool_timeout')) {
+        parsedUrl.searchParams.set('pool_timeout', '20');
+      }
+      finalUrl = parsedUrl.toString();
+    } catch {
+      if (config.connectionLimit && !finalUrl.includes('connection_limit=')) {
+        finalUrl += finalUrl.includes('?')
+          ? `&connection_limit=${config.connectionLimit}`
+          : `?connection_limit=${config.connectionLimit}`;
+      }
     }
 
     if (this.clientFactory) {
