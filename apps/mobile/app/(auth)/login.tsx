@@ -34,7 +34,7 @@ export default function LoginScreen() {
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [slug, setSlug] = useState(communitySlug || 'demo');
+  const [slug, setSlug] = useState(communitySlug || 'kewat');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -182,14 +182,14 @@ export default function LoginScreen() {
               setSlug(val);
               if (slugError) setSlugError(undefined);
             }}
-            placeholder="e.g. demo"
+            placeholder="e.g. kewat"
             autoCapitalize="none"
             autoCorrect={false}
             error={slugError}
             helperText={
               language === 'hi'
-                ? 'आपके समुदाय का अनूठा कोड (डिफ़ॉल्ट: demo)'
-                : 'Unique community code (default: demo)'
+                ? 'आपके समुदाय का अनूठा कोड (डिफ़ॉल्ट: kewat)'
+                : 'Unique community code (default: kewat)'
             }
           />
 

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { AuthUser, LoginResponseData, RegisterResponseData } from '@apnasamaj/shared-types';
 import { authApi, LoginPayload, RegisterPayload } from '../api/auth.api';
 import { ApiError } from '../api/types';
+import { onTokenUpdated, onSessionPurged } from '../api/client';
 import {
   getAuthTokens,
   setAuthTokens,
@@ -25,6 +26,7 @@ interface AuthContextType {
   register: (payload: RegisterPayload, communitySlug?: string) => Promise<RegisterResponseData>;
   logout: () => Promise<void>;
   switchCommunity: (newSlug: string) => Promise<void>;
+  updateUser: (updatedFields: Partial<AuthUser>) => Promise<void>;
   clearError: () => void;
 }
 
@@ -37,61 +39,181 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Restore authenticated session and community context on launch
+  // Synchronize with background token rotations and session purges from ApiClient
+  useEffect(() => {
+    const unsubToken = onTokenUpdated(({ accessToken: freshAccess }) => {
+      setAccessToken(freshAccess);
+    });
+
+    const unsubPurge = onSessionPurged(() => {
+      setUser(null);
+      setAccessToken(null);
+    });
+
+    return () => {
+      unsubToken();
+      unsubPurge();
+    };
+  }, []);
+
+  // Restore authenticated session and community context on launch / page refresh
   useEffect(() => {
     let isMounted = true;
 
     async function restoreSession() {
       try {
-        const [tokens, savedSlug, cachedUser] = await Promise.all([
+        const [rawSavedSlug, tokens, cachedUser] = await Promise.all([
+          getSecureItem(STORAGE_KEYS.COMMUNITY_SLUG),
           getAuthTokens(),
-          getStoredCommunitySlug(),
           getSecureItem(STORAGE_KEYS.USER_PROFILE),
         ]);
 
-        if (isMounted) {
-          if (savedSlug) {
-            setCommunitySlugState(savedSlug);
+        let parsedUser: AuthUser | null = null;
+        if (cachedUser) {
+          try {
+            parsedUser = JSON.parse(cachedUser) as AuthUser;
+          } catch {
+            parsedUser = null;
           }
-          if (tokens.accessToken) {
-            if (cachedUser) {
-              try {
-                const parsed = JSON.parse(cachedUser);
-                const activeSlug = savedSlug || APP_CONFIG.defaultCommunitySlug;
-                // Cross-tenant guard: verify cached profile matches active tenant context
-                if (!parsed.communitySlug || parsed.communitySlug.toLowerCase() === activeSlug.toLowerCase()) {
-                  setUser(parsed);
-                  setAccessToken(tokens.accessToken);
-                } else {
-                  // Purge stale cross-tenant tokens
-                  await clearAuthTokens();
-                }
-              } catch {
-                // Ignore parse errors
+        }
+
+        const hasTokens = Boolean(tokens.accessToken || tokens.refreshToken);
+        let activeSlug: string | null = rawSavedSlug ? rawSavedSlug.trim().toLowerCase() : null;
+
+        if (hasTokens) {
+          // If authenticated tokens exist, verify tenant context unambiguously
+          if (!activeSlug && parsedUser?.communitySlug) {
+            // Recover user's authentic community slug rather than silently falling back to 'demo'
+            activeSlug = parsedUser.communitySlug.trim().toLowerCase();
+            await setStoredCommunitySlug(activeSlug);
+          } else if (!activeSlug && !parsedUser?.communitySlug) {
+            // Missing community slug with authenticated tokens: NEVER silently fallback to 'demo'
+            console.warn(
+              '[AuthContext] Authenticated session found without verified community slug. Purging ambiguous session.'
+            );
+            await clearAuthTokens();
+            if (isMounted) {
+              setUser(null);
+              setAccessToken(null);
+              setIsLoading(false);
+            }
+            return;
+          } else if (
+            activeSlug &&
+            parsedUser?.communitySlug &&
+            activeSlug !== parsedUser.communitySlug.trim().toLowerCase()
+          ) {
+            // Cross-tenant mismatch: stored community slug does not match cached profile
+            console.warn(
+              `[AuthContext] Cross-tenant mismatch: stored "${activeSlug}" != profile "${parsedUser.communitySlug}". Purging session.`
+            );
+            await clearAuthTokens();
+            if (isMounted) {
+              setUser(null);
+              setAccessToken(null);
+              setIsLoading(false);
+            }
+            return;
+          }
+        } else {
+          // Unauthenticated user: default to 'demo' for login screen
+          if (!activeSlug) {
+            activeSlug = APP_CONFIG.defaultCommunitySlug;
+          }
+        }
+
+        if (isMounted && activeSlug) {
+          setCommunitySlugState(activeSlug);
+        }
+
+        let restoredUser: AuthUser | null = parsedUser;
+
+        // 2. Token Restoration & Session Validation
+        let activeAccess = tokens.accessToken;
+
+        // If no access token but refresh token exists, proactively renew session
+        if (!activeAccess && tokens.refreshToken && activeSlug) {
+          try {
+            const refreshData = await authApi.refresh(tokens.refreshToken, activeSlug);
+            activeAccess = refreshData.accessToken;
+            const newRefresh = refreshData.refreshToken || tokens.refreshToken;
+            await setAuthTokens({ accessToken: activeAccess, refreshToken: newRefresh });
+            if (refreshData.user) {
+              restoredUser = refreshData.user;
+              await setSecureItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(refreshData.user));
+            }
+          } catch (refreshErr) {
+            if (
+              refreshErr instanceof ApiError &&
+              (refreshErr.status === 401 || refreshErr.status === 403)
+            ) {
+              await clearAuthTokens();
+              if (isMounted) {
+                setUser(null);
+                setAccessToken(null);
+                setIsLoading(false);
               }
-            } else {
-              setAccessToken(tokens.accessToken);
+              return;
             }
           }
         }
 
-        // Verify active token with backend if network is available
-        if (tokens.accessToken) {
+        // If an access token exists (either directly restored or just renewed)
+        if (activeAccess) {
+          // Optimistically populate state to avoid blank flash
+          if (isMounted) {
+            if (restoredUser) {
+              setUser(restoredUser);
+            }
+            setAccessToken(activeAccess);
+          }
+
+          // Validate active token with backend and update profile
           try {
             const freshUser = await authApi.getMe();
             if (isMounted) {
+              // Verify fresh profile matches tenant context
+              if (
+                freshUser.communitySlug &&
+                activeSlug &&
+                freshUser.communitySlug.toLowerCase() !== activeSlug.toLowerCase()
+              ) {
+                console.warn(
+                  '[AuthContext] Backend profile belongs to different community. Purging session.'
+                );
+                await clearAuthTokens();
+                setUser(null);
+                setAccessToken(null);
+                setIsLoading(false);
+                return;
+              }
+              // Read latest token from storage (in case getMe triggered an automatic 401 refresh retry)
+              const latestTokens = await getAuthTokens();
               setUser(freshUser);
+              setAccessToken(latestTokens.accessToken || activeAccess);
               await setSecureItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(freshUser));
             }
           } catch (err: unknown) {
-            // If token is expired or forbidden (cross-tenant mismatch), purge session immediately
+            // If token is explicitly revoked/expired and cannot be renewed:
             if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
               await clearAuthTokens();
               if (isMounted) {
                 setUser(null);
                 setAccessToken(null);
               }
+            } else {
+              // Network error or 400/500: maintain cached session so user is not logged out offline
+              console.warn(
+                '[AuthContext] Backend validation skipped due to network or non-auth error. Preserving offline session:',
+                err
+              );
             }
+          }
+        } else {
+          // No tokens found
+          if (isMounted) {
+            setUser(null);
+            setAccessToken(null);
           }
         }
       } catch (err) {
@@ -213,6 +335,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [communitySlug, accessToken, user]
   );
 
+  const updateUser = useCallback(async (updatedFields: Partial<AuthUser>): Promise<void> => {
+    setUser((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, ...updatedFields };
+      setSecureItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(updated)).catch(console.warn);
+      return updated;
+    });
+  }, []);
+
   const clearError = useCallback(() => setError(null), []);
 
   return (
@@ -228,6 +359,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         logout,
         switchCommunity,
+        updateUser,
         clearError,
       }}
     >

@@ -1,11 +1,51 @@
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { STORAGE_KEYS } from '../constants/storageKeys';
 import { APP_CONFIG } from '../constants/config';
 
-// In-memory fallback if SecureStore is unavailable in a runtime environment
+// In-memory fallback if persistent storage is unavailable in the environment
 const memoryStorage = new Map<string, string>();
 
+/**
+ * Prefix for browser localStorage keys to prevent namespace collisions with other apps.
+ */
+const WEB_STORAGE_PREFIX = '@apnasamaj:';
+
+/**
+ * Returns the browser's localStorage if accessible, or null if restricted/unavailable.
+ */
+function getWebStorage(): Storage | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage;
+    }
+  } catch {
+    // LocalStorage access may be restricted by browser security policies or sandboxes
+  }
+  return null;
+}
+
+/**
+ * Checks whether the current runtime is Expo Web / browser environment.
+ */
+export function isWeb(): boolean {
+  return (
+    Platform.OS === 'web' ||
+    (typeof window !== 'undefined' &&
+      typeof window.localStorage !== 'undefined' &&
+      Platform.OS !== 'android' &&
+      Platform.OS !== 'ios')
+  );
+}
+
+/**
+ * Checks whether native SecureStore is available.
+ * Returns false immediately on Web to avoid calling unsupported native APIs.
+ */
 async function isSecureStoreAvailable(): Promise<boolean> {
+  if (isWeb()) {
+    return false;
+  }
   try {
     return await SecureStore.isAvailableAsync();
   } catch {
@@ -14,9 +54,47 @@ async function isSecureStoreAvailable(): Promise<boolean> {
 }
 
 /**
- * Reads a secure value from device Keychain / Keystore.
+ * Returns which underlying storage engine is active for diagnostics and testing.
+ */
+export async function getActiveStorageEngine(): Promise<'secure-store' | 'local-storage' | 'in-memory'> {
+  if (isWeb() && getWebStorage()) {
+    return 'local-storage';
+  }
+  const secureAvailable = await isSecureStoreAvailable();
+  if (secureAvailable) {
+    return 'secure-store';
+  }
+  return 'in-memory';
+}
+
+/**
+ * Clears in-memory storage fallback. Used in unit tests to simulate a fresh app start.
+ */
+export function clearMemoryStorageForTesting(): void {
+  memoryStorage.clear();
+}
+
+/**
+ * Reads a secure/persisted value from device Keychain/Keystore (native) or localStorage (web).
  */
 export async function getSecureItem(key: string): Promise<string | null> {
+  if (isWeb()) {
+    const webStorage = getWebStorage();
+    if (webStorage) {
+      try {
+        const value =
+          webStorage.getItem(`${WEB_STORAGE_PREFIX}${key}`) ??
+          webStorage.getItem(key);
+        if (value !== null) {
+          return value;
+        }
+      } catch (err) {
+        console.warn(`[StorageService] Failed to read ${key} from localStorage:`, err);
+      }
+    }
+    return memoryStorage.get(key) || null;
+  }
+
   try {
     const available = await isSecureStoreAvailable();
     if (available) {
@@ -29,9 +107,22 @@ export async function getSecureItem(key: string): Promise<string | null> {
 }
 
 /**
- * Writes an encrypted value to device Keychain / Keystore.
+ * Writes an encrypted/persisted value to device Keychain/Keystore (native) or localStorage (web).
  */
 export async function setSecureItem(key: string, value: string): Promise<void> {
+  if (isWeb()) {
+    const webStorage = getWebStorage();
+    if (webStorage) {
+      try {
+        webStorage.setItem(`${WEB_STORAGE_PREFIX}${key}`, value);
+      } catch (err) {
+        console.warn(`[StorageService] Failed to set ${key} in localStorage:`, err);
+      }
+    }
+    memoryStorage.set(key, value);
+    return;
+  }
+
   try {
     const available = await isSecureStoreAvailable();
     if (available) {
@@ -45,9 +136,23 @@ export async function setSecureItem(key: string, value: string): Promise<void> {
 }
 
 /**
- * Safely removes a key from Keychain / Keystore.
+ * Safely removes a key from Keychain/Keystore (native) or localStorage (web).
  */
 export async function removeSecureItem(key: string): Promise<void> {
+  if (isWeb()) {
+    const webStorage = getWebStorage();
+    if (webStorage) {
+      try {
+        webStorage.removeItem(`${WEB_STORAGE_PREFIX}${key}`);
+        webStorage.removeItem(key);
+      } catch (err) {
+        console.warn(`[StorageService] Failed to delete ${key} from localStorage:`, err);
+      }
+    }
+    memoryStorage.delete(key);
+    return;
+  }
+
   try {
     const available = await isSecureStoreAvailable();
     if (available) {
@@ -100,4 +205,5 @@ export async function getStoredCommunitySlug(): Promise<string> {
 export async function setStoredCommunitySlug(slug: string): Promise<void> {
   await setSecureItem(STORAGE_KEYS.COMMUNITY_SLUG, slug);
 }
+
 

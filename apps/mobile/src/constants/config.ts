@@ -17,17 +17,17 @@ function resolveDefaultApiBaseUrl(): string {
   if (hostUri) {
     const host = hostUri.split(':')[0];
     if (host && host !== 'localhost' && host !== '127.0.0.1') {
-      return `http://${host}:5000/api/v1`;
+      return `http://${host}:4000/api/v1`;
     }
   }
 
   // 3. Android Emulator fallback (maps to host loopback 127.0.0.1)
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:5000/api/v1';
+    return 'http://10.0.2.2:4000/api/v1';
   }
 
   // 4. iOS Simulator / Web fallback
-  return 'http://localhost:5000/api/v1';
+  return 'http://localhost:4000/api/v1';
 }
 
 export const APP_CONFIG = {
@@ -35,7 +35,7 @@ export const APP_CONFIG = {
   appVersion: '1.0.0',
   androidPackage: 'com.apnasamaj.app',
   apiBaseUrl: resolveDefaultApiBaseUrl(),
-  defaultCommunitySlug: process.env.EXPO_PUBLIC_DEFAULT_COMMUNITY_SLUG || 'demo',
+  defaultCommunitySlug: process.env.EXPO_PUBLIC_DEFAULT_COMMUNITY_SLUG || 'kewat',
   requestTimeoutMs: 15000,
   tokenRefreshMarginSeconds: 60,
   defaultPageSize: 10,

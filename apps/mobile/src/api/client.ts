@@ -7,15 +7,44 @@ import {
   getStoredCommunitySlug,
 } from '../services/storage.service';
 
-let isRefreshing = false;
-let refreshSubscribers: Array<(token: string | null) => void> = [];
+export type TokenUpdateListener = (tokens: { accessToken: string; refreshToken: string }) => void;
+export type SessionPurgeListener = () => void;
 
-function onTokenRefreshed(newToken: string | null) {
-  refreshSubscribers.forEach((cb) => cb(newToken));
+let tokenUpdateListeners: TokenUpdateListener[] = [];
+let sessionPurgeListeners: SessionPurgeListener[] = [];
+
+export function onTokenUpdated(listener: TokenUpdateListener): () => void {
+  tokenUpdateListeners.push(listener);
+  return () => {
+    tokenUpdateListeners = tokenUpdateListeners.filter((l) => l !== listener);
+  };
+}
+
+export function onSessionPurged(listener: SessionPurgeListener): () => void {
+  sessionPurgeListeners.push(listener);
+  return () => {
+    sessionPurgeListeners = sessionPurgeListeners.filter((l) => l !== listener);
+  };
+}
+
+function notifyTokenUpdated(tokens: { accessToken: string; refreshToken: string }) {
+  tokenUpdateListeners.forEach((l) => l(tokens));
+}
+
+function notifySessionPurged() {
+  sessionPurgeListeners.forEach((l) => l());
+}
+
+type RefreshSubscriber = (newToken: string | null, error?: unknown) => void;
+let isRefreshing = false;
+let refreshSubscribers: RefreshSubscriber[] = [];
+
+function onTokenRefreshed(newToken: string | null, error?: unknown) {
+  refreshSubscribers.forEach((cb) => cb(newToken, error));
   refreshSubscribers = [];
 }
 
-function addRefreshSubscriber(cb: (token: string | null) => void) {
+function addRefreshSubscriber(cb: RefreshSubscriber) {
   refreshSubscribers.push(cb);
 }
 
@@ -183,6 +212,7 @@ export class ApiClient {
     const { refreshToken } = await getAuthTokens();
     if (!refreshToken) {
       await clearAuthTokens();
+      notifySessionPurged();
       throw new ApiError('Session expired. Please log in again.', 401);
     }
 
@@ -191,49 +221,93 @@ export class ApiClient {
 
       try {
         const communitySlug = await getStoredCommunitySlug();
-        const refreshResponse = await fetch(`${this.baseUrl}/auth/refresh`, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'x-community-slug': communitySlug,
-          },
-          body: JSON.stringify({ refreshToken }),
-        });
+        const timeout = options.timeoutMs || APP_CONFIG.requestTimeoutMs;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-        const refreshData = await refreshResponse.json().catch(() => null);
+        let refreshResponse: Response;
+        let refreshData: any = null;
+
+        try {
+          refreshResponse = await fetch(`${this.baseUrl}/auth/refresh`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+              'x-community-slug': communitySlug,
+            },
+            body: JSON.stringify({ refreshToken }),
+            signal: controller.signal,
+          });
+          refreshData = await refreshResponse.json().catch(() => null);
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         if (refreshResponse.ok && refreshData?.data?.accessToken) {
           const newAccess = refreshData.data.accessToken;
           const newRefresh = refreshData.data.refreshToken || refreshToken;
           await setAuthTokens({ accessToken: newAccess, refreshToken: newRefresh });
           isRefreshing = false;
+          notifyTokenUpdated({ accessToken: newAccess, refreshToken: newRefresh });
           onTokenRefreshed(newAccess);
 
           // Retry initiating request with rotated access token
           return this.request<T>(endpoint, method, { ...options, _isRetry: true });
-        } else {
+        } else if (
+          refreshResponse.status === 401 ||
+          refreshResponse.status === 403
+        ) {
+          // Explicit session rejection from auth backend (expired/revoked/suspended)
           isRefreshing = false;
           await clearAuthTokens();
-          onTokenRefreshed(null);
-          throw new ApiError('Session renewal failed. Please log in again.', 401);
+          notifySessionPurged();
+          const authError = new ApiError(
+            'Session renewal failed. Please log in again.',
+            401,
+            refreshData
+          );
+          onTokenRefreshed(null, authError);
+          throw authError;
+        } else {
+          // Status 400 (validation), 5xx (server error), or other errors: do NOT wipe session tokens!
+          isRefreshing = false;
+          const serverError = new ApiError(
+            refreshData?.error || `Refresh failed with status ${refreshResponse.status}`,
+            refreshResponse.status,
+            refreshData
+          );
+          onTokenRefreshed(null, serverError);
+          throw serverError;
         }
       } catch (refreshErr) {
         isRefreshing = false;
-        await clearAuthTokens();
-        onTokenRefreshed(null);
+        // If it's already an ApiError with 401/403, tokens are already purged
+        // If it's a network error (abort/fetch fail), do NOT wipe tokens!
+        if (
+          refreshErr instanceof ApiError &&
+          (refreshErr.status === 401 || refreshErr.status === 403)
+        ) {
+          await clearAuthTokens();
+          notifySessionPurged();
+        }
+        onTokenRefreshed(null, refreshErr);
         throw refreshErr;
       }
     }
 
     // Concurrent callers await the active refresh attempt
     return new Promise<T>((resolve, reject) => {
-      addRefreshSubscriber((newToken: string | null) => {
+      addRefreshSubscriber((newToken: string | null, error?: unknown) => {
         if (newToken) {
           // Retry concurrent request with new token
           resolve(this.request<T>(endpoint, method, { ...options, _isRetry: true }));
         } else {
-          reject(new ApiError('Authentication expired.', 401));
+          reject(
+            error instanceof Error
+              ? error
+              : new ApiError('Authentication expired.', 401)
+          );
         }
       });
     });
@@ -241,4 +315,5 @@ export class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
 

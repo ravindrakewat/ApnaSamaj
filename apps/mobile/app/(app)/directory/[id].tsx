@@ -6,6 +6,7 @@ import {
   Pressable,
   Image,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +21,7 @@ import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { usersApi } from '../../../src/api/users.api';
+import { chatApi } from '../../../src/api/chat.api';
 
 export default function MemberProfileDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -27,12 +29,13 @@ export default function MemberProfileDetailScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { language } = useLocalization();
-  const { communitySlug } = useAuth();
+  const { user, communitySlug } = useAuth();
 
   const [member, setMember] = useState<PublicMemberProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<boolean>(false);
+  const [isStartingChat, setIsStartingChat] = useState<boolean>(false);
 
   const loadProfile = useCallback(async () => {
     if (!id || !id.trim()) {
@@ -67,6 +70,34 @@ export default function MemberProfileDetailScreen() {
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+
+  const handleStartChat = async () => {
+    if (!member?.id || isStartingChat) return;
+
+    if (user?.id === member.id) {
+      Alert.alert(
+        language === 'hi' ? 'सूचना' : 'Notice',
+        language === 'hi' ? 'आप स्वयं को संदेश नहीं भेज सकते।' : 'You cannot message yourself.'
+      );
+      return;
+    }
+
+    setIsStartingChat(true);
+    try {
+      const conv = await chatApi.createDirectConversation(member.id);
+      router.push(`/chat/${conv.id}` as any);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : language === 'hi'
+          ? 'चैट शुरू करने में विफल।'
+          : 'Failed to start chat.';
+      Alert.alert(language === 'hi' ? 'त्रुटि' : 'Error', msg);
+    } finally {
+      setIsStartingChat(false);
+    }
+  };
 
   const initial = member?.fullName ? member.fullName.trim().charAt(0).toUpperCase() : 'स';
 
@@ -208,6 +239,20 @@ export default function MemberProfileDetailScreen() {
                     : `Member since ${formatJoinedDate(member.joinedAt)}`}
                 </Typography>
               ) : null}
+
+              {/* Message Action Button (Disabled for self) */}
+              {user?.id !== member.id ? (
+                <View style={styles.messageActionContainer}>
+                  <Button
+                    title={language === 'hi' ? '💬 व्यक्तिगत संदेश भेजें' : '💬 Send Message'}
+                    variant="primary"
+                    size="md"
+                    loading={isStartingChat}
+                    onPress={handleStartChat}
+                    style={styles.messageButton}
+                  />
+                </View>
+              ) : null}
             </View>
           </Card>
 
@@ -304,41 +349,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    elevation: 2,
   },
   backButton: {
-    padding: 4,
+    padding: 6,
+    marginRight: 8,
   },
   headerSpacer: {
-    width: 24,
+    width: 32,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    gap: 12,
   },
   loadingText: {
-    marginTop: 8,
+    marginTop: 12,
   },
   errorPadding: {
-    padding: 16,
-    marginTop: 24,
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
   },
   stateCard: {
     padding: 24,
     alignItems: 'center',
   },
   errorIcon: {
-    fontSize: 40,
+    fontSize: 36,
     marginBottom: 8,
   },
   errorDesc: {
-    marginTop: 6,
+    marginTop: 8,
     marginBottom: 20,
+    lineHeight: 20,
   },
   errorBtnRow: {
     flexDirection: 'row',
@@ -349,31 +395,35 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    gap: 12,
+    paddingBottom: 40,
   },
   profileHeaderCard: {
-    padding: 24,
     alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
   avatarSection: {
     alignItems: 'center',
+    width: '100%',
   },
   largeAvatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     borderWidth: 2,
+    marginBottom: 12,
   },
   largeAvatarFallback: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    marginBottom: 12,
   },
   profileName: {
-    marginTop: 12,
     marginBottom: 6,
     textAlign: 'center',
   },
@@ -385,8 +435,16 @@ const styles = StyleSheet.create({
   joinedText: {
     marginTop: 2,
   },
+  messageActionContainer: {
+    width: '100%',
+    marginTop: 16,
+  },
+  messageButton: {
+    width: '100%',
+  },
   sectionCard: {
     padding: 16,
+    marginBottom: 16,
   },
   sectionTitle: {
     marginBottom: 12,
@@ -435,4 +493,3 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 });
-

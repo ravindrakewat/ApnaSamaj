@@ -25,6 +25,7 @@ node_modules/
 dist/
 build/
 .cache/
+.expo/
 
 # Environment files & secrets
 .env

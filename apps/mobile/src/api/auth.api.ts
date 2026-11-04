@@ -3,6 +3,7 @@ import { ApiResponse } from './types';
 import {
   LoginResponseData,
   RegisterResponseData,
+  RefreshResponseData,
   AuthUser,
 } from '@apnasamaj/shared-types';
 
@@ -69,10 +70,10 @@ export const authApi = {
   },
 
   /**
-   * Rotates session refresh token.
+   * Rotates session refresh token. Returns new access token, rotated refresh token, and user profile.
    */
-  async refresh(refreshToken: string, communitySlug?: string): Promise<{ accessToken: string; refreshToken?: string }> {
-    const response = await apiClient.post<ApiResponse<{ accessToken: string; refreshToken?: string }>>(
+  async refresh(refreshToken: string, communitySlug?: string): Promise<RefreshResponseData> {
+    const response = await apiClient.post<ApiResponse<RefreshResponseData>>(
       '/auth/refresh',
       { refreshToken },
       { skipAuth: true, communitySlug }

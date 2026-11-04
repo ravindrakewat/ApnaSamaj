@@ -28,7 +28,17 @@ async function runAll() {
   await import('./post-creation.test');
   await import('./directory-flow.test');
   await import('./groups-flow.test');
+  const { runMatrimonialFlowTests } = await import('./matrimonial-flow.test');
+  await runMatrimonialFlowTests();
   await import('./ui-navigation-audit.test');
+  const { runSessionPersistenceTests } = await import('./session-persistence.test');
+  await runSessionPersistenceTests();
+  const { runProfileSettingsFlowTests } = await import('./profile-settings-flow.test');
+  await runProfileSettingsFlowTests();
+  const { runGroupChatFlowTests } = await import('./group-chat-flow.test');
+  await runGroupChatFlowTests();
+  const { runPersonalChatFlowTests } = await import('./personal-chat-flow.test');
+  await runPersonalChatFlowTests();
 }
 
 runAll();

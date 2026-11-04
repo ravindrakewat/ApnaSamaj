@@ -6,7 +6,7 @@ import { Typography } from './Typography';
 import { useTheme } from '../hooks/useTheme';
 import { useLocalization } from '../hooks/useLocalization';
 
-export type NavTab = 'feed' | 'directory' | 'groups';
+export type NavTab = 'feed' | 'directory' | 'groups' | 'matrimonial' | 'chat' | 'profile';
 
 export interface BottomNavigationProps {
   activeTab: NavTab;
@@ -21,7 +21,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab })
   const tabs: Array<{ key: NavTab; labelHi: string; labelEn: string; icon: string; route: string }> = [
     {
       key: 'feed',
-      labelHi: 'समाज फ़ीड',
+      labelHi: 'फ़ीड',
       labelEn: 'Feed',
       icon: '📰',
       route: '/(app)',
@@ -39,6 +39,27 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab })
       labelEn: 'Groups',
       icon: '🏛️',
       route: '/(app)/groups',
+    },
+    {
+      key: 'matrimonial',
+      labelHi: 'विवाह',
+      labelEn: 'Matrimony',
+      icon: '💍',
+      route: '/(app)/matrimonial',
+    },
+    {
+      key: 'chat',
+      labelHi: 'चैट',
+      labelEn: 'Chat',
+      icon: '💬',
+      route: '/(app)/chat',
+    },
+    {
+      key: 'profile',
+      labelHi: 'प्रोफ़ाइल',
+      labelEn: 'Profile',
+      icon: '👤',
+      route: '/(app)/profile',
     },
   ];
 
@@ -89,6 +110,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab })
               weight={isActive ? 'bold' : 'regular'}
               color={isActive ? theme.colors.primary : theme.colors.textMuted}
               style={styles.tabLabel}
+              numberOfLines={1}
             >
               {label}
             </Typography>
@@ -103,7 +125,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 8,
+    paddingTop: 6,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
@@ -114,21 +136,23 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 2,
+    minWidth: 0,
   },
   iconContainer: {
-    width: 36,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
   },
   iconText: {
-    fontSize: 16,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 17,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
+    textAlign: 'center',
   },
 });

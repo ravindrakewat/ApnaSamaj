@@ -212,33 +212,84 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **Mobile 3.1** | Mobile Post Creation & Image Upload | Implemented native post creation and image attachment in `apps/mobile`: Post creation screen (`app/(app)/post/create.tsx`) supporting GENERAL, ANNOUNCEMENT, and EVENT post types with dynamic title requirements; multi-line text input with live character countdown (5000 chars); native image picker integration (`expo-image-picker@~16.0.6`) with preview card and remove action; client-side image validation (5MB max, JPEG/PNG/WebP/GIF); two-stage upload pipeline via `postsApi.uploadMedia` (`POST /api/v1/posts/media/upload`) with auto boundary detection on `FormData` and `postsApi.createPost` (`POST /api/v1/posts`); Floating Action Button (FAB) in Home Feed (`app/(app)/index.tsx`) with `useFocusEffect` auto-refresh on return; 17 automated tests passing (cumulative 69 mobile tests); 0 typecheck errors across all 9 workspaces; 2.71 MB Hermes Android bytecode bundle; production builds for web and admin verified with 0 errors. | docs/BATCH_3_1_MOBILE_POST_CREATION_REPORT.md | Verified Pass (69/69 mobile tests: 52 previous + 17 post creation, clean 9-workspace typecheck, 2.71 MB Hermes Android export, Vite admin & web builds passed) | Working Tree | Ready for user review |
 | **Mobile 4** | Mobile Community Directory & Member Profiles | Implemented native Member Directory and Member Profile screens in `apps/mobile`: Member Directory screen (`app/(app)/directory/index.tsx`) with 400ms debounced search, expandable location & roots filters (city, state, gotra, sub-caste), server-side pagination with duplicate ID deduplication, pull-to-refresh, empty and retry error states; Member Profile screen (`app/(app)/directory/[id].tsx`) resolving public profile by UUID with role badges, joined date, bio, community details, and privacy protection notice (zero phone/email exposure); integrated `BottomNavigation` supporting Feed & Directory tabs; `MemberCard` component with initials/avatar fallback; 7 automated tests passing (cumulative 76 mobile tests); 0 typecheck errors across all 9 workspaces; 2.75 MB Hermes Android bytecode bundle; production builds for web and admin verified with 0 errors. | docs/BATCH_4_MOBILE_MEMBER_DIRECTORY_REPORT.md | Verified Pass (76/76 mobile tests: 69 previous + 7 directory, clean 9-workspace typecheck, 2.75 MB Hermes Android export, Vite admin & web builds passed) | Working Tree | Ready for user review |
 | **Mobile 5** | Mobile Community Groups & Discussions | Implemented native Community Groups Discovery and Group Details screens in `apps/mobile`: Groups screen (`app/(app)/groups/index.tsx`) with category tabs (All, My Groups, Public, Private), 400ms debounced search, single-tap public join, server-side pagination, pull-to-refresh; Group Details screen (`app/(app)/group/[slug].tsx`) with hero banner, privacy indicators, member/post stats, membership actions (Join, Leave with sole-admin protection); private group security guard locking discussions & rosters from non-members; discussions feed reusing `PostCard` with like/comment interactions and member new post trigger; updated `BottomNavigation` with 3 primary tabs (Feed, Directory, Groups); `GroupCard` component; 10 automated tests passing (cumulative 86 mobile tests); 0 typecheck errors across all 9 workspaces; 2.79 MB Hermes Android bytecode bundle; production builds for web and admin verified with 0 errors. | docs/BATCH_5_MOBILE_GROUPS_REPORT.md | Verified Pass (86/86 mobile tests: 76 previous + 10 groups, clean 9-workspace typecheck, 2.79 MB Hermes Android export, Vite admin & web builds passed) | 0f209e9 | Confirmed (Pushed) | Committed & pushed in 0f209e9. |
-| **Mobile Audit** | Mobile UI & Navigation Audit & Safe Area Remediation | Completed full UI and navigation audit across all 11 existing mobile screens and 7 critical user flows. Identified missing standalone Profile, Community, and Language screens. Remediated top status-bar and camera punch-hole collisions by injecting `useSafeAreaInsets().top` across all custom headers; remediated bottom navigation system gesture bar overlap using `useSafeAreaInsets().bottom`; fixed Feed FAB offset to dynamically avoid tab bar overlap. Added 17 automated navigation and user flow tests (total 103 mobile assertions passing). | docs/MOBILE_UI_NAVIGATION_AUDIT_REPORT.md | Verified Pass (103/103 mobile tests, 0 typecheck errors across all 9 workspaces) | Pending Push | Staged and committed per user push request |
+| **Mobile Audit** | Mobile UI & Navigation Audit & Safe Area Remediation | Completed full UI and navigation audit across all 11 existing mobile screens and 7 critical user flows. Identified missing standalone Profile, Community, and Language screens. Remediated top status-bar and camera punch-hole collisions by injecting `useSafeAreaInsets().top` across all custom headers; remediated bottom navigation system gesture bar overlap using `useSafeAreaInsets().bottom`; fixed Feed FAB offset to dynamically avoid tab bar overlap. Added 17 automated navigation and user flow tests (total 103 mobile assertions passing). | docs/MOBILE_UI_NAVIGATION_AUDIT_REPORT.md | Verified Pass (103/103 mobile tests, 0 typecheck errors across all 9 workspaces) | 0c8b73b | Confirmed (Pulled) | Pulled from origin/main in 0c8b73b |
+| **Mobile Fix** | Fix Mobile Logout on Page Refresh & Persistent Storage | Resolved critical mobile logout on browser reload and app hydration. Fixed root cause: `expo-secure-store` unsupported on Web causing fallback to ephemeral memory storage wiped on reload. Implemented platform-aware storage: native uses `expo-secure-store` (Keystore/Keychain), Web uses `window.localStorage` with namespaced keys (`@apnasamaj:`). Rewrote `restoreSession()` to follow 7-step bootstrap pipeline (slug → tokens → refresh/validate → profile → auth state → navigation). Hardened `ApiClient` 401 retry: coalesces concurrent requests into 1 refresh, retains offline tokens on transient network failure, and notifies React context via event listeners. Added 11 automated regression tests (cumulative 114 mobile tests passing); 0 typecheck errors across all 9 workspaces; clean Expo Web export (1.26 MB bundle). | docs/MOBILE_SESSION_PERSISTENCE_FIX_REPORT.md | Verified Pass (114/114 mobile tests, clean 9-workspace typecheck, clean Expo Web export) | Working Tree | Ready for review |
+| **Mobile 6** | Mobile Matrimonial Profiles & Discovery | Implemented complete native Matrimonial module in `apps/mobile`: Matrimonial discovery screen (`app/(app)/matrimonial/index.tsx`) with dual-mode segmented control (Profiles vs Interests), multi-criteria filter panel (gender, marital status, manglik, sub-caste, city), server-side paginated FlatList with pull-to-refresh; Matrimonial profile detail screen (`app/(app)/matrimonial/[id].tsx`) with photo gallery carousel/thumbnails, 7 categorized bio/astrological/family/lifestyle sections, contact privacy guard (reveals phone only on mutual acceptance), express interest modal (500 char note), profile reporting, candidate blocking; `MatrimonialCard` component; added matrimonial tab to `BottomNavigation`; integrated 10 existing backend APIs in `matrimonialApi`; 14 new automated tests (cumulative 136 mobile tests passing); 0 typecheck errors across all 9 workspaces. | docs/BATCH_6_MOBILE_MATRIMONIAL_REPORT.md | Verified Pass (136/136 mobile tests, 0 typecheck errors across all 9 workspaces) | Working Tree | Ready for user review |
+| **Mobile 7** | Mobile Standalone Profile & Settings Module | Transitioned inline profile modal and top-bar language toggles into dedicated standalone screens (`app/(app)/profile/index.tsx` and `app/(app)/profile/settings.tsx`). Features hero avatar with photo upload (`POST /api/v1/users/me/avatar`), comprehensive personal details, profile editing modal (`PATCH /api/v1/users/me/profile`), instant language switcher (Hindi/English with persistence), multi-tenant community switcher with physical tenant isolation warnings & session termination, account overview, confirmed logout with server token revocation, and updated 5-tab BottomNavigation. Added 11 automated tests (cumulative 151 mobile assertions passing); clean 9-workspace typecheck. | docs/BATCH_7_MOBILE_PROFILE_SETTINGS_REPORT.md | Verified Pass (151/151 mobile tests, 0 typecheck errors across all 9 workspaces) | Working Tree | Ready for user review |
+| **Mobile 8.1** | Mobile WhatsApp-Style Group Chat | Implemented native Community Group Chat in `apps/mobile`: dedicated group chat screen (`app/(app)/group/[slug]/chat.tsx`) with WhatsApp-inspired message bubbles, inverted FlatList with cursor-based pagination, dynamic date separators, auto-scroll, live typing indicators, optimistic UI with tempId, public group membership gates, and private group lockouts. Created `chatApi` wrapping `GET/POST /groups/:id/messages` and `socket.service.ts` singleton managing Socket.IO connection with tenant context. Added Live Group Chat entry CTA button in `group/[slug].tsx`. 12 automated unit & integration tests passing (cumulative 163 mobile tests); 0 typecheck errors across all 9 workspaces. | docs/BATCH_8_1_MOBILE_GROUP_CHAT_REPORT.md | Verified Pass (163/163 mobile tests, 0 typecheck errors across all 9 workspaces) | Working Tree | Ready for user review |
+| **8.2** | Personal One-to-One Messaging Backend | Implemented complete backend foundation for private one-to-one messaging in Apna Samaj without mutating database data. Added `DirectConversation`, `DirectConversationParticipant`, and `DirectMessage` Prisma models with `@@unique([userOneId, userTwoId])` duplicate prevention; generated migration SQL artifact (`20261104203000_add_direct_messaging`); added shared types and Zod schemas; built `direct-chat.service.ts` and `direct-chat.controller.ts` mounted at `/api/v1/chat` (`/inbox`, `/direct`, `/conversations/:id/messages`, `/conversations/:id/read`); added Socket.IO events (`direct:join`, `direct:leave`, `direct:send_message`, `direct:user_typing`, `direct:message_read`) with tenant isolation and server-side authorization. Added 41 automated backend tests (12 scenarios); verified 0 typecheck errors across all 9 workspaces. | docs/BATCH_8_2_PERSONAL_CHAT_BACKEND_REPORT.md | Verified Pass (41/41 direct messaging tests, 47/47 chat isolation tests, 163/163 mobile tests, clean monorepo typecheck) | Working Tree | Ready for user review |
+| **Mobile 8.3** | Mobile Personal One-to-One Chat UI & Unified Chat Inbox | Implemented WhatsApp-style personal one-to-one messaging and unified chat inbox in `apps/mobile`: Member Profile Message button entry point (`apps/mobile/app/(app)/directory/[id].tsx`) with self-chat prevention; Personal Chat screen (`apps/mobile/app/(app)/chat/[id].tsx`) with inverted FlatList, optimistic messages, blue-tick read receipts (`✓✓`), live typing indicators, date separators, and failed message retry; Unified Chat Inbox (`apps/mobile/app/(app)/chat/index.tsx`) with three-way tabs (All Chats, Personal, Groups), combined sorting, live unread badges, and search; dedicated `useDirectChat` hook; expanded `BottomNavigation` with 6 compact tabs; updated Expo Router stack; 16 new automated tests (cumulative 179 mobile tests passing); 0 typecheck errors across all 9 workspaces; Expo Web export bundled in 6.9s. | docs/BATCH_8_3_MOBILE_PERSONAL_CHAT_REPORT.md | Verified Pass (179/179 mobile tests, 41 direct messaging tests, 47 chat isolation tests, 0 typecheck errors across all 9 workspaces, clean Expo Web export) | Working Tree | Ready for user review |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `0f209e97de4c8e29cfeff48f79583d367ccceaec` (`0f209e9`)
-- **Upstream Tracking:** Synchronized with `origin/main` (at `a4895ad`).
+- **Current HEAD:** `0c8b73b3e0cb3a0c0ad51b54ca0df82688009a25` (`0c8b73b`)
+- **Upstream Tracking:** Synchronized with `origin/main` (at `0c8b73b`).
 - **Actual `git status --short`:**
   ```text
-  M apps/admin/src/pages/MatrimonialModerationPage.tsx
+  M apps/api/src/app.ts
+  M apps/api/src/modules/chat/chat.socket.ts
+  M apps/api/src/modules/chat/index.ts
+  M apps/mobile/app.json
+  M apps/mobile/app/(app)/_layout.tsx
+  M apps/mobile/app/(app)/directory/[id].tsx
+  M apps/mobile/app/(app)/group/[slug].tsx
+  M apps/mobile/app/(app)/index.tsx
+  M apps/mobile/app/(auth)/login.tsx
+  M apps/mobile/app/(auth)/register.tsx
+  M apps/mobile/metro.config.js
+  M apps/mobile/src/api/auth.api.ts
+  M apps/mobile/src/api/client.ts
+  M apps/mobile/src/api/users.api.ts
+  M apps/mobile/src/components/BottomNavigation.tsx
+  M apps/mobile/src/components/index.ts
+  M apps/mobile/src/constants/config.ts
+  M apps/mobile/src/context/AuthContext.tsx
+  M apps/mobile/src/services/storage.service.ts
+  M apps/mobile/src/tests/test-runner.ts
   M docs/PROJECT_HISTORY.md
-  M package-lock.json
-  ?? apps/mobile/
-  ?? docs/BATCH_1_MOBILE_FOUNDATION_REPORT.md
-  ?? docs/BATCH_1_1_MOBILE_RUNTIME_VERIFICATION_REPORT.md
-  ?? docs/BATCH_2_MOBILE_AUTH_REPORT.md
-  ?? docs/BATCH_2_1_ANDROID_AUTH_VERIFICATION_REPORT.md
-  ?? docs/BATCH_3_MOBILE_SOCIAL_FEED_REPORT.md
-  ?? docs/BATCH_3_1_MOBILE_POST_CREATION_REPORT.md
-  ?? docs/BATCH_4_MOBILE_MEMBER_DIRECTORY_REPORT.md
-  ?? docs/BATCH_5_MOBILE_GROUPS_REPORT.md
+  M package.json
+  M packages/database/prisma/schema.prisma
+  M packages/shared-types/src/chat.ts
+  M packages/shared-types/src/index.ts
+  M packages/validation/src/chat.ts
+  ?? .expo/
+  ?? App.js
+  ?? apps/api/src/modules/chat/chat.routes.ts
+  ?? apps/api/src/modules/chat/direct-chat.controller.ts
+  ?? apps/api/src/modules/chat/direct-chat.service.ts
+  ?? apps/api/src/tests/direct-messaging-flow.test.ts
+  ?? apps/mobile/app/(app)/chat/
+  ?? apps/mobile/app/(app)/group/[slug]/
+  ?? apps/mobile/app/(app)/matrimonial/
+  ?? apps/mobile/app/(app)/profile/
+  ?? apps/mobile/src/api/chat.api.ts
+  ?? apps/mobile/src/api/matrimonial.api.ts
+  ?? apps/mobile/src/components/MatrimonialCard.tsx
+  ?? apps/mobile/src/hooks/useDirectChat.ts
+  ?? apps/mobile/src/hooks/useGroupChat.ts
+  ?? apps/mobile/src/services/socket.service.ts
+  ?? apps/mobile/src/tests/group-chat-flow.test.ts
+  ?? apps/mobile/src/tests/matrimonial-flow.test.ts
+  ?? apps/mobile/src/tests/personal-chat-flow.test.ts
+  ?? apps/mobile/src/tests/profile-settings-flow.test.ts
+  ?? apps/mobile/src/tests/session-persistence.test.ts
+  ?? docs/BATCH_6_MOBILE_MATRIMONIAL_REPORT.md
+  ?? docs/BATCH_7_MOBILE_PROFILE_SETTINGS_REPORT.md
+  ?? docs/BATCH_8_1_MOBILE_GROUP_CHAT_REPORT.md
+  ?? docs/BATCH_8_2_PERSONAL_CHAT_BACKEND_REPORT.md
+  ?? docs/BATCH_8_3_MOBILE_PERSONAL_CHAT_REPORT.md
+  ?? docs/BATCH_8_MESSAGING_BACKEND_AUDIT.md
+  ?? docs/MOBILE_APP_DEVELOPMENT_DASHBOARD.md
+  ?? docs/MOBILE_SESSION_PERSISTENCE_FIX_REPORT.md
+  ?? packages/database/prisma/migrations/20261104203000_add_direct_messaging/
+  ?? tsconfig.json
   ```
-- **Latest Completed Batch:** **Mobile UI & Navigation Audit & Safe Area Remediation**.
-- **Current In-Progress Batch:** Committed and pushed to `origin/main` for multi-machine synchronization.
-- **Exact Next Recommended Batch:** **Batch 6 (Mobile Track) — Mobile Matrimonial Profiles & Discovery**.
+- **Latest Completed Batch:** **Batch 8.3 (Mobile Track) — Mobile Personal One-to-One Chat UI & Unified Chat Inbox**.
+- **Current In-Progress Batch:** Completed and verified; ready for user review.
+- **Exact Next Recommended Batch:** **Batch 8.4 (Mobile Track) — Mobile Chat Polish & Message Actions**.
 
 ---
 

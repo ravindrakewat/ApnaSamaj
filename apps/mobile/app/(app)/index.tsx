@@ -395,7 +395,7 @@ export default function SocialFeedHomeScreen() {
 
           {/* User Profile Avatar / Drawer Trigger */}
           <Pressable
-            onPress={() => setIsProfileModalOpen(true)}
+            onPress={() => router.push('/(app)/profile' as any)}
             style={[styles.profileAvatar, { backgroundColor: theme.colors.primaryLight }]}
             accessibilityRole="button"
             accessibilityLabel="Open profile options"

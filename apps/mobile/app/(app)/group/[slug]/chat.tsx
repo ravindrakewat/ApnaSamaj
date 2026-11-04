@@ -1,0 +1,659 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  Image,
+  ActivityIndicator,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GroupDetails, GroupPrivacy } from '@apnasamaj/shared-types';
+import { Typography, Card, Button } from '../../../../src/components';
+import { useTheme } from '../../../../src/hooks/useTheme';
+import { useLocalization } from '../../../../src/hooks/useLocalization';
+import { useAuth } from '../../../../src/hooks/useAuth';
+import { groupsApi } from '../../../../src/api/groups.api';
+import { useGroupChat, ExtendedChatMessage } from '../../../../src/hooks/useGroupChat';
+
+export default function GroupChatScreen() {
+  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const router = useRouter();
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const { language } = useLocalization();
+  const { user } = useAuth();
+
+  // Group Details State
+  const [group, setGroup] = useState<GroupDetails | null>(null);
+  const [loadingGroup, setLoadingGroup] = useState<boolean>(true);
+  const [groupError, setGroupError] = useState<string | null>(null);
+  const [isJoining, setIsJoining] = useState<boolean>(false);
+  const [inputText, setInputText] = useState<string>('');
+  const [isSending, setIsSending] = useState<boolean>(false);
+
+  /**
+   * Load group details
+   */
+  const loadGroup = useCallback(async () => {
+    if (!slug) return;
+    setLoadingGroup(true);
+    setGroupError(null);
+    try {
+      const data = await groupsApi.getGroupBySlug(slug.trim());
+      setGroup(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'समूह विवरण लोड करने में विफल।';
+      setGroupError(msg);
+    } finally {
+      setLoadingGroup(false);
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    loadGroup();
+  }, [loadGroup]);
+
+  const isMember = Boolean(group?.isMember);
+  const isPrivate = group?.privacy === GroupPrivacy.PRIVATE;
+
+  // Real-time Chat Hook
+  const {
+    messages,
+    isLoadingHistory,
+    isLoadingOlder,
+    hasMore,
+    error: chatError,
+    isConnected,
+    typingUsers,
+    loadInitialHistory,
+    loadOlderMessages,
+    sendMessage,
+    reportTyping,
+  } = useGroupChat({
+    groupId: group?.id || '',
+    isMember,
+    isPrivate,
+  });
+
+  const handleJoin = async () => {
+    if (!group || isJoining) return;
+    setIsJoining(true);
+    try {
+      const res = await groupsApi.joinGroup(group.id);
+      setGroup((prev) =>
+        prev
+          ? {
+              ...prev,
+              isMember: true,
+              myRole: res.role,
+              membersCount: prev.membersCount + 1,
+            }
+          : null
+      );
+      Alert.alert(
+        language === 'hi' ? 'सफल' : 'Success',
+        language === 'hi' ? 'समूह में शामिल हुए!' : 'Joined group successfully!'
+      );
+      loadInitialHistory();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to join group.';
+      Alert.alert(language === 'hi' ? 'त्रुटि' : 'Error', msg);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const handleInputChange = (text: string) => {
+    setInputText(text);
+    reportTyping(text);
+  };
+
+  const handleSend = async () => {
+    const trimmed = inputText.trim();
+    if (!trimmed || isSending) return;
+
+    setIsSending(true);
+    setInputText('');
+    try {
+      await sendMessage(trimmed);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'संदेश भेजने में विफल।';
+      Alert.alert(language === 'hi' ? 'त्रुटि' : 'Error', msg);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const formatMessageTime = (isoString: string): string => {
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
+
+  const formatDateHeader = (isoString: string): string => {
+    try {
+      const d = new Date(isoString);
+      const today = new Date();
+      const yesterday = new Date();
+      yesterday.setDate(today.getDate() - 1);
+
+      if (d.toDateString() === today.toDateString()) {
+        return language === 'hi' ? 'आज' : 'Today';
+      }
+      if (d.toDateString() === yesterday.toDateString()) {
+        return language === 'hi' ? 'कल' : 'Yesterday';
+      }
+      return d.toLocaleDateString(language === 'hi' ? 'hi-IN' : 'en-US', {
+        day: 'numeric',
+        month: 'short',
+        year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  // Distinct color for other sender names (WhatsApp-style)
+  const getSenderColor = (senderId: string) => {
+    const colors = ['#E53935', '#8E24AA', '#1E88E5', '#00897B', '#FB8C00', '#6D4C41', '#039BE5'];
+    let hash = 0;
+    for (let i = 0; i < senderId.length; i++) {
+      hash = senderId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
+  };
+
+  const renderMessageItem = ({ item, index }: { item: ExtendedChatMessage; index: number }) => {
+    const isOwn = item.senderId === user?.id;
+
+    // In an inverted list, index + 1 is the chronologically earlier message.
+    const prevItem = index + 1 < messages.length ? messages[index + 1] : null;
+    const isDifferentDay =
+      !prevItem ||
+      new Date(item.createdAt).toDateString() !== new Date(prevItem.createdAt).toDateString();
+
+    return (
+      <View style={styles.messageRowWrapper}>
+        {/* Date separator pill above the first message of each day */}
+        {isDifferentDay && (
+          <View style={styles.dateSeparatorContainer}>
+            <View style={styles.datePill}>
+              <Typography variant="xs" weight="semibold" color="#4B5563">
+                {formatDateHeader(item.createdAt)}
+              </Typography>
+            </View>
+          </View>
+        )}
+
+        {/* Message Bubble Container */}
+        <View style={[styles.bubbleRow, isOwn ? styles.bubbleRowOwn : styles.bubbleRowOther]}>
+          {/* Avatar for other senders */}
+          {!isOwn && (
+            <View style={styles.senderAvatarContainer}>
+              {item.sender?.avatarUrl ? (
+                <Image source={{ uri: item.sender.avatarUrl }} style={styles.senderAvatar} />
+              ) : (
+                <View style={[styles.senderAvatarFallback, { backgroundColor: theme.colors.surfaceSubtle }]}>
+                  <Typography variant="xs" weight="bold" color={getSenderColor(item.senderId)}>
+                    {(item.sender?.fullName || 'M').charAt(0).toUpperCase()}
+                  </Typography>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Bubble Card */}
+          <View
+            style={[
+              styles.bubble,
+              isOwn ? styles.bubbleOwn : styles.bubbleOther,
+              item.isError && styles.bubbleError,
+            ]}
+          >
+            {/* Sender Name in Group Chat */}
+            {!isOwn && item.sender && (
+              <Typography
+                variant="xs"
+                weight="bold"
+                style={[styles.senderName, { color: getSenderColor(item.senderId) }]}
+              >
+                {item.sender.fullName}
+              </Typography>
+            )}
+
+            {/* Message Body */}
+            <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
+              {item.content}
+            </Typography>
+
+            {/* Timestamp & Status Metadata */}
+            <View style={styles.messageMeta}>
+              <Typography variant="xs" color="#64748B" style={styles.messageTime}>
+                {formatMessageTime(item.createdAt)}
+              </Typography>
+              {isOwn && (
+                <Typography variant="xs" color={item.isError ? theme.colors.error : '#059669'} style={styles.statusIndicator}>
+                  {item.isError ? '⚠️' : item.isOptimistic ? '🕒' : '✓'}
+                </Typography>
+              )}
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const initial = group?.name ? group.name.charAt(0).toUpperCase() : 'G';
+
+  return (
+    <KeyboardAvoidingView
+      style={[styles.screen, { backgroundColor: '#ECE5DD' }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
+      {/* WhatsApp-Style Top Header */}
+      <View
+        style={[
+          styles.headerBar,
+          {
+            paddingTop: Math.max(insets.top + 6, 14),
+            backgroundColor: theme.colors.surface,
+            borderBottomColor: theme.colors.border,
+          },
+        ]}
+      >
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel={language === 'hi' ? 'पीछे जाएं' : 'Back'}
+        >
+          <Typography variant="lg" weight="bold" color={theme.colors.textPrimary}>
+            ←
+          </Typography>
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push(`/(app)/group/${slug}` as any)}
+          style={styles.headerGroupInfo}
+        >
+          {group?.coverUrl ? (
+            <Image source={{ uri: group.coverUrl }} style={styles.groupHeaderAvatar} />
+          ) : (
+            <View style={[styles.groupHeaderAvatarFallback, { backgroundColor: theme.colors.primaryLight }]}>
+              <Typography variant="sm" weight="bold" color={theme.colors.primaryDark}>
+                {initial}
+              </Typography>
+            </View>
+          )}
+
+          <View style={styles.headerTextContainer}>
+            <Typography variant="md" weight="bold" color={theme.colors.textPrimary} numberOfLines={1}>
+              {group?.name || (language === 'hi' ? 'समूह चैट' : 'Group Chat')}
+            </Typography>
+
+            <Typography variant="xs" color={typingUsers.length > 0 ? '#16A34A' : theme.colors.textMuted} numberOfLines={1}>
+              {typingUsers.length > 0
+                ? `${typingUsers.join(', ')} ${language === 'hi' ? 'टाइप कर रहे हैं...' : 'typing...'}`
+                : group?.membersCount
+                ? `👥 ${group.membersCount} ${language === 'hi' ? 'सदस्य' : 'members'}`
+                : isConnected
+                ? (language === 'hi' ? 'सक्रिय' : 'Active')
+                : (language === 'hi' ? 'कनेक्ट हो रहा है...' : 'Connecting...')}
+            </Typography>
+          </View>
+        </Pressable>
+      </View>
+
+      {/* Main Body */}
+      {loadingGroup ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Typography variant="sm" color={theme.colors.textMuted} style={styles.loadingText}>
+            {language === 'hi' ? 'समूह विवरण लोड हो रहा है...' : 'Loading group details...'}
+          </Typography>
+        </View>
+      ) : groupError ? (
+        <View style={styles.centerContainer}>
+          <Typography variant="md" weight="bold" color={theme.colors.error}>
+            ⚠️ {groupError}
+          </Typography>
+          <Button
+            title={language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
+            onPress={loadGroup}
+            variant="outline"
+            size="sm"
+            style={{ marginTop: 12 }}
+          />
+        </View>
+      ) : isPrivate && !isMember ? (
+        <View style={styles.centerContainer}>
+          <Card style={styles.lockCard}>
+            <Typography variant="xl" align="center">
+              🔒
+            </Typography>
+            <Typography variant="md" weight="bold" color={theme.colors.textPrimary} align="center" style={{ marginTop: 8 }}>
+              {language === 'hi' ? 'निजी समूह चैट' : 'Private Group Chat'}
+            </Typography>
+            <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={{ marginTop: 6 }}>
+              {language === 'hi'
+                ? 'यह एक निजी समूह है। केवल स्वीकृत सदस्य ही इसकी चैट देख और संदेश भेज सकते हैं।'
+                : 'This is a private group. Only approved members can view messages and chat.'}
+            </Typography>
+          </Card>
+        </View>
+      ) : (
+        <View style={styles.chatArea}>
+          {/* Chat Messages List (Inverted for WhatsApp-like auto-scroll & pagination) */}
+          {isLoadingHistory ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <Typography variant="sm" color={theme.colors.textMuted} style={styles.loadingText}>
+                {language === 'hi' ? 'संदेश लोड हो रहे हैं...' : 'Loading messages...'}
+              </Typography>
+            </View>
+          ) : chatError ? (
+            <View style={styles.centerContainer}>
+              <Typography variant="sm" color={theme.colors.error} align="center">
+                {chatError}
+              </Typography>
+              <Button
+                title={language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
+                onPress={loadInitialHistory}
+                variant="outline"
+                size="sm"
+                style={{ marginTop: 10 }}
+              />
+            </View>
+          ) : (
+            <FlatList
+              data={messages}
+              keyExtractor={(item) => item.tempId || item.id}
+              renderItem={renderMessageItem}
+              inverted={true}
+              contentContainerStyle={styles.listContent}
+              onEndReached={loadOlderMessages}
+              onEndReachedThreshold={0.2}
+              ListFooterComponent={
+                isLoadingOlder ? (
+                  <View style={styles.loadingOlderIndicator}>
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Typography variant="sm" color="#64748B" align="center">
+                    {language === 'hi'
+                      ? '💬 इस समूह में अभी कोई संदेश नहीं है। पहला संदेश भेजकर बातचीत शुरू करें!'
+                      : '💬 No messages yet. Say hello to start the conversation!'}
+                  </Typography>
+                </View>
+              }
+            />
+          )}
+
+          {/* Bottom Composer / Membership Gate */}
+          <View
+            style={[
+              styles.composerBar,
+              {
+                paddingBottom: Math.max(insets.bottom, 12),
+                backgroundColor: theme.colors.surface,
+                borderTopColor: theme.colors.border,
+              },
+            ]}
+          >
+            {isMember ? (
+              <View style={styles.inputRow}>
+                <View style={[styles.inputPill, { backgroundColor: theme.colors.surfaceSubtle }]}>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder={language === 'hi' ? 'संदेश लिखें...' : 'Type a message...'}
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={inputText}
+                    onChangeText={handleInputChange}
+                    multiline
+                    maxLength={2000}
+                  />
+                </View>
+
+                <Pressable
+                  onPress={handleSend}
+                  disabled={!inputText.trim() || isSending}
+                  style={[
+                    styles.sendButton,
+                    {
+                      backgroundColor: inputText.trim() ? '#10B981' : '#CBD5E1',
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={language === 'hi' ? 'भेजें' : 'Send'}
+                >
+                  <Typography variant="md" color="#FFFFFF" weight="bold">
+                    ➤
+                  </Typography>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.joinPromptContainer}>
+                <Typography variant="xs" color={theme.colors.textSecondary} align="center" style={{ marginBottom: 6 }}>
+                  {language === 'hi'
+                    ? 'बातचीत में शामिल होने के लिए समूह सदस्य बनना आवश्यक है।'
+                    : 'Join the group to participate in this chat conversation.'}
+                </Typography>
+                <Button
+                  title={language === 'hi' ? 'समूह से जुड़ें (Join Group)' : 'Join Group to Chat'}
+                  onPress={handleJoin}
+                  loading={isJoining}
+                  variant="primary"
+                  size="sm"
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
+  headerBar: {
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 4,
+  },
+  headerGroupInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  groupHeaderAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: 10,
+  },
+  groupHeaderAvatarFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  centerContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 8,
+  },
+  lockCard: {
+    padding: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+  chatArea: {
+    flex: 1,
+  },
+  listContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  messageRowWrapper: {
+    marginVertical: 3,
+  },
+  dateSeparatorContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  datePill: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  bubbleRow: {
+    flexDirection: 'row',
+    marginVertical: 2,
+    maxWidth: '82%',
+  },
+  bubbleRowOwn: {
+    alignSelf: 'flex-end',
+    justifyContent: 'flex-end',
+  },
+  bubbleRowOther: {
+    alignSelf: 'flex-start',
+    justifyContent: 'flex-start',
+  },
+  senderAvatarContainer: {
+    marginRight: 6,
+    alignSelf: 'flex-end',
+    marginBottom: 2,
+  },
+  senderAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+  },
+  senderAvatarFallback: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubble: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  bubbleOwn: {
+    backgroundColor: '#E1FFC7', // Classic WhatsApp own-message tint
+    borderBottomRightRadius: 2,
+  },
+  bubbleOther: {
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 2,
+  },
+  bubbleError: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#EF4444',
+    borderWidth: 1,
+  },
+  senderName: {
+    marginBottom: 2,
+  },
+  messageContent: {
+    lineHeight: 20,
+  },
+  messageMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  messageTime: {
+    fontSize: 10,
+    marginRight: 4,
+  },
+  statusIndicator: {
+    fontSize: 10,
+  },
+  loadingOlderIndicator: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    transform: [{ scaleY: -1 }], // Inverted list correction
+    padding: 32,
+    alignItems: 'center',
+  },
+  composerBar: {
+    borderTopWidth: 1,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inputPill: {
+    flex: 1,
+    borderRadius: 22,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    maxHeight: 100,
+    marginRight: 8,
+  },
+  textInput: {
+    fontSize: 15,
+    color: '#0F172A',
+    maxHeight: 90,
+  },
+  sendButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  joinPromptContainer: {
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+});
+

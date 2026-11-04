@@ -24,6 +24,11 @@
       },
       "package": "com.apnasamaj.app"
     },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
     "plugins": [
       "expo-router",
       "expo-secure-store",

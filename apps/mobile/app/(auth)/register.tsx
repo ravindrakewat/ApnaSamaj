@@ -37,7 +37,7 @@ export default function RegisterScreen() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [slug, setSlug] = useState(communitySlug || 'demo');
+  const [slug, setSlug] = useState(communitySlug || 'kewat');
   const [showPassword, setShowPassword] = useState(false);
 
   // Optional Profile Fields matching backend schema
@@ -200,14 +200,14 @@ export default function RegisterScreen() {
               setSlug(val);
               if (slugError) setSlugError(undefined);
             }}
-            placeholder="e.g. demo"
+            placeholder="e.g. kewat"
             autoCapitalize="none"
             autoCorrect={false}
             error={slugError}
             helperText={
               language === 'hi'
-                ? 'जिस समुदाय में खाता बनाना है उसका कोड (उदा. demo)'
-                : 'Target community code (e.g. demo)'
+                ? 'जिस समुदाय में खाता बनाना है उसका कोड (उदा. kewat)'
+                : 'Target community code (e.g. kewat)'
             }
           />
 

@@ -388,7 +388,41 @@ export default function GroupDetailsScreen() {
               </View>
             )}
           </View>
-        </Card>
+        
+
+          {/* Real-time Group Chat CTA Button */}
+          <Pressable
+            onPress={() => router.push(`/(app)/group/${slug}/chat` as any)}
+            style={[
+              styles.chatCtaButton,
+              {
+                backgroundColor: theme.colors.surfaceSubtle,
+                borderColor: theme.colors.border,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={language === 'hi' ? 'समूह चैट खोलें' : 'Open group chat'}
+          >
+            <View style={styles.chatCtaLeft}>
+              <View style={[styles.chatCtaIconBox, { backgroundColor: '#DCFCE7' }]}>
+                <Typography variant="md">💬</Typography>
+              </View>
+              <View style={styles.chatCtaText}>
+                <Typography variant="sm" weight="bold" color={theme.colors.textPrimary}>
+                  {language === 'hi' ? 'समूह लाइव चैट (Live Chat)' : 'Live Group Chat'}
+                </Typography>
+                <Typography variant="xs" color={theme.colors.textSecondary}>
+                  {language === 'hi'
+                    ? 'सदस्यों के साथ तुरंत बातचीत करें'
+                    : 'Chat in real-time with group members'}
+                </Typography>
+              </View>
+            </View>
+            <Typography variant="md" color={theme.colors.textMuted}>
+              →
+            </Typography>
+          </Pressable>
+</Card>
 
         {/* Section Heading */}
         <View style={styles.discussionsHeaderRow}>
@@ -736,6 +770,31 @@ const styles = StyleSheet.create({
   },
   fullWidthBtn: {
     width: '100%',
+  },
+  chatCtaButton: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chatCtaLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  chatCtaIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  chatCtaText: {
+    flex: 1,
   },
   privateNotice: {
     alignItems: 'center',

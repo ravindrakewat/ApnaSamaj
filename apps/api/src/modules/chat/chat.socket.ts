@@ -6,7 +6,21 @@ import { verifyAccessToken } from '../auth/auth.tokens';
 import { tenantDbManager, PrismaClient } from '@apnasamaj/database';
 import { resolveCommunityFromRequest } from '@apnasamaj/validation';
 import { sendChatMessage, verifyGroupChatAccess } from './chat.service';
-import { ChatMessageItem, NewChatMessageEvent, NotificationItem, ModerationQueueUpdatePayload } from '@apnasamaj/shared-types';
+import {
+  sendDirectMessage,
+  verifyDirectConversationAccess,
+  markDirectConversationAsRead,
+} from './direct-chat.service';
+import {
+  ChatMessageItem,
+  NewChatMessageEvent,
+  NotificationItem,
+  ModerationQueueUpdatePayload,
+  DirectMessageItem,
+  DirectNewMessageEvent,
+  DirectUserTypingEvent,
+  DirectMessageReadEvent,
+} from '@apnasamaj/shared-types';
 
 export interface AuthenticatedSocketUser {
   id: string;
@@ -67,6 +81,10 @@ export function emitModerationQueueUpdate(
   } catch (err: unknown) {
     console.warn('[Realtime Moderation] Failed to emit queue update:', err);
   }
+}
+
+export function getConversationRoomName(tenantSlug: string, conversationId: string): string {
+  return `${tenantSlug}:conversation:${conversationId}`;
 }
 
 export function getUserNotificationRoomName(tenantSlug: string, userId: string): string {
@@ -312,6 +330,7 @@ export function initChatSocketServer(httpServer: http.Server): Server {
 
     const tenantSlug = tenant.slug;
     const getTenantRoomName = (groupId: string) => `${tenantSlug}:group:${groupId}`;
+    const getDirectRoomName = (conversationId: string) => getConversationRoomName(tenantSlug, conversationId);
     const userRoomName = getUserNotificationRoomName(tenantSlug, user.id);
 
     // Automatically join the authenticated user's notification room within their verified tenant
@@ -468,6 +487,151 @@ export function initChatSocketServer(httpServer: http.Server): Server {
         });
       }
     });
+
+    // --------------------------------------------------------
+    // DIRECT ONE-TO-ONE CHAT LISTENERS
+    // --------------------------------------------------------
+
+    // A. Join Direct Conversation Room
+    socket.on(
+      'direct:join',
+      async (
+        payload: { conversationId: string },
+        callback?: (res: { success: boolean; error?: string }) => void
+      ) => {
+        try {
+          const { conversationId } = payload || {};
+          if (!conversationId) {
+            callback?.({ success: false, error: 'Conversation ID is required.' });
+            return;
+          }
+
+          // Authorize access: strictly verify user is a participant
+          await verifyDirectConversationAccess(conversationId, user.id, db);
+          const roomName = getDirectRoomName(conversationId);
+          socket.join(roomName);
+
+          callback?.({ success: true });
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : 'Failed to join direct conversation.';
+          callback?.({ success: false, error: errorMsg });
+        }
+      }
+    );
+
+    // B. Leave Direct Conversation Room
+    socket.on('direct:leave', (payload: { conversationId: string }) => {
+      if (payload?.conversationId) {
+        socket.leave(getDirectRoomName(payload.conversationId));
+      }
+    });
+
+    // C. Send Direct Message
+    socket.on(
+      'direct:send_message',
+      async (
+        payload: { conversationId: string; content: string; tempId?: string },
+        callback?: (res: { success: boolean; message?: DirectMessageItem; error?: string }) => void
+      ) => {
+        try {
+          const { conversationId, content, tempId } = payload || {};
+          if (!conversationId || !content) {
+            callback?.({ success: false, error: 'Conversation ID and message content are required.' });
+            return;
+          }
+
+          // Rate limit enforcement (~1 message per second)
+          if (!checkRateLimit(user.id)) {
+            callback?.({
+              success: false,
+              error: 'You are sending messages too quickly. Please wait a moment.',
+            });
+            return;
+          }
+
+          // Verify access & persist message
+          const savedMessage = await sendDirectMessage(
+            conversationId,
+            user.id,
+            content,
+            tempId,
+            db
+          );
+
+          // Broadcast strictly to participants in the direct conversation room
+          const eventPayload: DirectNewMessageEvent = {
+            message: savedMessage,
+            tempId,
+          };
+          const roomName = getDirectRoomName(conversationId);
+          io.to(roomName).emit('direct:new_message', eventPayload);
+
+          // Acknowledge sender callback
+          callback?.({ success: true, message: savedMessage });
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : 'Failed to send message.';
+          callback?.({ success: false, error: errorMsg });
+        }
+      }
+    );
+
+    // D. Direct Typing Indicators
+    socket.on(
+      'direct:user_typing',
+      async (payload: { conversationId: string; isTyping: boolean }) => {
+        try {
+          const { conversationId, isTyping } = payload || {};
+          if (!conversationId) return;
+
+          // Verify user is in this conversation
+          await verifyDirectConversationAccess(conversationId, user.id, db);
+
+          const eventPayload: DirectUserTypingEvent = {
+            conversationId,
+            userId: user.id,
+            userName: user.fullName,
+            isTyping: Boolean(isTyping),
+          };
+
+          socket.to(getDirectRoomName(conversationId)).emit('direct:user_typing', eventPayload);
+        } catch {
+          // Ignore unauthorized typing events
+        }
+      }
+    );
+
+    // E. Direct Message Read Status
+    socket.on(
+      'direct:message_read',
+      async (
+        payload: { conversationId: string },
+        callback?: (res: { success: boolean; readAt?: string; error?: string }) => void
+      ) => {
+        try {
+          const { conversationId } = payload || {};
+          if (!conversationId) {
+            callback?.({ success: false, error: 'Conversation ID is required.' });
+            return;
+          }
+
+          const result = await markDirectConversationAsRead(conversationId, user.id, db);
+
+          const eventPayload: DirectMessageReadEvent = {
+            conversationId,
+            userId: user.id,
+            readAt: result.readAt,
+          };
+
+          // Broadcast to conversation room so other participant sees blue ticks/read status
+          socket.to(getDirectRoomName(conversationId)).emit('direct:message_read', eventPayload);
+
+          callback?.({ success: true, readAt: result.readAt });
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : 'Failed to mark conversation as read.';
+          callback?.({ success: false, error: errorMsg });
+        }
+      }
+    );
 
     // 5. Disconnect Cleanup
     socket.on('disconnect', () => {

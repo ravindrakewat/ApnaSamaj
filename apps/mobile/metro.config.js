@@ -15,5 +15,22 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
-module.exports = config;
+// 3. Fallback resolution for monorepo packages that import .js targeting .ts files
+const defaultResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  try {
+    return (defaultResolveRequest || context.resolveRequest)(context, moduleName, platform);
+  } catch (err) {
+    if (typeof moduleName === 'string' && moduleName.endsWith('.js')) {
+      const stripped = moduleName.slice(0, -3);
+      try {
+        return (defaultResolveRequest || context.resolveRequest)(context, stripped, platform);
+      } catch {
+        throw err;
+      }
+    }
+    throw err;
+  }
+};
 
+module.exports = config;

@@ -18,3 +18,34 @@ export const listGroupMessagesQuerySchema = z.object({
 });
 
 export type ListGroupMessagesQueryInput = z.infer<typeof listGroupMessagesQuerySchema>;
+
+export const createDirectConversationSchema = z.object({
+  recipientId: z.string().uuid('Invalid recipient ID format'),
+});
+
+export type CreateDirectConversationSchemaInput = z.infer<typeof createDirectConversationSchema>;
+
+export const sendDirectMessageSchema = z.object({
+  content: z
+    .string()
+    .trim()
+    .min(1, 'Message content cannot be empty')
+    .max(2000, 'Message content cannot exceed 2000 characters'),
+  tempId: z.string().optional(),
+});
+
+export type SendDirectMessageSchemaInput = z.infer<typeof sendDirectMessageSchema>;
+
+export const listDirectMessagesQuerySchema = z.object({
+  before: z.string().trim().optional(),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+});
+
+export type ListDirectMessagesQueryInput = z.infer<typeof listDirectMessagesQuerySchema>;
+
+export const listDirectInboxQuerySchema = z.object({
+  cursor: z.string().trim().optional(),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+});
+
+export type ListDirectInboxQueryInput = z.infer<typeof listDirectInboxQuerySchema>;

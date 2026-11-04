@@ -169,7 +169,6 @@ enum MatrimonialInterestStatus {
   WITHDRAWN
 }
 
-
 // --------------------------------------------------------
 // AUTHENTICATION & USER CREDENTIALS
 // --------------------------------------------------------
@@ -177,38 +176,46 @@ enum MatrimonialInterestStatus {
 model User {
   id              String     @id @default(uuid())
   phone           String     @unique // Normalized E.164: +91XXXXXXXXXX
-  passwordHash    String     // Strictly non-nullable in Phase 1
+  passwordHash    String // Strictly non-nullable in Phase 1
   isPhoneVerified Boolean    @default(false) // Defaults to false in Phase 1
   role            Role       @default(MEMBER)
   status          UserStatus @default(PENDING)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  profile             Profile?
-  refreshTokens       RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
-  createdGroups       Group[]              @relation("GroupCreator")
-  groupMemberships    GroupMember[]
-  posts               Post[]               @relation("PostAuthor")
-  comments            Comment[]            @relation("CommentAuthor")
-  postLikes           PostLike[]
-  postViews           PostView[]
-  authoredAuditLogs   AuditLog[]           @relation("AuditActor")
-  receivedNotifications  Notification[]    @relation("NotificationRecipient")
-  triggeredNotifications Notification[]    @relation("NotificationActor")
-  sentChatMessages             ChatMessage[]         @relation("SentChatMessages")
+  profile                      Profile?
+  refreshTokens                RefreshToken[]
+  passwordResetTokens          PasswordResetToken[]
+  createdGroups                Group[]                         @relation("GroupCreator")
+  groupMemberships             GroupMember[]
+  posts                        Post[]                          @relation("PostAuthor")
+  comments                     Comment[]                       @relation("CommentAuthor")
+  postLikes                    PostLike[]
+  postViews                    PostView[]
+  authoredAuditLogs            AuditLog[]                      @relation("AuditActor")
+  receivedNotifications        Notification[]                  @relation("NotificationRecipient")
+  triggeredNotifications       Notification[]                  @relation("NotificationActor")
+  sentChatMessages             ChatMessage[]                   @relation("SentChatMessages")
+  directConversationsAsUserOne DirectConversation[]            @relation("DirectConversationsAsUserOne")
+  directConversationsAsUserTwo DirectConversation[]            @relation("DirectConversationsAsUserTwo")
+  directChatParticipations     DirectConversationParticipant[] @relation("DirectChatParticipants")
+  sentDirectMessages           DirectMessage[]                 @relation("SentDirectMessages")
+  directConversationsAsUserOne DirectConversation[]  @relation("DirectConversationsAsUserOne")
+  directConversationsAsUserTwo DirectConversation[]  @relation("DirectConversationsAsUserTwo")
+  directChatParticipations     DirectConversationParticipant[] @relation("DirectChatParticipants")
+  sentDirectMessages           DirectMessage[]       @relation("SentDirectMessages")
   matrimonialProfile           MatrimonialProfile?
-  sentMatrimonialInterests     MatrimonialInterest[] @relation("SentMatrimonialInterests")
-  receivedMatrimonialInterests MatrimonialInterest[] @relation("ReceivedMatrimonialInterests")
-  approvedMatrimonialProfiles  MatrimonialProfile[]  @relation("MatrimonialProfileApprover")
-  authoredPostAppeals          PostAppeal[]          @relation("PostAppealAuthor")
-  reviewedPostAppeals          PostAppeal[]          @relation("PostAppealReviewer")
-  verifiedMatrimonialProfiles  MatrimonialProfile[]  @relation("MatrimonialProfileVerifier")
-  reviewedMatrimonialDocuments MatrimonialDocument[] @relation("MatrimonialDocumentReviewer")
-  reportedMatrimonialProfiles  MatrimonialReport[]   @relation("MatrimonialReportReporter")
-  resolvedMatrimonialReports   MatrimonialReport[]   @relation("MatrimonialReportResolver")
-  blockedMatrimonialUsers      MatrimonialBlock[]    @relation("MatrimonialBlocker")
-  blockedByMatrimonialUsers    MatrimonialBlock[]    @relation("MatrimonialBlockedUser")
+  sentMatrimonialInterests     MatrimonialInterest[]           @relation("SentMatrimonialInterests")
+  receivedMatrimonialInterests MatrimonialInterest[]           @relation("ReceivedMatrimonialInterests")
+  approvedMatrimonialProfiles  MatrimonialProfile[]            @relation("MatrimonialProfileApprover")
+  authoredPostAppeals          PostAppeal[]                    @relation("PostAppealAuthor")
+  reviewedPostAppeals          PostAppeal[]                    @relation("PostAppealReviewer")
+  verifiedMatrimonialProfiles  MatrimonialProfile[]            @relation("MatrimonialProfileVerifier")
+  reviewedMatrimonialDocuments MatrimonialDocument[]           @relation("MatrimonialDocumentReviewer")
+  reportedMatrimonialProfiles  MatrimonialReport[]             @relation("MatrimonialReportReporter")
+  resolvedMatrimonialReports   MatrimonialReport[]             @relation("MatrimonialReportResolver")
+  blockedMatrimonialUsers      MatrimonialBlock[]              @relation("MatrimonialBlocker")
+  blockedByMatrimonialUsers    MatrimonialBlock[]              @relation("MatrimonialBlockedUser")
 
   @@index([role])
   @@index([status])
@@ -218,7 +225,7 @@ model Profile {
   id          String    @id @default(uuid())
   userId      String    @unique
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fullName    String    // Single source of truth for member name
+  fullName    String // Single source of truth for member name
   gender      Gender?
   dateOfBirth DateTime?
   bio         String?
@@ -243,7 +250,7 @@ model RefreshToken {
   ipAddress  String?
   isRevoked  Boolean   @default(false)
   revokedAt  DateTime? // Timestamp when revoked or rotated
-  replacedBy String?   // SHA-256 hash of the replacement token
+  replacedBy String? // SHA-256 hash of the replacement token
   expiresAt  DateTime
   createdAt  DateTime  @default(now())
 
@@ -256,7 +263,7 @@ model PasswordResetToken {
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String    @unique // SHA-256 hash of the one-time reset token
-  expiresAt DateTime  // Fixed 1-hour expiration
+  expiresAt DateTime // Fixed 1-hour expiration
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
@@ -288,13 +295,13 @@ model Group {
 }
 
 model GroupMember {
-  id        String          @id @default(uuid())
-  groupId   String
-  group     Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      GroupMemberRole @default(MEMBER)
-  joinedAt  DateTime        @default(now())
+  id       String          @id @default(uuid())
+  groupId  String
+  group    Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     GroupMemberRole @default(MEMBER)
+  joinedAt DateTime        @default(now())
 
   @@unique([groupId, userId])
   @@index([userId])
@@ -305,17 +312,17 @@ model GroupMember {
 // --------------------------------------------------------
 
 model Post {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   authorId  String
-  author    User      @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  author    User     @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   groupId   String?
-  group     Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  type      PostType  @default(GENERAL)
+  group     Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  type      PostType @default(GENERAL)
   title     String?
   content   String
-  isPinned  Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  isPinned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   media    PostMedia[]
   comments Comment[]
@@ -387,10 +394,10 @@ model AuditLog {
   id         String   @id @default(uuid())
   actorId    String
   actor      User     @relation("AuditActor", fields: [actorId], references: [id], onDelete: Cascade)
-  action     String   // e.g. "USER_STATUS_UPDATE", "USER_ROLE_UPDATE"
-  targetType String   // e.g. "USER"
-  targetId   String   // The ID of the affected user or entity
-  details    Json?    // Context, e.g. { previousStatus: "ACTIVE", newStatus: "SUSPENDED", reason: "..." }
+  action     String // e.g. "USER_STATUS_UPDATE", "USER_ROLE_UPDATE"
+  targetType String // e.g. "USER"
+  targetId   String // The ID of the affected user or entity
+  details    Json? // Context, e.g. { previousStatus: "ACTIVE", newStatus: "SUSPENDED", reason: "..." }
   ipAddress  String?
   userAgent  String?
   createdAt  DateTime @default(now())
@@ -443,82 +450,133 @@ model ChatMessage {
 }
 
 // --------------------------------------------------------
+// --------------------------------------------------------
+// DIRECT ONE-TO-ONE MESSAGING
+// --------------------------------------------------------
+
+model DirectConversation {
+  id        String   @id @default(uuid())
+  userOneId String
+  userOne   User     @relation("DirectConversationsAsUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
+  userTwoId String
+  userTwo   User     @relation("DirectConversationsAsUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants DirectConversationParticipant[]
+  messages     DirectMessage[]
+
+  @@unique([userOneId, userTwoId])
+  @@index([userOneId])
+  @@index([userTwoId])
+  @@index([updatedAt(sort: Desc)])
+}
+
+model DirectConversationParticipant {
+  id             String             @id @default(uuid())
+  conversationId String
+  conversation   DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User               @relation("DirectChatParticipants", fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model DirectMessage {
+  id             String             @id @default(uuid())
+  conversationId String
+  conversation   DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User               @relation("SentDirectMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([senderId])
+}
+
 // MATRIMONIAL MODULE
 // --------------------------------------------------------
 
 model MatrimonialProfile {
-  id                  String                    @id @default(uuid())
-  userId              String                    @unique
-  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status              MatrimonialProfileStatus  @default(DRAFT)
-  rejectionReason     String?
+  id              String                   @id @default(uuid())
+  userId          String                   @unique
+  user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status          MatrimonialProfileStatus @default(DRAFT)
+  rejectionReason String?
 
   // Physical & Community (complements canonical Profile: fullName, gender, dob, city, state, subCaste, gotra)
-  maritalStatus       MaritalStatus
-  heightCm            Int                       // Height in centimeters (e.g. 175)
-  weightKg            Int?                      // Optional weight in kg
-  motherTongue        String                    @default("Hindi")
-  religion            String                    @default("Hindu")
-  caste               String?                   // Community/Samaj lineage
-  subCaste            String?                   // Can supplement Profile subCaste
-  gotra               String?                   // Gotra
-  manglik             ManglikStatus             @default(DONT_KNOW)
+  maritalStatus MaritalStatus
+  heightCm      Int // Height in centimeters (e.g. 175)
+  weightKg      Int? // Optional weight in kg
+  motherTongue  String        @default("Hindi")
+  religion      String        @default("Hindu")
+  caste         String? // Community/Samaj lineage
+  subCaste      String? // Can supplement Profile subCaste
+  gotra         String? // Gotra
+  manglik       ManglikStatus @default(DONT_KNOW)
 
   // Astrological / Horoscope (optional)
-  birthTime           String?                   // e.g. "14:30"
-  birthCity           String?
-  rashi               String?                   // Moon sign / Zodiac
-  nakshatra           String?                   // Birth star
+  birthTime String? // e.g. "14:30"
+  birthCity String?
+  rashi     String? // Moon sign / Zodiac
+  nakshatra String? // Birth star
 
   // Education & Career
-  highestEducation    String                    // e.g. "B.Tech in Computer Science", "MBA", "MBBS"
-  educationDetails    String?                   // College / University / Additional degrees
-  employedIn          EmploymentSector          @default(PRIVATE_SECTOR)
-  occupation          String                    // e.g. "Software Engineer", "Bank Manager"
-  companyName         String?                   // Employer (optional)
-  annualIncome        String                    // Bracket or range: e.g. "10-15 Lakhs", "15-25 Lakhs"
-  workCity            String?
-  workState           String?
-  workCountry         String                    @default("India")
+  highestEducation String // e.g. "B.Tech in Computer Science", "MBA", "MBBS"
+  educationDetails String? // College / University / Additional degrees
+  employedIn       EmploymentSector @default(PRIVATE_SECTOR)
+  occupation       String // e.g. "Software Engineer", "Bank Manager"
+  companyName      String? // Employer (optional)
+  annualIncome     String // Bracket or range: e.g. "10-15 Lakhs", "15-25 Lakhs"
+  workCity         String?
+  workState        String?
+  workCountry      String           @default("India")
 
   // Family Background
-  familyType          FamilyType                @default(NUCLEAR)
-  familyValues        FamilyValues              @default(TRADITIONAL)
-  fatherName          String?
-  fatherOccupation    String?
-  motherName          String?
-  motherOccupation    String?
-  brothersCount       Int                       @default(0)
-  brothersMarried     Int                       @default(0)
-  sistersCount        Int                       @default(0)
-  sistersMarried      Int                       @default(0)
-  familyNativePlace   String?                   // Hometown / Ancestral village
-  aboutFamily         String?
+  familyType        FamilyType   @default(NUCLEAR)
+  familyValues      FamilyValues @default(TRADITIONAL)
+  fatherName        String?
+  fatherOccupation  String?
+  motherName        String?
+  motherOccupation  String?
+  brothersCount     Int          @default(0)
+  brothersMarried   Int          @default(0)
+  sistersCount      Int          @default(0)
+  sistersMarried    Int          @default(0)
+  familyNativePlace String? // Hometown / Ancestral village
+  aboutFamily       String?
 
   // Lifestyle
-  diet                DietType                  @default(VEGETARIAN)
-  smoking             HabitFrequency            @default(NO)
-  drinking            HabitFrequency            @default(NO)
+  diet     DietType       @default(VEGETARIAN)
+  smoking  HabitFrequency @default(NO)
+  drinking HabitFrequency @default(NO)
 
   // Personal Narratives
   aboutMe             String?
   partnerExpectations String?
 
   // Moderation & Tracking
-  approvedAt          DateTime?
-  approvedById        String?
-  approvedBy          User?                     @relation("MatrimonialProfileApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  isVerified          Boolean                   @default(false)
-  verifiedAt          DateTime?
-  verifiedById        String?
-  verifiedBy          User?                     @relation("MatrimonialProfileVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("MatrimonialProfileApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  isVerified   Boolean   @default(false)
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   User?     @relation("MatrimonialProfileVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  photos              MatrimonialPhoto[]
-  partnerPreference   MatrimonialPartnerPreference?
-  documents           MatrimonialDocument[]
-  reports             MatrimonialReport[]
+  photos            MatrimonialPhoto[]
+  partnerPreference MatrimonialPartnerPreference?
+  documents         MatrimonialDocument[]
+  reports           MatrimonialReport[]
 
   @@index([status])
   @@index([maritalStatus])
@@ -528,54 +586,54 @@ model MatrimonialProfile {
 }
 
 model MatrimonialPartnerPreference {
-  id                   String              @id @default(uuid())
-  profileId            String              @unique
-  profile              MatrimonialProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id        String             @id @default(uuid())
+  profileId String             @unique
+  profile   MatrimonialProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  minAge               Int                 @default(18)
-  maxAge               Int                 @default(45)
-  minHeightCm          Int                 @default(140)
-  maxHeightCm          Int                 @default(210)
-  maritalStatuses      MaritalStatus[]     @default([])
-  manglik              ManglikStatus?
-  diet                 DietType?
+  minAge          Int             @default(18)
+  maxAge          Int             @default(45)
+  minHeightCm     Int             @default(140)
+  maxHeightCm     Int             @default(210)
+  maritalStatuses MaritalStatus[] @default([])
+  manglik         ManglikStatus?
+  diet            DietType?
 
-  preferredEducations  String[]            @default([])
-  preferredOccupations String[]            @default([])
-  preferredCities      String[]            @default([])
-  preferredStates      String[]            @default([])
+  preferredEducations  String[] @default([])
+  preferredOccupations String[] @default([])
+  preferredCities      String[] @default([])
+  preferredStates      String[] @default([])
   minIncome            String?
   notes                String?
 
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model MatrimonialPhoto {
-  id         String              @id @default(uuid())
+  id         String             @id @default(uuid())
   profileId  String
-  profile    MatrimonialProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile    MatrimonialProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   url        String
-  order      Int                 @default(0)
-  isPrimary  Boolean             @default(false)
-  isApproved Boolean             @default(true)
-  createdAt  DateTime            @default(now())
+  order      Int                @default(0)
+  isPrimary  Boolean            @default(false)
+  isApproved Boolean            @default(true)
+  createdAt  DateTime           @default(now())
 
   @@index([profileId])
   @@index([profileId, isPrimary])
 }
 
 model MatrimonialInterest {
-  id          String                     @id @default(uuid())
+  id          String                    @id @default(uuid())
   senderId    String
-  sender      User                       @relation("SentMatrimonialInterests", fields: [senderId], references: [id], onDelete: Cascade)
+  sender      User                      @relation("SentMatrimonialInterests", fields: [senderId], references: [id], onDelete: Cascade)
   receiverId  String
-  receiver    User                       @relation("ReceivedMatrimonialInterests", fields: [receiverId], references: [id], onDelete: Cascade)
-  status      MatrimonialInterestStatus  @default(PENDING)
-  message     String?                    // Optional note with interest
+  receiver    User                      @relation("ReceivedMatrimonialInterests", fields: [receiverId], references: [id], onDelete: Cascade)
+  status      MatrimonialInterestStatus @default(PENDING)
+  message     String? // Optional note with interest
   respondedAt DateTime?
-  createdAt   DateTime                   @default(now())
-  updatedAt   DateTime                   @updatedAt
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
 
   @@unique([senderId, receiverId])
   @@index([senderId, status])
@@ -643,7 +701,7 @@ model MatrimonialBlock {
 
 model PostAppeal {
   id          String           @id @default(uuid())
-  postId      String           // Historical post UUID identifier; post is physically deleted upon moderation takedown
+  postId      String // Historical post UUID identifier; post is physically deleted upon moderation takedown
   authorId    String?
   author      User?            @relation("PostAppealAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   reason      String

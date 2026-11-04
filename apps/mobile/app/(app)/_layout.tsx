@@ -70,6 +70,55 @@ export default function AppLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="group/[slug]/chat"
+        options={{
+          title: 'समूह चैट',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="matrimonial/index"
+        options={{
+          title: 'विवाह परिचय',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="matrimonial/[id]"
+        options={{
+          title: 'विवाह प्रोफ़ाइल',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="chat/index"
+        options={{
+          title: 'संदेश व चैट',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="chat/[id]"
+        options={{
+          title: 'निजी चैट',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="profile/index"
+        options={{
+          title: 'मेरी प्रोफ़ाइल',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="profile/settings"
+        options={{
+          title: 'सेटिंग्स',
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }
