@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   GroupDetails,
   GroupPrivacy,
@@ -35,6 +36,7 @@ export default function GroupDetailsScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { language } = useLocalization();
   const { communitySlug } = useAuth();
 
@@ -511,7 +513,7 @@ export default function GroupDetailsScreen() {
       <View
         style={[
           styles.headerBar,
-          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border },
+          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, paddingTop: Math.max(insets.top, 14) },
         ]}
       >
         <Pressable

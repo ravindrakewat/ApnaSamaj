@@ -3,6 +3,10 @@
 dist/
 web-build/
 
+# Environment files
+.env
+.env*.local
+
 # Native
 *.orig.*
 *.jks

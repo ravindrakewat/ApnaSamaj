@@ -1,7 +1,7 @@
 import moduleMod from 'module';
 import path from 'path';
 
-// Hook require for react-native and expo-secure-store in Node test runtime
+// Hook require for react-native, expo-secure-store, and safe area in Node test runtime
 const originalRequire = (moduleMod.prototype as any).require;
 (moduleMod.prototype as any).require = function (id: string) {
   if (id === 'react-native') {
@@ -12,6 +12,9 @@ const originalRequire = (moduleMod.prototype as any).require;
   }
   if (id === 'expo-constants') {
     return originalRequire.call(this, path.resolve(__dirname, './mocks/expo-constants'));
+  }
+  if (id === 'react-native-safe-area-context') {
+    return originalRequire.call(this, path.resolve(__dirname, './mocks/react-native-safe-area-context'));
   }
   return originalRequire.apply(this, arguments);
 };
@@ -25,7 +28,7 @@ async function runAll() {
   await import('./post-creation.test');
   await import('./directory-flow.test');
   await import('./groups-flow.test');
+  await import('./ui-navigation-audit.test');
 }
 
 runAll();
-

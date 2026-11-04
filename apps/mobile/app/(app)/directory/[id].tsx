@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PublicMemberProfile } from '@apnasamaj/shared-types';
 import {
   Typography,
@@ -24,6 +25,7 @@ export default function MemberProfileDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { language } = useLocalization();
   const { communitySlug } = useAuth();
 
@@ -97,7 +99,7 @@ export default function MemberProfileDetailScreen() {
       <View
         style={[
           styles.headerBar,
-          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border },
+          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, paddingTop: Math.max(insets.top, 14) },
         ]}
       >
         <Pressable

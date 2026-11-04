@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PostItem, PostType, PostMediaItem } from '@apnasamaj/shared-types';
 import {
   Typography,
@@ -30,6 +31,7 @@ import { APP_CONFIG } from '../../src/constants/config';
 export default function SocialFeedHomeScreen() {
   const router = useRouter();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { language, setLanguage, t } = useLocalization();
   const { user, communitySlug, switchCommunity, logout } = useAuth();
 
@@ -361,7 +363,7 @@ export default function SocialFeedHomeScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
       {/* Top Navbar */}
-      <View style={[styles.topBar, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+      <View style={[styles.topBar, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, paddingTop: Math.max(insets.top, 12) }]}>
         <View style={styles.brandRow}>
           <View style={[styles.brandIcon, { backgroundColor: theme.colors.primary }]}>
             <Typography variant="sm" weight="bold" color={theme.colors.textInverse}>
@@ -448,7 +450,7 @@ export default function SocialFeedHomeScreen() {
 
       {/* Floating Action Button (FAB) - Create Post */}
       <Pressable
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        style={[styles.fab, { backgroundColor: theme.colors.primary, bottom: 64 + Math.max(insets.bottom, 10) }]}
         onPress={() => router.push('/(app)/post/create')}
         accessibilityRole="button"
         accessibilityLabel={language === 'hi' ? 'नई पोस्ट लिखें' : 'Create new post'}

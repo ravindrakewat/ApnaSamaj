@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from './Typography';
 import { useTheme } from '../hooks/useTheme';
 import { useLocalization } from '../hooks/useLocalization';
@@ -14,6 +15,7 @@ export interface BottomNavigationProps {
 export const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab }) => {
   const router = useRouter();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { language } = useLocalization();
 
   const tabs: Array<{ key: NavTab; labelHi: string; labelEn: string; icon: string; route: string }> = [
@@ -52,6 +54,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab })
         {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
+          paddingBottom: Math.max(insets.bottom, 10),
         },
       ]}
     >
@@ -101,7 +104,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 8,
-    paddingBottom: 12,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },

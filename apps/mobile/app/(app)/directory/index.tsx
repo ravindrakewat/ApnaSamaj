@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PublicDirectoryMember } from '@apnasamaj/shared-types';
 import {
   Typography,
@@ -25,6 +26,7 @@ import { usersApi } from '../../../src/api/users.api';
 export default function MemberDirectoryScreen() {
   const router = useRouter();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { language, setLanguage, t } = useLocalization();
   const { communitySlug } = useAuth();
 
@@ -360,7 +362,7 @@ export default function MemberDirectoryScreen() {
       <View
         style={[
           styles.topBar,
-          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border },
+          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, paddingTop: Math.max(insets.top, 12) },
         ]}
       >
         <View style={styles.brandRow}>
