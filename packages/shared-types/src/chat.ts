@@ -53,6 +53,8 @@ export interface ChatMessageItem {
   groupId: string;
   senderId: string;
   content: string;
+  clientMessageId?: string | null;
+  tempId?: string;
   createdAt: string;
   updatedAt: string;
   sender?: ChatMessageSender | null;
@@ -124,10 +126,58 @@ export interface DirectMessageItem {
   conversationId: string;
   senderId: string;
   content: string;
+  clientMessageId?: string | null;
+  tempId?: string;
   createdAt: string;
   updatedAt: string;
   sender?: ChatMessageSender | null;
   attachments?: ChatAttachmentItem[];
+}
+
+/**
+ * Message delivery lifecycle state for offline-first chat and outbox queue.
+ */
+export type MessageDeliveryStatus = 'pending' | 'sending' | 'sent' | 'failed';
+
+/**
+ * Local offline persistent chat message structure.
+ */
+export interface LocalChatMessage {
+  localId: string;
+  tempId: string;
+  serverMessageId?: string | null;
+  conversationId: string;
+  conversationType: 'DIRECT' | 'GROUP';
+  senderId: string;
+  content: string;
+  attachment?: ChatAttachmentInput | null;
+  deliveryStatus: MessageDeliveryStatus;
+  retryCount: number;
+  lastError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  tenantSlug: string;
+  userId: string;
+}
+
+/**
+ * Outbox queue item for optimistic and background synchronization.
+ */
+export interface OutboxQueueItem {
+  id: string; // tempId
+  tempId: string;
+  conversationId: string;
+  conversationType: 'DIRECT' | 'GROUP';
+  content?: string;
+  attachment?: ChatAttachmentInput;
+  deliveryStatus: MessageDeliveryStatus;
+  retryCount: number;
+  lastAttemptAt?: string | null;
+  nextAttemptAt?: string | null;
+  lastError?: string | null;
+  createdAt: string;
+  tenantSlug: string;
+  userId: string;
 }
 
 /**

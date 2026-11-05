@@ -56,6 +56,7 @@ export default function PersonalChatScreen() {
     hasMore,
     error: chatError,
     isConnected,
+    isOffline,
     isOtherUserTyping,
     otherUserTypingName,
     otherUserLastReadAt,
@@ -110,6 +111,16 @@ export default function PersonalChatScreen() {
   const handleSend = async () => {
     const trimmed = inputText.trim();
     if ((!trimmed && !selectedAttachment) || isSending || isUploadingAttachment) return;
+
+    if ((!isConnected || isOffline) && selectedAttachment) {
+      Alert.alert(
+        language === 'hi' ? 'ऑफ़लाइन चेतावनी' : 'Offline Notice',
+        language === 'hi'
+          ? 'मीडिया फ़ाइल अपलोड करने के लिए इंटरनेट कनेक्शन आवश्यक है। कृपया टेक्स्ट संदेश भेजें या कनेक्शन मिलने की प्रतीक्षा करें।'
+          : 'Media file uploads require an active internet connection. Please send text or wait for network recovery.'
+      );
+      return;
+    }
 
     setIsSending(true);
     const attachmentToUpload = selectedAttachment;
@@ -249,24 +260,32 @@ export default function PersonalChatScreen() {
                   variant="xs"
                   weight={isReadByRecipient ? 'bold' : 'regular'}
                   color={
-                    item.isError
+                    item.isError || item.deliveryStatus === 'failed'
                       ? theme.colors.error
                       : isReadByRecipient
                         ? '#0284C7' // WhatsApp blue ticks
-                        : item.isOptimistic
+                        : item.isOptimistic || item.deliveryStatus === 'pending' || item.deliveryStatus === 'sending'
                           ? '#94A3B8'
                           : '#64748B'
                   }
                   style={styles.statusIndicator}
                 >
-                  {item.isError ? '⚠️' : item.isOptimistic ? '🕒' : isReadByRecipient ? '✓✓' : '✓'}
+                  {item.isError || item.deliveryStatus === 'failed'
+                    ? '⚠️'
+                    : item.deliveryStatus === 'sending'
+                    ? '⏳'
+                    : item.deliveryStatus === 'pending' || item.isOptimistic
+                    ? '🕒'
+                    : isReadByRecipient
+                    ? '✓✓'
+                    : '✓'}
                 </Typography>
               )}
             </View>
           </View>
 
           {/* Failed message retry CTA */}
-          {item.isError && (
+          {(item.isError || item.deliveryStatus === 'failed') && (
             <Pressable
               onPress={() => item.tempId && retryMessage(item.tempId)}
               style={styles.retryButton}
@@ -344,10 +363,21 @@ export default function PersonalChatScreen() {
         <View
           style={[
             styles.connectionDot,
-            { backgroundColor: isConnected ? '#10B981' : '#F59E0B' },
+            { backgroundColor: isConnected && !isOffline ? '#10B981' : '#F59E0B' },
           ]}
         />
       </View>
+
+      {/* Offline Banner */}
+      {(!isConnected || isOffline) && (
+        <View style={styles.offlineBanner}>
+          <Typography variant="xs" color="#92400E" weight="medium" align="center">
+            {language === 'hi'
+              ? '⚠️ आप ऑफ़लाइन हैं। संदेश कनेक्शन मिलने पर भेजे जाएंगे।'
+              : '⚠️ You are offline. Messages will be sent when connected.'}
+          </Typography>
+        </View>
+      )}
 
       {/* Main Messages Area */}
       <KeyboardAvoidingView
@@ -531,6 +561,15 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  offlineBanner: {
+    backgroundColor: '#FEF3C7',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chatArea: {
     flex: 1,

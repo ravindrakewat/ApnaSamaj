@@ -6,9 +6,11 @@ import {
   DirectUserTypingEvent,
   DirectMessageReadEvent,
   ChatAttachmentInput,
+  MessageDeliveryStatus,
 } from '@apnasamaj/shared-types';
 import { chatApi } from '../api/chat.api';
 import { connectChatSocket, getChatSocket } from '../services/socket.service';
+import { chatPersistenceService, outboxQueueService } from '../services';
 import { useAuth } from './useAuth';
 
 export interface ExtendedDirectMessage extends DirectMessageItem {
@@ -16,6 +18,7 @@ export interface ExtendedDirectMessage extends DirectMessageItem {
   isError?: boolean;
   errorMessage?: string;
   tempId?: string;
+  deliveryStatus?: MessageDeliveryStatus;
 }
 
 export interface UseDirectChatOptions {
@@ -23,7 +26,7 @@ export interface UseDirectChatOptions {
 }
 
 export function useDirectChat({ conversationId }: UseDirectChatOptions) {
-  const { user } = useAuth();
+  const { user, communitySlug } = useAuth();
 
   const [messages, setMessages] = useState<ExtendedDirectMessage[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(true);
@@ -33,6 +36,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
   const [error, setError] = useState<string | null>(null);
 
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [isOffline, setIsOffline] = useState<boolean>(false);
   const [isOtherUserTyping, setIsOtherUserTyping] = useState<boolean>(false);
   const [otherUserTypingName, setOtherUserTypingName] = useState<string>('');
   const [otherUserLastReadAt, setOtherUserLastReadAt] = useState<string | null>(null);
@@ -59,7 +63,80 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
   }, [conversationId]);
 
   /**
-   * Load initial message history
+   * Hydrate initial messages from L1/L2 local cache & subscribe to Outbox updates
+   */
+  useEffect(() => {
+    if (!conversationId || !communitySlug) return;
+
+    if (user?.id) {
+      outboxQueueService.initialize(communitySlug, user.id);
+    }
+
+    chatPersistenceService
+      .getConversationMessages(conversationId, communitySlug, user?.id || '')
+      .then((cached) => {
+        if (cached && cached.length > 0) {
+          setMessages((prev) => {
+            if (prev.length > 0) return prev;
+            return cached.map((c) => ({
+              id: c.serverMessageId || c.tempId || c.localId,
+              conversationId: c.conversationId,
+              senderId: c.senderId,
+              content: c.content,
+              createdAt: c.createdAt,
+              updatedAt: c.updatedAt,
+              deliveryStatus: c.deliveryStatus,
+              isOptimistic: c.deliveryStatus === 'pending' || c.deliveryStatus === 'sending',
+              isError: c.deliveryStatus === 'failed',
+              errorMessage: c.lastError || undefined,
+              tempId: c.tempId,
+              attachments: c.attachment
+                ? [
+                    {
+                      id: c.attachment.id || `att-${c.tempId}`,
+                      directMessageId: c.serverMessageId || c.tempId,
+                      type: c.attachment.type,
+                      fileName: c.attachment.fileName,
+                      mimeType: c.attachment.mimeType,
+                      fileSizeBytes: c.attachment.fileSizeBytes,
+                      storagePath: c.attachment.storagePath,
+                      createdAt: c.createdAt,
+                    },
+                  ]
+                : [],
+            }));
+          });
+        }
+      })
+      .catch(console.warn);
+
+    const unsubOutbox = outboxQueueService.subscribe((event) => {
+      if (event.conversationId !== conversationId) return;
+
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.tempId === event.tempId) {
+            return {
+              ...m,
+              id: event.serverMessageId || m.id,
+              deliveryStatus: event.status,
+              isOptimistic: event.status === 'pending' || event.status === 'sending',
+              isError: event.status === 'failed',
+              errorMessage: event.error || undefined,
+            };
+          }
+          return m;
+        })
+      );
+    });
+
+    return () => {
+      unsubOutbox();
+    };
+  }, [conversationId, communitySlug, user?.id]);
+
+  /**
+   * Load initial message history from server with offline resilience
    */
   const loadInitialHistory = useCallback(async () => {
     if (!conversationId) {
@@ -72,20 +149,54 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
 
     try {
       const data = await chatApi.getDirectMessages(conversationId, { limit: 30 });
-      // Backend returns descending (newest first)
-      setMessages(data.messages);
+      setIsOffline(false);
+      outboxQueueService.setOnlineStatus(true);
+
+      // Persist server messages in local cache
+      if (communitySlug && user?.id) {
+        chatPersistenceService.saveReceivedMessages(
+          conversationId,
+          'DIRECT',
+          data.messages,
+          communitySlug,
+          user.id
+        );
+      }
+
+      setMessages((prev) => {
+        // Keep pending/failed messages in front
+        const pending = prev.filter(
+          (m) => m.deliveryStatus === 'pending' || m.deliveryStatus === 'sending' || m.isError
+        );
+        const serverIds = new Set(data.messages.map((m) => m.id));
+        const filteredPending = pending.filter(
+          (p) => !serverIds.has(p.id) && (!p.tempId || !data.messages.some((m) => m.tempId === p.tempId))
+        );
+
+        const mappedServer: ExtendedDirectMessage[] = data.messages.map((m) => ({
+          ...m,
+          deliveryStatus: 'sent',
+          isOptimistic: false,
+          isError: false,
+        }));
+
+        return [...filteredPending, ...mappedServer];
+      });
+
       setNextCursor(data.nextCursor || null);
       setHasMore(data.hasMore);
 
       // Auto-mark conversation as read on initial open
       markAsRead();
     } catch (err: unknown) {
+      setIsOffline(true);
+      outboxQueueService.setOnlineStatus(false);
       const msg = err instanceof Error ? err.message : 'संदेश लोड करने में विफल।';
       setError(msg);
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [conversationId, markAsRead]);
+  }, [conversationId, communitySlug, user?.id, markAsRead]);
 
   /**
    * Load older messages via cursor pagination
@@ -146,15 +257,30 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
 
     const handleConnect = () => {
       setIsConnected(true);
+      setIsOffline(false);
+      outboxQueueService.setOnlineStatus(true);
       joinDirectRoom();
+      outboxQueueService.processQueue();
     };
 
     const handleDisconnect = () => {
       setIsConnected(false);
+      setIsOffline(true);
+      outboxQueueService.setOnlineStatus(false);
     };
 
     const handleNewMessage = (payload: DirectNewMessageEvent) => {
       if (!payload?.message || payload.message.conversationId !== conversationId) return;
+
+      if (communitySlug && user?.id) {
+        chatPersistenceService.saveReceivedMessages(
+          conversationId,
+          'DIRECT',
+          [payload.message],
+          communitySlug,
+          user.id
+        );
+      }
 
       setMessages((prev) => {
         // If message was sent optimistically by this client, replace it
@@ -162,7 +288,12 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
           const index = prev.findIndex((m) => m.tempId === payload.tempId);
           if (index !== -1) {
             const updated = [...prev];
-            updated[index] = { ...payload.message, isOptimistic: false };
+            updated[index] = {
+              ...payload.message,
+              deliveryStatus: 'sent',
+              isOptimistic: false,
+              isError: false,
+            };
             return updated;
           }
         }
@@ -173,7 +304,14 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         }
 
         // Add to beginning of descending list (newest first)
-        return [payload.message, ...prev];
+        return [
+          {
+            ...payload.message,
+            deliveryStatus: 'sent',
+            isOptimistic: false,
+          },
+          ...prev,
+        ];
       });
 
       // If message is from other user, automatically mark conversation read
@@ -212,6 +350,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         if (s.connected) {
           joinDirectRoom();
         }
+        outboxQueueService.processQueue();
       }
     };
 
@@ -232,7 +371,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [conversationId, loadInitialHistory, joinDirectRoom, markAsRead, user?.id]);
+  }, [conversationId, loadInitialHistory, joinDirectRoom, markAsRead, user?.id, communitySlug]);
 
   /**
    * Notify server of typing status (debounced)
@@ -276,7 +415,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
   );
 
   /**
-   * Send a message with optimistic UI and graceful fallback
+   * Send a message with outbox queue persistence, optimistic UI and socket/HTTP fallback
    */
   const sendMessage = useCallback(
     async (content?: string, attachment?: ChatAttachmentInput) => {
@@ -296,12 +435,13 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         content: trimmed,
         createdAt: nowIso,
         updatedAt: nowIso,
+        deliveryStatus: isConnected ? 'sending' : 'pending',
         sender: user
           ? {
-            id: user.id,
-            fullName: user.fullName || 'You',
-            avatarUrl: (user as any)?.avatarUrl || null,
-          }
+              id: user.id,
+              fullName: user.fullName || 'You',
+              avatarUrl: (user as any)?.avatarUrl || null,
+            }
           : null,
         attachments: attachment
           ? [
@@ -321,12 +461,25 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         tempId,
       };
 
-      // Add to UI immediately
+      // 1. Add to UI immediately
       setMessages((prev) => [optimisticMsg, ...prev]);
+
+      // 2. Queue in outbox persistence
+      if (communitySlug && user?.id) {
+        await outboxQueueService.enqueue({
+          tempId,
+          conversationId,
+          conversationType: 'DIRECT',
+          content: trimmed,
+          attachment: attachment || null,
+          tenantSlug: communitySlug,
+          userId: user.id,
+        });
+      }
 
       const socket = getChatSocket();
 
-      // Try sending via Socket.IO first
+      // 3. Try sending via Socket.IO if connected
       if (socket && socket.connected) {
         try {
           const sent = await new Promise<boolean>((resolve) => {
@@ -335,13 +488,22 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
             socket.emit(
               'direct:send_message',
               { conversationId, content: trimmed, attachment, tempId },
-              (res: { success: boolean; message?: DirectMessageItem; error?: string }) => {
+              async (res: { success: boolean; message?: DirectMessageItem; error?: string }) => {
                 clearTimeout(timeout);
                 if (res?.success && res.message) {
                   const saved = res.message;
+                  if (communitySlug && user?.id) {
+                    await chatPersistenceService.updateMessageDeliveryStatus(tempId, 'sent', {
+                      serverMessageId: saved.id,
+                      tenantSlug: communitySlug,
+                      userId: user.id,
+                    });
+                  }
                   setMessages((prev) =>
                     prev.map((m) =>
-                      m.tempId === tempId ? { ...saved, isOptimistic: false } : m
+                      m.tempId === tempId
+                        ? { ...saved, deliveryStatus: 'sent', isOptimistic: false, isError: false }
+                        : m
                     )
                   );
                   resolve(true);
@@ -354,43 +516,11 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
 
           if (sent) return;
         } catch {
-          // Socket send timed out or threw, proceed to HTTP fallback
+          // Socket send timed out or threw, outbox queue handles fallback
         }
       }
-
-      // HTTP fallback for guaranteed persistence
-      try {
-        const savedMessage = await chatApi.sendDirectMessage(
-          conversationId,
-          trimmed,
-          tempId,
-          attachment
-        );
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.tempId === tempId ? { ...savedMessage, isOptimistic: false } : m
-          )
-        );
-      } catch (err: unknown) {
-        const errorMsg =
-          err instanceof Error ? err.message : 'संदेश भेजने में विफल।';
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.tempId === tempId
-              ? {
-                ...m,
-                isOptimistic: false,
-                isError: true,
-                errorMessage: errorMsg,
-              }
-              : m
-          )
-        );
-      }
     },
-    [conversationId, user, sendTypingStatus]
+    [conversationId, user, communitySlug, isConnected, sendTypingStatus]
   );
 
   /**
@@ -398,50 +528,17 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
    */
   const retryMessage = useCallback(
     async (tempId: string) => {
-      const failedMsg = messages.find((m) => m.tempId === tempId && m.isError);
-      if (!failedMsg) return;
-
-      const attachment = failedMsg.attachments?.[0];
-
-      // Reset error state to optimistic
       setMessages((prev) =>
         prev.map((m) =>
-          m.tempId === tempId ? { ...m, isError: false, errorMessage: undefined, isOptimistic: true } : m
+          m.tempId === tempId
+            ? { ...m, deliveryStatus: 'sending', isError: false, errorMessage: undefined, isOptimistic: true }
+            : m
         )
       );
 
-      try {
-        const savedMessage = await chatApi.sendDirectMessage(
-          conversationId,
-          failedMsg.content,
-          tempId,
-          attachment
-        );
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.tempId === tempId ? { ...savedMessage, isOptimistic: false } : m
-          )
-        );
-      } catch (err: unknown) {
-        const errorMsg =
-          err instanceof Error ? err.message : 'संदेश भेजने में पुनः विफल।';
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.tempId === tempId
-              ? {
-                ...m,
-                isOptimistic: false,
-                isError: true,
-                errorMessage: errorMsg,
-              }
-              : m
-          )
-        );
-      }
+      await outboxQueueService.retryMessage(tempId);
     },
-    [conversationId, messages]
+    []
   );
 
   return {
@@ -451,6 +548,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
     hasMore,
     error,
     isConnected,
+    isOffline,
     isOtherUserTyping,
     otherUserTypingName,
     otherUserLastReadAt,

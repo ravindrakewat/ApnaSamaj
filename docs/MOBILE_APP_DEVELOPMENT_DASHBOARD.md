@@ -262,8 +262,14 @@ Every completed task has been validated across four distinct tiers of verificati
 4. **Android Compatibility (87.5%):** Architecture, Hermes bytecode, and emulator verified; physical OEM handset run pending.
 5. **iOS Compatibility (57.1%):** Code-level compatibility verified; Xcode build and iPhone testing pending due to Windows host environment.
 
-### Critical Pending Work:
-1. **Batch 7 (Mobile Real-Time Chat & Direct Messaging):** Integrate existing backend Socket.IO service (`apps/api/src/modules/chat`) for community group discussions and 1-on-1 member chat.
-2. **Standalone Profile & Settings Screen (`apps/mobile/app/(app)/profile/index.tsx`):** Promote the modal drawer into a first-class route supporting profile photo update and bio editing.
-3. **Physical Android Device Verification:** Run the application on a physical Android smartphone via Expo Go to verify camera punch hole insets, push notifications, and network latency on mobile data.
+### Real-Time Chat & Messaging Module Status (Completed):
+1. **Batch 8.1 (Mobile Group Chat):** Community group discussions with WhatsApp-style bubbles, cursor pagination, Socket.IO real-time delivery, and typing indicators.
+2. **Batch 8.2 & 8.3 (Personal One-to-One Chat & Unified Inbox):** Direct private chat backend and mobile UI with read receipts (`✓✓`), multi-tab inbox, and member profile integration.
+3. **Batch 8.4 (Chat Media Attachments):** Secure images, videos, and documents with magic-byte validation and private Supabase storage.
+4. **Batch 8.5 (FCM Push Notifications):** Firebase Admin SDK background notifications with topic channels, preference controls, and cold-start deep routing.
+5. **Batch 8.6 (Offline Chat Sync & Outbox Queue):** Offline-first local message persistence, Android Keystore 1024-byte chunking, conversational FIFO outbox queue, exponential backoff with jitter, mid-flight crash recovery, and backend idempotency with `clientMessageId`.
+
+### Next Recommended Milestones:
+1. **Batch 8.7 (Voice Notes & Audio Messaging):** Audio recording, waveform preview, and voice note playback for mobile chat.
+2. **Physical Device QA:** Final on-device hardware verification (OEM punch-hole cameras, push notification delivery, and low-connectivity synchronization).
 

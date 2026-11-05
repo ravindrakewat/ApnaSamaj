@@ -19,6 +19,15 @@ import {
 } from './chat.service';
 import { createTemporarySignedChatAttachmentUrl } from '../../services/storage.service';
 import { dispatchPushNotificationToUser } from '../notifications/push-notification.service';
+import { chatIdempotencyService } from './chat-idempotency.service';
+
+function isPrismaClient(val: any): val is PrismaClient {
+  return Boolean(val && typeof val === 'object' && ('$connect' in val || 'user' in val || 'chatMessage' in val || 'directMessage' in val));
+}
+
+function isChatAttachmentInput(val: any): val is ChatAttachmentInput {
+  return Boolean(val && typeof val === 'object' && ('storagePath' in val || 'mimeType' in val || 'fileSizeBytes' in val));
+}
 
 function assertDb(db?: PrismaClient): PrismaClient {
   if (!db) {
@@ -52,6 +61,8 @@ export function mapToDirectMessageItem(item: RawDirectMessage): DirectMessageIte
     conversationId: item.conversationId,
     senderId: item.senderId,
     content: item.content,
+    clientMessageId: (item as any).clientMessageId || null,
+    tempId: (item as any).clientMessageId || undefined,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
     sender: item.sender
@@ -453,14 +464,15 @@ export async function sendDirectMessage(
   let resolvedDb: PrismaClient | undefined;
   let resolvedAttachment: ChatAttachmentInput | undefined;
 
-  if (typeof attachmentOrTempId === 'string' || attachmentOrTempId === undefined) {
-    resolvedTempId = attachmentOrTempId;
-    resolvedDb = tempIdOrDb as PrismaClient | undefined;
-    resolvedAttachment = (db as unknown as ChatAttachmentInput) || attachment;
-  } else {
-    resolvedAttachment = attachmentOrTempId;
-    resolvedTempId = typeof tempIdOrDb === 'string' ? tempIdOrDb : undefined;
-    resolvedDb = db || (typeof tempIdOrDb !== 'string' ? (tempIdOrDb as PrismaClient) : undefined);
+  for (const arg of [attachmentOrTempId, tempIdOrDb, db, attachment]) {
+    if (!arg) continue;
+    if (typeof arg === 'string' && !resolvedTempId) {
+      resolvedTempId = arg;
+    } else if (isPrismaClient(arg) && !resolvedDb) {
+      resolvedDb = arg;
+    } else if (isChatAttachmentInput(arg) && !resolvedAttachment) {
+      resolvedAttachment = arg;
+    }
   }
 
   const client = assertDb(resolvedDb);
@@ -472,6 +484,25 @@ export async function sendDirectMessage(
   }
   if (trimmed.length > 2000) {
     throw new ChatServiceError('Message content cannot exceed 2000 characters.', 400);
+  }
+
+  // 1. Idempotency fast-path: Check if message already exists with this clientMessageId
+  if (resolvedTempId) {
+    try {
+      const existing = await client.directMessage.findFirst({
+        where: {
+          conversationId,
+          senderId,
+          clientMessageId: resolvedTempId,
+        },
+        include: directMessageInclude,
+      });
+      if (existing) {
+        return mapToDirectMessageItem(existing);
+      }
+    } catch {
+      // Suppress if column query fails on unmigrated database
+    }
   }
 
   if (resolvedAttachment) {
@@ -487,90 +518,160 @@ export async function sendDirectMessage(
     }
   }
 
-  const now = new Date();
+  const idempotencyKey = resolvedTempId
+    ? chatIdempotencyService.buildKey(conversationId, 'DIRECT', conversationId, senderId, resolvedTempId)
+    : undefined;
 
-  // Create message and update conversation updatedAt
-  const message = await client.directMessage.create({
-    data: {
-      conversationId,
-      senderId,
-      content: trimmed,
-      ...(resolvedAttachment
-        ? {
-            attachments: {
-              create: {
-                type: resolvedAttachment.type,
-                fileName: resolvedAttachment.fileName,
-                mimeType: resolvedAttachment.mimeType,
-                fileSizeBytes: resolvedAttachment.fileSizeBytes,
-                storagePath: resolvedAttachment.storagePath,
-              },
-            },
-          }
-        : {}),
-    },
-    include: directMessageInclude,
-  });
+  return await chatIdempotencyService.executeIdempotent(idempotencyKey, async () => {
+    // 1. Check if message already exists with this clientMessageId
+    if (resolvedTempId) {
+      try {
+        const existing = await client.directMessage.findFirst({
+          where: {
+            conversationId,
+            senderId,
+            clientMessageId: resolvedTempId,
+          },
+          include: directMessageInclude,
+        });
+        if (existing) {
+          return mapToDirectMessageItem(existing);
+        }
+      } catch {
+        // Suppress if column query fails on unmigrated database
+      }
+    }
 
-  await client.directConversation.update({
-    where: { id: conversationId },
-    data: { updatedAt: now },
-  });
+    const now = new Date();
 
-  // Automatically mark sender's lastReadAt to now
-  await client.directConversationParticipant.upsert({
-    where: {
-      conversationId_userId: {
+    let message: any;
+    try {
+      message = await client.directMessage.create({
+        data: {
+          conversationId,
+          senderId,
+          content: trimmed,
+          ...(resolvedTempId ? { clientMessageId: resolvedTempId } : {}),
+          ...(resolvedAttachment
+            ? {
+                attachments: {
+                  create: {
+                    type: resolvedAttachment.type,
+                    fileName: resolvedAttachment.fileName,
+                    mimeType: resolvedAttachment.mimeType,
+                    fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                    storagePath: resolvedAttachment.storagePath,
+                  },
+                },
+              }
+            : {}),
+        },
+        include: directMessageInclude,
+      });
+    } catch (createErr: any) {
+      // P2002: Unique constraint violation (concurrent duplicate insert)
+      if (createErr?.code === 'P2002' && resolvedTempId) {
+        const existing = await client.directMessage.findFirst({
+          where: {
+            conversationId,
+            senderId,
+            clientMessageId: resolvedTempId,
+          },
+          include: directMessageInclude,
+        });
+        if (existing) {
+          return mapToDirectMessageItem(existing);
+        }
+      }
+
+      // Graceful fallback if clientMessageId column does not exist yet in live database
+      if (createErr?.message && (createErr.message.includes('clientMessageId') || createErr.message.includes('column')) && resolvedTempId) {
+        message = await client.directMessage.create({
+          data: {
+            conversationId,
+            senderId,
+            content: trimmed,
+            ...(resolvedAttachment
+              ? {
+                  attachments: {
+                    create: {
+                      type: resolvedAttachment.type,
+                      fileName: resolvedAttachment.fileName,
+                      mimeType: resolvedAttachment.mimeType,
+                      fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                      storagePath: resolvedAttachment.storagePath,
+                    },
+                  },
+                }
+              : {}),
+          },
+          include: directMessageInclude,
+        });
+      } else {
+        throw createErr;
+      }
+    }
+
+    await client.directConversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: now },
+    });
+
+    // Automatically mark sender's lastReadAt to now
+    await client.directConversationParticipant.upsert({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId: senderId,
+        },
+      },
+      update: { lastReadAt: now },
+      create: {
         conversationId,
         userId: senderId,
+        lastReadAt: now,
       },
-    },
-    update: { lastReadAt: now },
-    create: {
-      conversationId,
-      userId: senderId,
-      lastReadAt: now,
-    },
-  });
-
-  // Non-blocking FCM push notification dispatch to conversation recipient
-  try {
-    const conv = await client.directConversation.findUnique({
-      where: { id: conversationId },
-      select: { userOneId: true, userTwoId: true },
     });
-    if (conv) {
-      const recipientId = conv.userOneId === senderId ? conv.userTwoId : conv.userOneId;
-      const senderName = message.sender?.profile?.fullName || 'Community Member';
-      const pushBody = resolvedAttachment
-        ? resolvedAttachment.type === 'IMAGE'
-          ? 'Sent a photo'
-          : resolvedAttachment.type === 'VIDEO'
-          ? 'Sent a video'
-          : 'Sent a document'
-        : 'Sent you a message';
 
-      await dispatchPushNotificationToUser(
-        {
-          recipientId,
-          category: 'personalMessages',
-          title: senderName,
-          body: pushBody,
-          routingPayload: {
-            type: 'PERSONAL_CHAT',
-            conversationId,
-            entityId: message.id,
+    // Non-blocking FCM push notification dispatch to conversation recipient
+    try {
+      const conv = await client.directConversation.findUnique({
+        where: { id: conversationId },
+        select: { userOneId: true, userTwoId: true },
+      });
+      if (conv) {
+        const recipientId = conv.userOneId === senderId ? conv.userTwoId : conv.userOneId;
+        const senderName = message.sender?.profile?.fullName || 'Community Member';
+        const pushBody = resolvedAttachment
+          ? resolvedAttachment.type === 'IMAGE'
+            ? 'Sent a photo'
+            : resolvedAttachment.type === 'VIDEO'
+            ? 'Sent a video'
+            : 'Sent a document'
+          : 'Sent you a message';
+
+        await dispatchPushNotificationToUser(
+          {
+            recipientId,
+            category: 'personalMessages',
+            title: senderName,
+            body: pushBody,
+            routingPayload: {
+              type: 'PERSONAL_CHAT',
+              conversationId,
+              entityId: message.id,
+            },
+            actorId: senderId,
           },
-          actorId: senderId,
-        },
-        client
-      );
+          client
+        );
+      }
+    } catch (pushErr) {
+      console.warn('[Direct Chat] FCM push notification dispatch warning (suppressed):', pushErr);
     }
-  } catch (pushErr) {
-    console.warn('[Direct Chat] FCM push notification dispatch warning (suppressed):', pushErr);
-  }
 
-  return mapToDirectMessageItem(message);
+    return mapToDirectMessageItem(message);
+  });
 }
 
 /**

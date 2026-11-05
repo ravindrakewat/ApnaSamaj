@@ -15,6 +15,7 @@ import {
 import { STORAGE_KEYS } from '../constants/storageKeys';
 import { APP_CONFIG } from '../constants/config';
 import { unregisterPushTokenOnLogout } from '../services/notifications';
+import { outboxQueueService, chatPersistenceService } from '../services';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -193,6 +194,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setUser(freshUser);
               setAccessToken(latestTokens.accessToken || activeAccess);
               await setSecureItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(freshUser));
+              if (activeSlug && freshUser.id) {
+                outboxQueueService.initialize(activeSlug, freshUser.id).catch(console.warn);
+              }
             }
           } catch (err: unknown) {
             // If token is explicitly revoked/expired and cannot be renewed:
@@ -252,6 +256,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAccessToken(result.accessToken);
         setUser(result.user);
         setCommunitySlugState(targetSlug);
+        outboxQueueService.initialize(targetSlug, result.user.id).catch(console.warn);
 
         return result;
       } catch (err: unknown) {
@@ -284,6 +289,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAccessToken(result.accessToken);
         setUser(result.user);
         setCommunitySlugState(targetSlug);
+        outboxQueueService.initialize(targetSlug, result.user.id).catch(console.warn);
 
         return result;
       } catch (err: unknown) {
@@ -300,6 +306,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     try {
+      outboxQueueService.teardown();
+      chatPersistenceService.evictMemorySession();
       await unregisterPushTokenOnLogout().catch(console.warn);
       const { refreshToken } = await getAuthTokens();
       await authApi.logout(refreshToken || undefined);
@@ -316,6 +324,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (newSlug: string): Promise<void> => {
       const clean = newSlug.trim().toLowerCase();
       if (clean === communitySlug) return;
+
+      // Stop old queue worker and evict in-memory session cache (preserves persistent outbox in original tenant namespace)
+      outboxQueueService.teardown();
+      chatPersistenceService.evictMemorySession();
 
       // If user is currently authenticated with another community,
       // terminate the old session so old tokens and profile never leak into the new community context

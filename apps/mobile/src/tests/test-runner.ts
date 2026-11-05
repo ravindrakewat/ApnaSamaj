@@ -46,6 +46,8 @@ async function runAll() {
   await runChatMediaAttachmentsFlowTests();
   const { runPushNotificationsFlowTests } = await import('./push-notifications-flow.test');
   await runPushNotificationsFlowTests();
+  const { runOfflineChatSyncFlowTests } = await import('./offline-chat-sync-flow.test');
+  await runOfflineChatSyncFlowTests();
 }
 
 runAll();

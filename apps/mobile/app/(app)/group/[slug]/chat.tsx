@@ -83,10 +83,12 @@ export default function GroupChatScreen() {
     hasMore,
     error: chatError,
     isConnected,
+    isOffline,
     typingUsers,
     loadInitialHistory,
     loadOlderMessages,
     sendMessage,
+    retryMessage,
     reportTyping,
   } = useGroupChat({
     groupId: group?.id || '',
@@ -130,6 +132,16 @@ export default function GroupChatScreen() {
   const handleSend = async () => {
     const trimmed = inputText.trim();
     if ((!trimmed && !selectedAttachment) || isSending || isUploadingAttachment) return;
+
+    if ((!isConnected || isOffline) && selectedAttachment) {
+      Alert.alert(
+        language === 'hi' ? 'ऑफ़लाइन चेतावनी' : 'Offline Notice',
+        language === 'hi'
+          ? 'मीडिया फ़ाइल अपलोड करने के लिए इंटरनेट कनेक्शन आवश्यक है। कृपया टेक्स्ट संदेश भेजें या कनेक्शन मिलने की प्रतीक्षा करें।'
+          : 'Media file uploads require an active internet connection. Please send text or wait for network recovery.'
+      );
+      return;
+    }
 
     setIsSending(true);
     const attachmentToUpload = selectedAttachment;
@@ -289,11 +301,41 @@ export default function GroupChatScreen() {
                 {formatMessageTime(item.createdAt)}
               </Typography>
               {isOwn && (
-                <Typography variant="xs" color={item.isError ? theme.colors.error : '#059669'} style={styles.statusIndicator}>
-                  {item.isError ? '⚠️' : item.isOptimistic ? '🕒' : '✓'}
+                <Typography
+                  variant="xs"
+                  color={
+                    item.isError || item.deliveryStatus === 'failed'
+                      ? theme.colors.error
+                      : item.deliveryStatus === 'pending' || item.deliveryStatus === 'sending' || item.isOptimistic
+                      ? '#94A3B8'
+                      : '#059669'
+                  }
+                  style={styles.statusIndicator}
+                >
+                  {item.isError || item.deliveryStatus === 'failed'
+                    ? '⚠️'
+                    : item.deliveryStatus === 'sending'
+                    ? '⏳'
+                    : item.deliveryStatus === 'pending' || item.isOptimistic
+                    ? '🕒'
+                    : '✓'}
                 </Typography>
               )}
             </View>
+
+            {/* Failed message retry CTA */}
+            {isOwn && (item.isError || item.deliveryStatus === 'failed') && (
+              <Pressable
+                onPress={() => item.tempId && retryMessage(item.tempId)}
+                style={styles.retryButton}
+                accessibilityRole="button"
+                accessibilityLabel="Retry sending message"
+              >
+                <Typography variant="xs" color={theme.colors.error} weight="bold">
+                  {language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
+                </Typography>
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
@@ -361,6 +403,17 @@ export default function GroupChatScreen() {
           </View>
         </Pressable>
       </View>
+
+      {/* Offline Banner */}
+      {(!isConnected || isOffline) && (
+        <View style={styles.offlineBanner}>
+          <Typography variant="xs" color="#92400E" weight="medium" align="center">
+            {language === 'hi'
+              ? '⚠️ आप ऑफ़लाइन हैं। संदेश कनेक्शन मिलने पर भेजे जाएंगे।'
+              : '⚠️ You are offline. Messages will be sent when connected.'}
+          </Typography>
+        </View>
+      )}
 
       {/* Main Body */}
       {loadingGroup ? (
@@ -727,6 +780,23 @@ const styles = StyleSheet.create({
   joinPromptContainer: {
     alignItems: 'center',
     paddingVertical: 6,
+  },
+  offlineBanner: {
+    backgroundColor: '#FEF3C7',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryButton: {
+    alignSelf: 'flex-end',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
   },
 });
 

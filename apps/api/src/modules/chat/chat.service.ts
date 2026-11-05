@@ -7,6 +7,7 @@ import {
 } from '@apnasamaj/shared-types';
 import { ListGroupMessagesQueryInput } from '@apnasamaj/validation';
 import { dispatchPushNotificationToMultipleUsers } from '../notifications/push-notification.service';
+import { chatIdempotencyService } from './chat-idempotency.service';
 
 export class ChatServiceError extends Error {
   public statusCode: number;
@@ -27,6 +28,14 @@ export class ForbiddenChatError extends ChatServiceError {
   constructor(message: string = 'Access denied: You do not have permission for this chat room.') {
     super(message, 403);
   }
+}
+
+function isPrismaClient(val: any): val is PrismaClient {
+  return Boolean(val && typeof val === 'object' && ('$connect' in val || 'user' in val || 'chatMessage' in val || 'directMessage' in val));
+}
+
+function isChatAttachmentInput(val: any): val is ChatAttachmentInput {
+  return Boolean(val && typeof val === 'object' && ('storagePath' in val || 'mimeType' in val || 'fileSizeBytes' in val));
 }
 
 function assertDb(db?: PrismaClient): PrismaClient {
@@ -61,6 +70,8 @@ export function mapToChatMessageItem(item: RawChatMessage): ChatMessageItem {
     groupId: item.groupId,
     senderId: item.senderId,
     content: item.content,
+    clientMessageId: (item as any).clientMessageId || null,
+    tempId: (item as any).clientMessageId || undefined,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
     sender: item.sender
@@ -203,14 +214,15 @@ export async function sendChatMessage(
   let resolvedDb: PrismaClient | undefined;
   let resolvedAttachment: ChatAttachmentInput | undefined;
 
-  if (typeof attachmentOrTempId === 'string' || attachmentOrTempId === undefined) {
-    resolvedTempId = attachmentOrTempId;
-    resolvedDb = tempIdOrDb as PrismaClient | undefined;
-    resolvedAttachment = (db as unknown as ChatAttachmentInput) || attachment;
-  } else {
-    resolvedAttachment = attachmentOrTempId;
-    resolvedTempId = typeof tempIdOrDb === 'string' ? tempIdOrDb : undefined;
-    resolvedDb = db || (typeof tempIdOrDb !== 'string' ? (tempIdOrDb as PrismaClient) : undefined);
+  for (const arg of [attachmentOrTempId, tempIdOrDb, db, attachment]) {
+    if (!arg) continue;
+    if (typeof arg === 'string' && !resolvedTempId) {
+      resolvedTempId = arg;
+    } else if (isPrismaClient(arg) && !resolvedDb) {
+      resolvedDb = arg;
+    } else if (isChatAttachmentInput(arg) && !resolvedAttachment) {
+      resolvedAttachment = arg;
+    }
   }
 
   const client = assertDb(resolvedDb);
@@ -222,6 +234,25 @@ export async function sendChatMessage(
   }
   if (trimmed.length > 2000) {
     throw new ChatServiceError('Message content cannot exceed 2000 characters.', 400);
+  }
+
+  // 1. Idempotency fast-path: Check if message already exists with this clientMessageId
+  if (resolvedTempId) {
+    try {
+      const existing = await client.chatMessage.findFirst({
+        where: {
+          groupId: group.id,
+          senderId,
+          clientMessageId: resolvedTempId,
+        },
+        include: chatMessageInclude,
+      });
+      if (existing) {
+        return mapToChatMessageItem(existing as unknown as RawChatMessage);
+      }
+    } catch {
+      // Suppress if column query fails on unmigrated database
+    }
   }
 
   if (resolvedAttachment) {
@@ -237,81 +268,152 @@ export async function sendChatMessage(
     }
   }
 
-  try {
-    const message = await client.chatMessage.create({
-      data: {
-        groupId: group.id,
-        senderId,
-        content: trimmed,
-        ...(resolvedAttachment
-          ? {
-              attachments: {
-                create: {
-                  type: resolvedAttachment.type,
-                  fileName: resolvedAttachment.fileName,
-                  mimeType: resolvedAttachment.mimeType,
-                  fileSizeBytes: resolvedAttachment.fileSizeBytes,
-                  storagePath: resolvedAttachment.storagePath,
-                },
-              },
-            }
-          : {}),
-      },
-      include: chatMessageInclude,
-    });
+  const idempotencyKey = resolvedTempId
+    ? chatIdempotencyService.buildKey(group.slug || group.id, 'GROUP', group.id, senderId, resolvedTempId)
+    : undefined;
 
-    // Non-blocking FCM push notification dispatch to group members
-    try {
-      if (client.groupMember && typeof client.groupMember.findMany === 'function') {
-        const activeMembers = await client.groupMember.findMany({
+  return await chatIdempotencyService.executeIdempotent(idempotencyKey, async () => {
+    // 1. Check if message already exists with this clientMessageId
+    if (resolvedTempId) {
+      try {
+        const existing = await client.chatMessage.findFirst({
           where: {
             groupId: group.id,
-            userId: { not: senderId },
+            senderId,
+            clientMessageId: resolvedTempId,
           },
-          select: { userId: true },
+          include: chatMessageInclude,
         });
+        if (existing) {
+          return mapToChatMessageItem(existing as unknown as RawChatMessage);
+        }
+      } catch {
+        // Suppress if column query fails on unmigrated database
+      }
+    }
 
-        if (activeMembers.length > 0) {
-          const memberIds = activeMembers.map((m) => m.userId);
-          const senderName = (message as any)?.sender?.profile?.fullName || 'Community Member';
-          const pushBody = resolvedAttachment
-            ? `${senderName}: ${
-                resolvedAttachment.type === 'IMAGE'
-                  ? 'Sent a photo'
-                  : resolvedAttachment.type === 'VIDEO'
-                  ? 'Sent a video'
-                  : 'Sent a document'
-              }`
-            : `${senderName}: Sent a message`;
-
-          await dispatchPushNotificationToMultipleUsers(
-            {
-              recipientIds: memberIds,
-              category: 'groupMessages',
-              title: group.name,
-              body: pushBody,
-              routingPayload: {
-                type: 'GROUP_CHAT',
-                groupId: group.id,
-                groupSlug: group.slug,
-                entityId: message.id,
-              },
-              excludeUserId: senderId,
+    try {
+      let message: any;
+      try {
+        message = await client.chatMessage.create({
+          data: {
+            groupId: group.id,
+            senderId,
+            content: trimmed,
+            ...(resolvedTempId ? { clientMessageId: resolvedTempId } : {}),
+            ...(resolvedAttachment
+              ? {
+                  attachments: {
+                    create: {
+                      type: resolvedAttachment.type,
+                      fileName: resolvedAttachment.fileName,
+                      mimeType: resolvedAttachment.mimeType,
+                      fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                      storagePath: resolvedAttachment.storagePath,
+                    },
+                  },
+                }
+              : {}),
+          },
+          include: chatMessageInclude,
+        });
+      } catch (createErr: any) {
+        // P2002: Unique constraint violation (concurrent duplicate insert)
+        if (createErr?.code === 'P2002' && resolvedTempId) {
+          const existing = await client.chatMessage.findFirst({
+            where: {
+              groupId: group.id,
+              senderId,
+              clientMessageId: resolvedTempId,
             },
-            client
-          );
+            include: chatMessageInclude,
+          });
+          if (existing) {
+            return mapToChatMessageItem(existing as unknown as RawChatMessage);
+          }
+        }
+
+        // Graceful fallback if clientMessageId column does not exist yet in live database
+        if (createErr?.message && (createErr.message.includes('clientMessageId') || createErr.message.includes('column')) && resolvedTempId) {
+          message = await client.chatMessage.create({
+            data: {
+              groupId: group.id,
+              senderId,
+              content: trimmed,
+              ...(resolvedAttachment
+                ? {
+                    attachments: {
+                      create: {
+                        type: resolvedAttachment.type,
+                        fileName: resolvedAttachment.fileName,
+                        mimeType: resolvedAttachment.mimeType,
+                        fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                        storagePath: resolvedAttachment.storagePath,
+                      },
+                    },
+                  }
+                : {}),
+            },
+            include: chatMessageInclude,
+          });
+        } else {
+          throw createErr;
         }
       }
-    } catch (groupPushErr) {
-      console.warn('[Group Chat] FCM push notification dispatch warning (suppressed):', groupPushErr);
-    }
 
-    return mapToChatMessageItem(message as unknown as RawChatMessage);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ChatMessage') || msg.includes('does not exist')) {
-      throw new ChatServiceError('Chat service is temporarily offline (database migration pending).', 503);
+      // Non-blocking FCM push notification dispatch to group members
+      try {
+        if (client.groupMember && typeof client.groupMember.findMany === 'function') {
+          const activeMembers = await client.groupMember.findMany({
+            where: {
+              groupId: group.id,
+              userId: { not: senderId },
+            },
+            select: { userId: true },
+          });
+
+          if (activeMembers.length > 0) {
+            const memberIds = activeMembers.map((m) => m.userId);
+            const senderName = (message as any)?.sender?.profile?.fullName || 'Community Member';
+            const pushBody = resolvedAttachment
+              ? `${senderName}: ${
+                  resolvedAttachment.type === 'IMAGE'
+                    ? 'Sent a photo'
+                    : resolvedAttachment.type === 'VIDEO'
+                    ? 'Sent a video'
+                    : 'Sent a document'
+                }`
+              : `${senderName}: Sent a message`;
+
+            await dispatchPushNotificationToMultipleUsers(
+              {
+                recipientIds: memberIds,
+                category: 'groupMessages',
+                title: group.name,
+                body: pushBody,
+                routingPayload: {
+                  type: 'GROUP_CHAT',
+                  groupId: group.id,
+                  groupSlug: group.slug,
+                  entityId: message.id,
+                },
+                excludeUserId: senderId,
+              },
+              client
+            );
+          }
+        }
+      } catch (groupPushErr) {
+        console.warn('[Group Chat] FCM push notification dispatch warning (suppressed):', groupPushErr);
+      }
+
+      return mapToChatMessageItem(message as unknown as RawChatMessage);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('ChatMessage') || msg.includes('does not exist')) {
+        throw new ChatServiceError('Chat service is temporarily offline (database migration pending).', 503);
+      }
+      throw err;
     }
-    throw err;
-  }
+  });
 }

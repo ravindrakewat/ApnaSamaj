@@ -5,9 +5,11 @@ import {
   NewChatMessageEvent,
   UserTypingEvent,
   ChatAttachmentInput,
+  MessageDeliveryStatus,
 } from '@apnasamaj/shared-types';
 import { chatApi } from '../api/chat.api';
 import { connectChatSocket, getChatSocket } from '../services/socket.service';
+import { chatPersistenceService, outboxQueueService } from '../services';
 import { useAuth } from './useAuth';
 
 export interface ExtendedChatMessage extends ChatMessageItem {
@@ -15,6 +17,7 @@ export interface ExtendedChatMessage extends ChatMessageItem {
   isError?: boolean;
   errorMessage?: string;
   tempId?: string;
+  deliveryStatus?: MessageDeliveryStatus;
 }
 
 export interface UseGroupChatOptions {
@@ -24,7 +27,7 @@ export interface UseGroupChatOptions {
 }
 
 export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptions) {
-  const { user } = useAuth();
+  const { user, communitySlug } = useAuth();
 
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(true);
@@ -34,6 +37,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
   const [error, setError] = useState<string | null>(null);
 
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [isOffline, setIsOffline] = useState<boolean>(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
 
   const isTypingActiveRef = useRef<boolean>(false);
@@ -42,7 +46,85 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
   const isPrivateAndNonMember = isPrivate && !isMember;
 
   /**
-   * Load initial message history
+   * Hydrate initial messages from L1/L2 local cache & subscribe to Outbox updates
+   */
+  useEffect(() => {
+    if (!groupId || !communitySlug || isPrivateAndNonMember) return;
+
+    if (user?.id) {
+      outboxQueueService.initialize(communitySlug, user.id);
+    }
+
+    chatPersistenceService
+      .getConversationMessages(groupId, communitySlug, user?.id || '')
+      .then((cached) => {
+        if (cached && cached.length > 0) {
+          setMessages((prev) => {
+            if (prev.length > 0) return prev;
+            return cached.map((c) => ({
+              id: c.serverMessageId || c.tempId || c.localId,
+              groupId: c.conversationId,
+              senderId: c.senderId,
+              content: c.content,
+              createdAt: c.createdAt,
+              updatedAt: c.updatedAt,
+              deliveryStatus: c.deliveryStatus,
+              isOptimistic: c.deliveryStatus === 'pending' || c.deliveryStatus === 'sending',
+              isError: c.deliveryStatus === 'failed',
+              errorMessage: c.lastError || undefined,
+              tempId: c.tempId,
+              sender: {
+                id: c.senderId,
+                fullName: c.senderId === user?.id ? user.fullName || 'You' : 'Community Member',
+                avatarUrl: null,
+              },
+              attachments: c.attachment
+                ? [
+                    {
+                      id: c.attachment.id || `att-${c.tempId}`,
+                      chatMessageId: c.serverMessageId || c.tempId,
+                      type: c.attachment.type,
+                      fileName: c.attachment.fileName,
+                      mimeType: c.attachment.mimeType,
+                      fileSizeBytes: c.attachment.fileSizeBytes,
+                      storagePath: c.attachment.storagePath,
+                      createdAt: c.createdAt,
+                    },
+                  ]
+                : [],
+            }));
+          });
+        }
+      })
+      .catch(console.warn);
+
+    const unsubOutbox = outboxQueueService.subscribe((event) => {
+      if (event.conversationId !== groupId) return;
+
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.tempId === event.tempId) {
+            return {
+              ...m,
+              id: event.serverMessageId || m.id,
+              deliveryStatus: event.status,
+              isOptimistic: event.status === 'pending' || event.status === 'sending',
+              isError: event.status === 'failed',
+              errorMessage: event.error || undefined,
+            };
+          }
+          return m;
+        })
+      );
+    });
+
+    return () => {
+      unsubOutbox();
+    };
+  }, [groupId, communitySlug, user?.id, isPrivateAndNonMember]);
+
+  /**
+   * Load initial message history with offline resilience
    */
   const loadInitialHistory = useCallback(async () => {
     if (!groupId || isPrivateAndNonMember) {
@@ -55,17 +137,51 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
 
     try {
       const data = await chatApi.getGroupMessages(groupId, { limit: 30 });
-      // Backend returns descending (newest first).
-      setMessages(data.messages);
+      setIsOffline(false);
+      outboxQueueService.setOnlineStatus(true);
+
+      // Persist server messages in local cache
+      if (communitySlug && user?.id) {
+        chatPersistenceService.saveReceivedMessages(
+          groupId,
+          'GROUP',
+          data.messages,
+          communitySlug,
+          user.id
+        );
+      }
+
+      setMessages((prev) => {
+        // Keep pending/failed messages in front
+        const pending = prev.filter(
+          (m) => m.deliveryStatus === 'pending' || m.deliveryStatus === 'sending' || m.isError
+        );
+        const serverIds = new Set(data.messages.map((m) => m.id));
+        const filteredPending = pending.filter(
+          (p) => !serverIds.has(p.id) && (!p.tempId || !data.messages.some((m) => m.tempId === p.tempId))
+        );
+
+        const mappedServer: ExtendedChatMessage[] = data.messages.map((m) => ({
+          ...m,
+          deliveryStatus: 'sent',
+          isOptimistic: false,
+          isError: false,
+        }));
+
+        return [...filteredPending, ...mappedServer];
+      });
+
       setNextCursor(data.nextCursor || null);
       setHasMore(data.hasMore);
     } catch (err: unknown) {
+      setIsOffline(true);
+      outboxQueueService.setOnlineStatus(false);
       const msg = err instanceof Error ? err.message : 'चैट संदेश लोड करने में विफल।';
       setError(msg);
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [groupId, isPrivateAndNonMember]);
+  }, [groupId, isPrivateAndNonMember, communitySlug, user?.id]);
 
   /**
    * Load older messages via cursor pagination
@@ -122,15 +238,30 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
 
     const handleConnect = () => {
       setIsConnected(true);
+      setIsOffline(false);
+      outboxQueueService.setOnlineStatus(true);
       joinGroupRoom();
+      outboxQueueService.processQueue();
     };
 
     const handleDisconnect = () => {
       setIsConnected(false);
+      setIsOffline(true);
+      outboxQueueService.setOnlineStatus(false);
     };
 
     const handleNewMessage = (payload: NewChatMessageEvent) => {
       if (!payload?.message || payload.message.groupId !== groupId) return;
+
+      if (communitySlug && user?.id) {
+        chatPersistenceService.saveReceivedMessages(
+          groupId,
+          'GROUP',
+          [payload.message],
+          communitySlug,
+          user.id
+        );
+      }
 
       setMessages((prev) => {
         // If message was sent optimistically by this client, replace it
@@ -138,7 +269,12 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
           const index = prev.findIndex((m) => m.tempId === payload.tempId);
           if (index !== -1) {
             const updated = [...prev];
-            updated[index] = { ...payload.message, isOptimistic: false };
+            updated[index] = {
+              ...payload.message,
+              deliveryStatus: 'sent',
+              isOptimistic: false,
+              isError: false,
+            };
             return updated;
           }
         }
@@ -149,7 +285,14 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         }
 
         // Add to beginning of descending list (newest first)
-        return [payload.message, ...prev];
+        return [
+          {
+            ...payload.message,
+            deliveryStatus: 'sent',
+            isOptimistic: false,
+          },
+          ...prev,
+        ];
       });
     };
 
@@ -181,6 +324,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         if (s.connected) {
           joinGroupRoom();
         }
+        outboxQueueService.processQueue();
       }
     };
 
@@ -200,7 +344,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [groupId, isPrivateAndNonMember, loadInitialHistory, joinGroupRoom, user?.id]);
+  }, [groupId, isPrivateAndNonMember, loadInitialHistory, joinGroupRoom, user?.id, communitySlug]);
 
   /**
    * Handle text typing broadcast
@@ -236,7 +380,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
   );
 
   /**
-   * Send a chat message with optimistic updates & socket/HTTP fallback
+   * Send a chat message with outbox queue persistence, optimistic updates & socket/HTTP fallback
    */
   const sendMessage = useCallback(
     async (content?: string, attachment?: ChatAttachmentInput): Promise<boolean> => {
@@ -269,6 +413,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         content: trimmed,
         createdAt: nowIso,
         updatedAt: nowIso,
+        deliveryStatus: isConnected ? 'sending' : 'pending',
         sender: {
           id: user?.id || '',
           fullName: user?.fullName || 'You',
@@ -292,56 +437,73 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         tempId,
       };
 
-      // Insert at beginning of newest-first list
+      // 1. Insert at beginning of newest-first list
       setMessages((prev) => [optimisticMsg, ...prev]);
+
+      // 2. Queue in outbox persistence
+      if (communitySlug && user?.id) {
+        await outboxQueueService.enqueue({
+          tempId,
+          conversationId: groupId,
+          conversationType: 'GROUP',
+          content: trimmed,
+          attachment: attachment || null,
+          tenantSlug: communitySlug,
+          userId: user.id,
+        });
+      }
 
       const socket = getChatSocket();
 
+      // 3. Try sending via Socket.IO if connected
       if (socket && socket.connected) {
         socket.emit(
           'send_message',
           { groupId, content: trimmed, attachment, tempId },
-          (res: { success: boolean; message?: ChatMessageItem; error?: string }) => {
+          async (res: { success: boolean; message?: ChatMessageItem; error?: string }) => {
             if (res?.success && res.message) {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.tempId === tempId ? { ...res.message!, isOptimistic: false } : m
-                )
-              );
-            } else {
-              const errorMsg = res?.error || 'Failed to send message.';
+              const saved = res.message;
+              if (communitySlug && user?.id) {
+                await chatPersistenceService.updateMessageDeliveryStatus(tempId, 'sent', {
+                  serverMessageId: saved.id,
+                  tenantSlug: communitySlug,
+                  userId: user.id,
+                });
+              }
               setMessages((prev) =>
                 prev.map((m) =>
                   m.tempId === tempId
-                    ? { ...m, isOptimistic: false, isError: true, errorMessage: errorMsg }
+                    ? { ...saved, deliveryStatus: 'sent', isOptimistic: false, isError: false }
                     : m
                 )
               );
             }
           }
         );
-      } else {
-        // HTTP fallback
-        try {
-          const saved = await chatApi.sendGroupMessage(groupId, trimmed, tempId, attachment);
-          setMessages((prev) =>
-            prev.map((m) => (m.tempId === tempId ? { ...saved, isOptimistic: false } : m))
-          );
-        } catch (err: unknown) {
-          const errorMsg = err instanceof Error ? err.message : 'Failed to send message.';
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.tempId === tempId
-                ? { ...m, isOptimistic: false, isError: true, errorMessage: errorMsg }
-                : m
-            )
-          );
-        }
       }
 
       return true;
     },
-    [groupId, isMember, user]
+    [groupId, isMember, user, communitySlug, isConnected]
+  );
+
+  /**
+   * Retry sending a failed message
+   */
+  const retryMessage = useCallback(
+    async (tempId: string) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.tempId === tempId
+            ? { ...m, deliveryStatus: 'sending', isError: false, errorMessage: undefined, isOptimistic: true }
+            : m
+        )
+      );
+
+      await outboxQueueService.retryMessage(tempId);
+      return true;
+    },
+    []
   );
 
   return {
@@ -351,10 +513,12 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
     hasMore,
     error,
     isConnected,
+    isOffline,
     typingUsers,
     loadInitialHistory,
     loadOlderMessages,
     sendMessage,
+    retryMessage,
     reportTyping,
   };
 }

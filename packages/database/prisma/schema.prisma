@@ -494,17 +494,19 @@ model NotificationLog {
 // --------------------------------------------------------
 
 model ChatMessage {
-  id        String   @id @default(uuid())
-  groupId   String
-  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  senderId  String
-  sender    User     @relation("SentChatMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(uuid())
+  groupId         String
+  group           Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User     @relation("SentChatMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content         String
+  clientMessageId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   attachments ChatAttachment[]
 
+  @@unique([groupId, senderId, clientMessageId])
   @@index([groupId, createdAt(sort: Desc)])
   @@index([senderId])
 }
@@ -548,17 +550,19 @@ model DirectConversationParticipant {
 }
 
 model DirectMessage {
-  id             String             @id @default(uuid())
-  conversationId String
-  conversation   DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  senderId       String
-  sender         User               @relation("SentDirectMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  content        String
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  id              String             @id @default(uuid())
+  conversationId  String
+  conversation    DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User               @relation("SentDirectMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content         String
+  clientMessageId String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   attachments    ChatAttachment[]
 
+  @@unique([conversationId, senderId, clientMessageId])
   @@index([conversationId, createdAt(sort: Desc)])
   @@index([senderId])
 }

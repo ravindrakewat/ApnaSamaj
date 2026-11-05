@@ -21,11 +21,19 @@ export const Alert = {
   alert: (title: string, message?: string, buttons?: any[]) => {},
 };
 
+export const AppState = {
+  currentState: 'active',
+  addEventListener: (_event: string, _handler: (status: string) => void) => {
+    return { remove: () => {} };
+  },
+};
+
 export default {
   Platform,
   StyleSheet,
   Share,
   Linking,
   Alert,
+  AppState,
 };
 
