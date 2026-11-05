@@ -6,6 +6,7 @@ import {
   ChatAttachmentInput,
 } from '@apnasamaj/shared-types';
 import { ListGroupMessagesQueryInput } from '@apnasamaj/validation';
+import { dispatchPushNotificationToMultipleUsers } from '../notifications/push-notification.service';
 
 export class ChatServiceError extends Error {
   public statusCode: number;
@@ -258,6 +259,52 @@ export async function sendChatMessage(
       },
       include: chatMessageInclude,
     });
+
+    // Non-blocking FCM push notification dispatch to group members
+    try {
+      if (client.groupMember && typeof client.groupMember.findMany === 'function') {
+        const activeMembers = await client.groupMember.findMany({
+          where: {
+            groupId: group.id,
+            userId: { not: senderId },
+          },
+          select: { userId: true },
+        });
+
+        if (activeMembers.length > 0) {
+          const memberIds = activeMembers.map((m) => m.userId);
+          const senderName = (message as any)?.sender?.profile?.fullName || 'Community Member';
+          const pushBody = resolvedAttachment
+            ? `${senderName}: ${
+                resolvedAttachment.type === 'IMAGE'
+                  ? 'Sent a photo'
+                  : resolvedAttachment.type === 'VIDEO'
+                  ? 'Sent a video'
+                  : 'Sent a document'
+              }`
+            : `${senderName}: Sent a message`;
+
+          await dispatchPushNotificationToMultipleUsers(
+            {
+              recipientIds: memberIds,
+              category: 'groupMessages',
+              title: group.name,
+              body: pushBody,
+              routingPayload: {
+                type: 'GROUP_CHAT',
+                groupId: group.id,
+                groupSlug: group.slug,
+                entityId: message.id,
+              },
+              excludeUserId: senderId,
+            },
+            client
+          );
+        }
+      }
+    } catch (groupPushErr) {
+      console.warn('[Group Chat] FCM push notification dispatch warning (suppressed):', groupPushErr);
+    }
 
     return mapToChatMessageItem(message as unknown as RawChatMessage);
   } catch (err: unknown) {

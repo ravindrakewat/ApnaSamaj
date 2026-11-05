@@ -78,6 +78,17 @@ enum NotificationType {
   MATRIMONIAL_DOCUMENT_REJECTED
 }
 
+enum DevicePlatform {
+  ANDROID
+  IOS
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
 enum MatrimonialProfileStatus {
   DRAFT
   PENDING_APPROVAL
@@ -212,6 +223,9 @@ model User {
   resolvedMatrimonialReports   MatrimonialReport[]             @relation("MatrimonialReportResolver")
   blockedMatrimonialUsers      MatrimonialBlock[]              @relation("MatrimonialBlocker")
   blockedByMatrimonialUsers    MatrimonialBlock[]              @relation("MatrimonialBlockedUser")
+  devicePushTokens             DevicePushToken[]
+  notificationPreference       NotificationPreference?
+  notificationLogs             NotificationLog[]
 
   @@index([role])
   @@index([status])
@@ -425,6 +439,54 @@ model Notification {
 
   @@index([recipientId, isRead])
   @@index([recipientId, createdAt(sort: Desc)])
+}
+
+// --------------------------------------------------------
+// DEVICE PUSH TOKENS & NOTIFICATION PREFERENCES (FCM)
+// --------------------------------------------------------
+
+model DevicePushToken {
+  id         String         @id @default(uuid())
+  userId     String
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId   String?
+  token      String         @unique
+  platform   DevicePlatform @default(ANDROID)
+  isActive   Boolean        @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([userId, isActive])
+  @@index([token])
+}
+
+model NotificationPreference {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personalMessages Boolean  @default(true)
+  groupMessages    Boolean  @default(true)
+  matrimonial      Boolean  @default(true)
+  likes            Boolean  @default(true)
+  comments         Boolean  @default(true)
+  announcements    Boolean  @default(true)
+  communityUpdates Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model NotificationLog {
+  id        String                     @id @default(uuid())
+  userId    String
+  user      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String
+  status    NotificationDeliveryStatus @default(PENDING)
+  errorCode String?
+  createdAt DateTime                   @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([category, status])
 }
 
 // --------------------------------------------------------

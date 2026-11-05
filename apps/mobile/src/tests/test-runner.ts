@@ -13,6 +13,9 @@ const originalRequire = (moduleMod.prototype as any).require;
   if (id === 'expo-constants') {
     return originalRequire.call(this, path.resolve(__dirname, './mocks/expo-constants'));
   }
+  if (id === 'expo-notifications') {
+    return originalRequire.call(this, path.resolve(__dirname, './mocks/expo-notifications'));
+  }
   if (id === 'react-native-safe-area-context') {
     return originalRequire.call(this, path.resolve(__dirname, './mocks/react-native-safe-area-context'));
   }
@@ -41,6 +44,8 @@ async function runAll() {
   await runPersonalChatFlowTests();
   const { runChatMediaAttachmentsFlowTests } = await import('./chat-media-attachments-flow.test');
   await runChatMediaAttachmentsFlowTests();
+  const { runPushNotificationsFlowTests } = await import('./push-notifications-flow.test');
+  await runPushNotificationsFlowTests();
 }
 
 runAll();

@@ -6,9 +6,12 @@ import {
   NotificationsResponseData,
   MarkNotificationReadResponse,
   MarkAllNotificationsReadResponse,
+  NotificationPreferencesItem,
+  PushNotificationRoutingPayload,
 } from '@apnasamaj/shared-types';
 import { NotificationsQueryInput } from '@apnasamaj/validation';
 import { emitRealtimeNotification, emitRealtimeUnreadCount } from '../chat/chat.socket';
+import { dispatchPushNotificationToUser } from './push-notification.service';
 
 export class NotificationServiceError extends Error {
   public statusCode: number;
@@ -354,6 +357,63 @@ export async function sendNotificationSafely(
       }
     } catch (socketErr: unknown) {
       console.warn('[Notification Service] Real-time socket emission failed:', socketErr);
+    }
+
+    // FCM push notification dispatch (non-blocking)
+    try {
+      let pushCategory: keyof NotificationPreferencesItem = 'communityUpdates';
+      let routingType: PushNotificationRoutingPayload['type'] = 'ANNOUNCEMENT';
+
+      switch (params.type) {
+        case 'POST_LIKE':
+          pushCategory = 'likes';
+          routingType = 'POST_LIKE';
+          break;
+        case 'POST_COMMENT':
+          pushCategory = 'comments';
+          routingType = 'POST_COMMENT';
+          break;
+        case 'MATRIMONIAL_INTEREST_RECEIVED':
+        case 'MATRIMONIAL_INTEREST_ACCEPTED':
+        case 'MATRIMONIAL_PROFILE_APPROVED':
+        case 'MATRIMONIAL_PROFILE_REJECTED':
+        case 'MATRIMONIAL_PROFILE_SUSPENDED':
+        case 'MATRIMONIAL_DOCUMENT_APPROVED':
+        case 'MATRIMONIAL_DOCUMENT_REJECTED':
+          pushCategory = 'matrimonial';
+          routingType = 'MATRIMONIAL_INTEREST';
+          break;
+        case 'GROUP_ROLE_UPDATE':
+        case 'GROUP_MEMBER_REMOVED':
+          pushCategory = 'groupMessages';
+          routingType = 'GROUP_CHAT';
+          break;
+        default:
+          pushCategory = 'communityUpdates';
+          routingType = 'ANNOUNCEMENT';
+          break;
+      }
+
+      await dispatchPushNotificationToUser(
+        {
+          recipientId: params.recipientId,
+          category: pushCategory,
+          title: params.title,
+          body: params.message,
+          routingPayload: {
+            type: routingType,
+            postId: params.entityType === 'POST' ? params.entityId || undefined : undefined,
+            interestId: String(params.type).startsWith('MATRIMONIAL_INTEREST')
+              ? params.entityId || undefined
+              : undefined,
+            entityId: params.entityId || undefined,
+          },
+          actorId: params.actorId,
+        },
+        db
+      );
+    } catch (fcmErr) {
+      console.warn('[Notification Service] FCM push delivery notice (suppressed):', fcmErr);
     }
   } catch (err: unknown) {
     // Non-blocking error handling: log warning, never throw

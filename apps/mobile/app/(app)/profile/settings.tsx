@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,6 +6,8 @@ import {
   Pressable,
   Alert,
   Platform,
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +23,8 @@ import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { TranslationLanguage } from '../../../src/localization/i18n';
+import { notificationsApi } from '../../../src/api/notifications.api';
+import { NotificationPreferencesItem } from '@apnasamaj/shared-types';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -33,6 +37,64 @@ export default function SettingsScreen() {
   const [communityError, setCommunityError] = useState<string | null>(null);
   const [isSwitchingCommunity, setIsSwitchingCommunity] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Notification Preferences State
+  const [preferences, setPreferences] = useState<NotificationPreferencesItem>({
+    personalMessages: true,
+    groupMessages: true,
+    matrimonial: true,
+    likes: true,
+    comments: true,
+    announcements: true,
+    communityUpdates: true,
+  });
+  const [isLoadingPreferences, setIsLoadingPreferences] = useState(true);
+  const [updatingKey, setUpdatingKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadPreferences() {
+      try {
+        const data = await notificationsApi.getNotificationPreferences();
+        if (isMounted) {
+          setPreferences(data);
+        }
+      } catch (err) {
+        console.warn('[Settings] Failed to load notification preferences:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingPreferences(false);
+        }
+      }
+    }
+    loadPreferences();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleTogglePreference = async (key: keyof NotificationPreferencesItem) => {
+    const previous = preferences[key];
+    const updatedValue = !previous;
+
+    setUpdatingKey(key);
+    try {
+      const result = await notificationsApi.updateNotificationPreferences({
+        [key]: updatedValue,
+      });
+      setPreferences(result);
+    } catch (err: unknown) {
+      console.warn(`[Settings] Failed to update ${key} preference:`, err);
+      Alert.alert(
+        language === 'hi' ? 'त्रुटि' : 'Error',
+        language === 'hi'
+          ? 'सूचना प्राथमिकताएं सहेजने में विफल। कृपया पुनः प्रयास करें।'
+          : 'Failed to update notification preference. Please try again.'
+      );
+    } finally {
+      setUpdatingKey(null);
+    }
+  };
 
   /**
    * Change Language handler
@@ -302,7 +364,120 @@ export default function SettingsScreen() {
           </View>
         </Card>
 
-        {/* Section 3: Account & Security */}
+        {/* Section 3: Notification Preferences (FCM) */}
+        <Typography variant="sm" weight="bold" color={theme.colors.textMuted} style={styles.sectionHeader}>
+          {language === 'hi' ? 'सूचनाएं व अलर्ट (NOTIFICATION PREFERENCES)' : 'NOTIFICATION PREFERENCES'}
+        </Typography>
+
+        <Card style={styles.sectionCard}>
+          {isLoadingPreferences ? (
+            <View style={{ padding: 16, alignItems: 'center' }}>
+              <ActivityIndicator color={theme.colors.primary} size="small" />
+            </View>
+          ) : (
+            <>
+              {/* Personal Messages */}
+              <View style={styles.preferenceRow}>
+                <View style={styles.preferenceText}>
+                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
+                    {language === 'hi' ? 'व्यक्तिगत संदेश (Direct Messages)' : 'Personal Messages'}
+                  </Typography>
+                  <Typography variant="xs" color={theme.colors.textSecondary}>
+                    {language === 'hi' ? 'निजी बातचीत के नए संदेश' : 'Direct one-to-one chat messages'}
+                  </Typography>
+                </View>
+                <Switch
+                  value={preferences.personalMessages}
+                  onValueChange={() => handleTogglePreference('personalMessages')}
+                  disabled={updatingKey === 'personalMessages'}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
+                  thumbColor={preferences.personalMessages ? theme.colors.primary : theme.colors.borderStrong}
+                />
+              </View>
+
+              {/* Group Messages */}
+              <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
+                <View style={styles.preferenceText}>
+                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
+                    {language === 'hi' ? 'समूह संदेश (Group Chat)' : 'Group Messages'}
+                  </Typography>
+                  <Typography variant="xs" color={theme.colors.textSecondary}>
+                    {language === 'hi' ? 'समाज समूहों के संदेश' : 'Community group chat notifications'}
+                  </Typography>
+                </View>
+                <Switch
+                  value={preferences.groupMessages}
+                  onValueChange={() => handleTogglePreference('groupMessages')}
+                  disabled={updatingKey === 'groupMessages'}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
+                  thumbColor={preferences.groupMessages ? theme.colors.primary : theme.colors.borderStrong}
+                />
+              </View>
+
+              {/* Matrimonial */}
+              <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
+                <View style={styles.preferenceText}>
+                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
+                    {language === 'hi' ? 'वैवाहिक रिश्ते व रुचि (Matrimonial)' : 'Matrimonial'}
+                  </Typography>
+                  <Typography variant="xs" color={theme.colors.textSecondary}>
+                    {language === 'hi' ? 'नई रुचि और स्वीकृत प्रस्ताव' : 'Interest requests & match updates'}
+                  </Typography>
+                </View>
+                <Switch
+                  value={preferences.matrimonial}
+                  onValueChange={() => handleTogglePreference('matrimonial')}
+                  disabled={updatingKey === 'matrimonial'}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
+                  thumbColor={preferences.matrimonial ? theme.colors.primary : theme.colors.borderStrong}
+                />
+              </View>
+
+              {/* Likes & Comments */}
+              <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
+                <View style={styles.preferenceText}>
+                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
+                    {language === 'hi' ? 'पसंद व टिप्पणियाँ (Social Activity)' : 'Likes & Comments'}
+                  </Typography>
+                  <Typography variant="xs" color={theme.colors.textSecondary}>
+                    {language === 'hi' ? 'आपकी पोस्ट पर प्रतिक्रियाएं' : 'Reactions and comments on your posts'}
+                  </Typography>
+                </View>
+                <Switch
+                  value={preferences.likes && preferences.comments}
+                  onValueChange={() => {
+                    handleTogglePreference('likes');
+                    handleTogglePreference('comments');
+                  }}
+                  disabled={updatingKey === 'likes' || updatingKey === 'comments'}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
+                  thumbColor={preferences.likes ? theme.colors.primary : theme.colors.borderStrong}
+                />
+              </View>
+
+              {/* Announcements & Community Updates */}
+              <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
+                <View style={styles.preferenceText}>
+                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
+                    {language === 'hi' ? 'घोषणाएं व समाज सूचनाएं' : 'Announcements & Updates'}
+                  </Typography>
+                  <Typography variant="xs" color={theme.colors.textSecondary}>
+                    {language === 'hi' ? 'महत्वपूर्ण सामाजिक सूचनाएं' : 'Important community announcements'}
+                  </Typography>
+                </View>
+                <Switch
+                  value={preferences.announcements}
+                  onValueChange={() => handleTogglePreference('announcements')}
+                  disabled={updatingKey === 'announcements'}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
+                  thumbColor={preferences.announcements ? theme.colors.primary : theme.colors.borderStrong}
+                />
+              </View>
+            </>
+          )}
+        </Card>
+
+        {/* Section 4: Account & Security */}
         <Typography variant="sm" weight="bold" color={theme.colors.textMuted} style={styles.sectionHeader}>
           {language === 'hi' ? 'खाता एवं सुरक्षा (ACCOUNT & SECURITY)' : 'ACCOUNT & SECURITY'}
         </Typography>
@@ -492,5 +667,19 @@ const styles = StyleSheet.create({
   },
   logoutBtn: {
     borderWidth: 1.5,
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  preferenceRowBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E2E8F0',
+  },
+  preferenceText: {
+    flex: 1,
+    paddingRight: 16,
   },
 });

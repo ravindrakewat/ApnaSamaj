@@ -23,6 +23,11 @@ export interface AppConfig {
   maxMediaFileSizeBytes: number;
   maxVideoFileSizeBytes: number;
   maxPostMediaCount: number;
+  firebaseServiceAccountKey?: string;
+  firebaseServiceAccountPath?: string;
+  firebaseProjectId?: string;
+  firebaseClientEmail?: string;
+  firebasePrivateKey?: string;
 }
 
 export function validateAndGetConfig(): AppConfig {
@@ -65,6 +70,11 @@ export function validateAndGetConfig(): AppConfig {
     maxMediaFileSizeBytes: isNaN(maxMediaFileSizeBytes) ? 5242880 : maxMediaFileSizeBytes,
     maxVideoFileSizeBytes: isNaN(maxVideoFileSizeBytes) ? 31457280 : maxVideoFileSizeBytes,
     maxPostMediaCount: isNaN(maxPostMediaCount) ? 4 : maxPostMediaCount,
+    firebaseServiceAccountKey: process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+    firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
+    firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
+    firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY,
   };
 }
 

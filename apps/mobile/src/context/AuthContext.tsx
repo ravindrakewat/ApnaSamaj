@@ -14,6 +14,7 @@ import {
 } from '../services/storage.service';
 import { STORAGE_KEYS } from '../constants/storageKeys';
 import { APP_CONFIG } from '../constants/config';
+import { unregisterPushTokenOnLogout } from '../services/notifications';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -299,6 +300,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     try {
+      await unregisterPushTokenOnLogout().catch(console.warn);
       const { refreshToken } = await getAuthTokens();
       await authApi.logout(refreshToken || undefined);
     } finally {
@@ -319,6 +321,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // terminate the old session so old tokens and profile never leak into the new community context
       if (accessToken || user) {
         try {
+          await unregisterPushTokenOnLogout().catch(console.warn);
           const { refreshToken } = await getAuthTokens();
           await authApi.logout(refreshToken || undefined);
         } catch {

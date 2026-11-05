@@ -8,6 +8,10 @@ import {
   markAsReadHandler,
   markAllAsReadHandler,
   deleteNotificationHandler,
+  registerDeviceHandler,
+  deactivateDeviceHandler,
+  getNotificationPreferencesHandler,
+  updateNotificationPreferencesHandler,
 } from './notifications.controller';
 
 export const notificationsRouter = Router();
@@ -15,7 +19,15 @@ export const notificationsRouter = Router();
 // All notification endpoints require authenticated active user status and resolved community tenant
 notificationsRouter.use(authenticateToken, requireActiveUser, requireTenantContext);
 
-// GET /api/v1/notifications/unread-count - Fast unread notification count badge
+// Device token registration & management (FCM)
+notificationsRouter.post('/devices/register', registerDeviceHandler);
+notificationsRouter.delete('/devices/:id', deactivateDeviceHandler);
+
+// User notification preferences
+notificationsRouter.get('/preferences', getNotificationPreferencesHandler);
+notificationsRouter.patch('/preferences', updateNotificationPreferencesHandler);
+
+// In-app notifications feed
 notificationsRouter.get('/unread-count', getUnreadCountHandler);
 
 // GET /api/v1/notifications - Paginated notification feed with optional unread-only filter

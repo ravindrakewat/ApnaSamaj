@@ -75,3 +75,52 @@ export interface MarkNotificationReadResponse {
 export interface MarkAllNotificationsReadResponse {
   updatedCount: number;
 }
+
+// --------------------------------------------------------
+// FCM PUSH NOTIFICATIONS & DEVICE REGISTRATION
+// --------------------------------------------------------
+
+export type DevicePlatform = 'ANDROID' | 'IOS';
+export type PushTokenType = 'FCM' | 'APNS';
+
+export interface RegisterDeviceTokenInput {
+  token: string;
+  platform: DevicePlatform;
+  tokenType?: PushTokenType;
+  deviceId?: string;
+}
+
+export interface RegisterDeviceTokenResponseData {
+  id: string;
+  platform: DevicePlatform;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface NotificationPreferencesItem {
+  personalMessages: boolean;
+  groupMessages: boolean;
+  matrimonial: boolean;
+  likes: boolean;
+  comments: boolean;
+  announcements: boolean;
+  communityUpdates: boolean;
+}
+
+export type UpdateNotificationPreferencesInput = Partial<NotificationPreferencesItem>;
+
+export interface PushNotificationRoutingPayload {
+  type:
+    | 'PERSONAL_CHAT'
+    | 'GROUP_CHAT'
+    | 'MATRIMONIAL_INTEREST'
+    | 'POST_COMMENT'
+    | 'POST_LIKE'
+    | 'ANNOUNCEMENT';
+  conversationId?: string;
+  groupId?: string;
+  groupSlug?: string;
+  postId?: string;
+  interestId?: string;
+  entityId?: string;
+}

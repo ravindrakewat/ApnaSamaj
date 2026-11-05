@@ -63,12 +63,13 @@ The following milestone checkpoint commits have been independently inspected in 
 | `0f209e9` | `0f209e97de4c8e29cfeff48f79583d367ccceaec` | `feat(mobile): complete mobile app batches 1-5` | Mobile App Foundation & Core Modules | **Confirmed** | **Confirmed (Pushed)** |
 | `0c8b73b` | `0c8b73b806c7881e7cc64d12b722abebc997e733` | `feat(mobile): complete UI & navigation audit, remediate safe area insets, and add user flow test suite` | Mobile UI & Navigation Audit | **Confirmed** | **Confirmed (Pushed)** |
 | `a415dba` | `a415dba57ad46ec116101e8f57771641c998c6dd` | `chore: sync complete Apna Samaj development progress` | Batches 6, 7, 8.1, 8.2, 8.3 Checkpoint Sync | **Confirmed** | **Confirmed (Pushed)** |
+| `72c79ec` | `72c79ec2090ef9e697e5a880f83355908a011571` | `feat: add secure chat media attachments` | Batch 8.4 Chat Media Attachments | **Confirmed** | **Confirmed (Pushed)** |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current HEAD:** `a415dba57ad46ec116101e8f57771641c998c6dd` (`a415dba`)
+- **Current HEAD:** `72c79ec2090ef9e697e5a880f83355908a011571` (`72c79ec`)
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
-- **Upstream Sync Status:** Synchronized with `origin/main` (at `a415dba`).
+- **Upstream Sync Status:** Synchronized with `origin/main` (at `72c79ec`).
 
 ---
 
@@ -221,48 +222,50 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **Mobile 8.1** | Mobile WhatsApp-Style Group Chat | Implemented native Community Group Chat in `apps/mobile`: dedicated group chat screen (`app/(app)/group/[slug]/chat.tsx`) with WhatsApp-inspired message bubbles, inverted FlatList with cursor-based pagination, dynamic date separators, auto-scroll, live typing indicators, optimistic UI with tempId, public group membership gates, and private group lockouts. Created `chatApi` wrapping `GET/POST /groups/:id/messages` and `socket.service.ts` singleton managing Socket.IO connection with tenant context. Added Live Group Chat entry CTA button in `group/[slug].tsx`. 12 automated unit & integration tests passing (cumulative 163 mobile tests); 0 typecheck errors across all 9 workspaces. | docs/BATCH_8_1_MOBILE_GROUP_CHAT_REPORT.md | Verified Pass (163/163 mobile tests, 0 typecheck errors across all 9 workspaces) | Working Tree | Ready for user review |
 | **8.2** | Personal One-to-One Messaging Backend | Implemented complete backend foundation for private one-to-one messaging in Apna Samaj without mutating database data. Added `DirectConversation`, `DirectConversationParticipant`, and `DirectMessage` Prisma models with `@@unique([userOneId, userTwoId])` duplicate prevention; generated migration SQL artifact (`20261104203000_add_direct_messaging`); added shared types and Zod schemas; built `direct-chat.service.ts` and `direct-chat.controller.ts` mounted at `/api/v1/chat` (`/inbox`, `/direct`, `/conversations/:id/messages`, `/conversations/:id/read`); added Socket.IO events (`direct:join`, `direct:leave`, `direct:send_message`, `direct:user_typing`, `direct:message_read`) with tenant isolation and server-side authorization. Added 41 automated backend tests (12 scenarios); verified 0 typecheck errors across all 9 workspaces. | docs/BATCH_8_2_PERSONAL_CHAT_BACKEND_REPORT.md | Verified Pass (41/41 direct messaging tests, 47/47 chat isolation tests, 163/163 mobile tests, clean monorepo typecheck) | Working Tree | Ready for user review |
 | **Mobile 8.3** | Mobile Personal One-to-One Chat UI & Unified Chat Inbox | Implemented WhatsApp-style personal one-to-one messaging and unified chat inbox in `apps/mobile`: Member Profile Message button entry point (`apps/mobile/app/(app)/directory/[id].tsx`) with self-chat prevention; Personal Chat screen (`apps/mobile/app/(app)/chat/[id].tsx`) with inverted FlatList, optimistic messages, blue-tick read receipts (`✓✓`), live typing indicators, date separators, and failed message retry; Unified Chat Inbox (`apps/mobile/app/(app)/chat/index.tsx`) with three-way tabs (All Chats, Personal, Groups), combined sorting, live unread badges, and search; dedicated `useDirectChat` hook; expanded `BottomNavigation` with 6 compact tabs; updated Expo Router stack; 16 new automated tests (cumulative 179 mobile tests passing); 0 typecheck errors across all 9 workspaces; Expo Web export bundled in 6.9s. | docs/BATCH_8_3_MOBILE_PERSONAL_CHAT_REPORT.md | Verified Pass (179/179 mobile tests, 41 direct messaging tests, 47 chat isolation tests, 0 typecheck errors across all 9 workspaces, clean Expo Web export) | a415dba | Confirmed (Pushed) | Committed & pushed in a415dba. |
-| **Mobile 8.4** | Chat Media Attachments (Images, Videos & Documents) | Implemented full media attachment pipeline across backend and mobile: added `ChatAttachment` model and migration SQL artifact (`20261105153000_add_chat_attachments`); private Supabase storage bucket `chat-attachments` (`public: false`) with 15-min signed URLs; magic-byte file detection and strict executable rejection; upload endpoints (`POST /api/v1/chat/conversations/:id/attachments`, `POST /api/v1/groups/:id/attachments`); Socket.IO media broadcasting; React Native `expo-document-picker@~13.0.3` integration; `ChatAttachmentButton`, `ChatAttachmentPreview`, `ChatImageMessage`, `ChatVideoMessage`, `ChatDocumentMessage`, `ChatUploadProgress` components in `chat/[id].tsx` and `group/[slug]/chat.tsx`; text-only message backward compatibility; 26 backend tests + 11 mobile flow tests (cumulative 190 mobile tests passing); 0 typecheck errors across all 9 workspaces; Expo web bundle export passed. | docs/BATCH_8_4_CHAT_MEDIA_ATTACHMENTS_REPORT.md | Verified Pass (26 backend tests, 41 direct messaging tests, 47 chat isolation tests, 190/190 mobile tests, 0 typecheck errors across 9 workspaces, clean Expo Web export) | Working Tree | Ready for user review |
+| **Mobile 8.4** | Chat Media Attachments (Images, Videos & Documents) | Implemented full media attachment pipeline across backend and mobile: added `ChatAttachment` model and migration SQL artifact (`20261105153000_add_chat_attachments`); private Supabase storage bucket `chat-attachments` (`public: false`) with 15-min signed URLs; magic-byte file detection and strict executable rejection; upload endpoints (`POST /api/v1/chat/conversations/:id/attachments`, `POST /api/v1/groups/:id/attachments`); Socket.IO media broadcasting; React Native `expo-document-picker@~13.0.3` integration; `ChatAttachmentButton`, `ChatAttachmentPreview`, `ChatImageMessage`, `ChatVideoMessage`, `ChatDocumentMessage`, `ChatUploadProgress` components in `chat/[id].tsx` and `group/[slug]/chat.tsx`; text-only message backward compatibility; 26 backend tests + 11 mobile flow tests (cumulative 190 mobile tests passing); 0 typecheck errors across all 9 workspaces; Expo web bundle export passed. | docs/BATCH_8_4_CHAT_MEDIA_ATTACHMENTS_REPORT.md | Verified Pass (26 backend tests, 41 direct messaging tests, 47 chat isolation tests, 190/190 mobile tests, 0 typecheck errors across 9 workspaces, clean Expo Web export) | 72c79ec | Confirmed (Pushed) | Committed & pushed in 72c79ec. |
+| **Mobile 8.5** | Firebase Cloud Messaging (FCM) Push Notifications | Implemented production-grade native push notification system with direct Firebase Admin SDK (`firebase-admin@^12.7.0`) on backend and `expo-notifications@^0.29.14` on mobile. Physical tenant isolation with `DevicePushToken`, `NotificationPreference`, and `NotificationLog` Prisma models and migration artifact (`20261105170000_add_device_push_tokens_and_preferences`); backend routes (`POST /devices/register`, `DELETE /devices/:id`, `GET /preferences`, `PATCH /preferences`); non-blocking dispatch with invalid token deactivation, self-action suppression, and mock fallback; privacy guarantees (zero raw messages or phone numbers in push data); Android high-priority notification channels (`apna_samaj_default`); cold-start tap handling and route resolution; mobile notification preferences settings UI; 43 backend tests + 10 mobile flow tests passing; 0 errors across 9-workspace typecheck; 1.64 MB Metro web bundle export. | docs/BATCH_8_5_FCM_PUSH_NOTIFICATIONS_REPORT.md | Verified Pass (43/43 push backend tests, 41 direct messaging tests, 29 chat attachment tests, 10 mobile push tests / 200 cumulative mobile tests, 0 monorepo typecheck errors, clean Metro web export) | Working Tree | Ready for user review |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `a415dba57ad46ec116101e8f57771641c998c6dd` (`a415dba`)
-- **Upstream Tracking:** Synchronized with `origin/main` (at `a415dba`).
+- **Current HEAD:** `72c79ec2090ef9e697e5a880f83355908a011571` (`72c79ec`)
+- **Upstream Tracking:** Synchronized with `origin/main` (at `72c79ec`).
 - **Actual `git status --short`:**
   ```text
-  M apps/api/src/middleware/upload.middleware.ts
-  M apps/api/src/modules/chat/chat.controller.ts
-  M apps/api/src/modules/chat/chat.routes.ts
+  M apps/api/package.json
+  M apps/api/src/config/env.ts
   M apps/api/src/modules/chat/chat.service.ts
-  M apps/api/src/modules/chat/chat.socket.ts
-  M apps/api/src/modules/chat/direct-chat.controller.ts
   M apps/api/src/modules/chat/direct-chat.service.ts
-  M apps/api/src/modules/groups/groups.routes.ts
-  M apps/api/src/services/storage.service.ts
-  M apps/mobile/app/(app)/chat/[id].tsx
-  M apps/mobile/app/(app)/group/[slug]/chat.tsx
+  M apps/api/src/modules/notifications/index.ts
+  M apps/api/src/modules/notifications/notifications.controller.ts
+  M apps/api/src/modules/notifications/notifications.routes.ts
+  M apps/api/src/modules/notifications/notifications.service.ts
+  M apps/mobile/app.json
+  M apps/mobile/app/(app)/profile/settings.tsx
+  M apps/mobile/app/_layout.tsx
   M apps/mobile/package.json
-  M apps/mobile/src/api/chat.api.ts
-  M apps/mobile/src/components/index.ts
-  M apps/mobile/src/hooks/useDirectChat.ts
-  M apps/mobile/src/hooks/useGroupChat.ts
+  M apps/mobile/src/context/AuthContext.tsx
   M apps/mobile/src/tests/test-runner.ts
   M docs/PROJECT_HISTORY.md
   M package-lock.json
   M packages/database/prisma/schema.prisma
-  M packages/shared-types/src/chat.ts
-  M packages/validation/src/chat.ts
-  ?? apps/api/src/tests/chat-media-attachments.test.ts
-  ?? apps/mobile/src/components/chat/
-  ?? apps/mobile/src/tests/chat-media-attachments-flow.test.ts
-  ?? docs/BATCH_8_4_CHAT_MEDIA_ATTACHMENTS_REPORT.md
-  ?? packages/database/prisma/migrations/20261105153000_add_chat_attachments/
+  M packages/shared-types/src/notification.ts
+  M packages/validation/src/notification.ts
+  ?? apps/api/src/modules/notifications/push-notification.service.ts
+  ?? apps/api/src/services/firebase.service.ts
+  ?? apps/api/src/tests/push-notifications.test.ts
+  ?? apps/mobile/src/api/notifications.api.ts
+  ?? apps/mobile/src/services/notifications/
+  ?? apps/mobile/src/tests/mocks/expo-notifications.ts
+  ?? apps/mobile/src/tests/push-notifications-flow.test.ts
+  ?? docs/BATCH_8_5_FCM_PUSH_NOTIFICATIONS_REPORT.md
+  ?? packages/database/prisma/migrations/20261105170000_add_device_push_tokens_and_preferences/
   ```
-- **Latest Completed Batch:** **Batch 8.4 (Mobile Track) — Chat Media Attachments (Images, Videos & Documents)**.
-- **Current In-Progress Batch:** Completed and verified; ready for user review.
-- **Exact Next Recommended Batch:** **Batch 8.5 (Mobile Track) — Mobile Push Notifications & Offline Sync or Voice Notes**.
+- **Latest Completed Batch:** **Batch 8.5 (Mobile Track) — Firebase Cloud Messaging (FCM) Push Notifications**.
+- **Current In-Progress Batch:** Completed and verified; working tree preserved for user review.
+- **Exact Next Recommended Batch:** **Batch 8.6 (Mobile Track) — Mobile Voice Notes & Audio Messages or Offline Message Queue**.
 
 ---
 

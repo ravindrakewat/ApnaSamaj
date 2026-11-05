@@ -5,8 +5,16 @@ import {
   NotificationsResponseData,
   MarkNotificationReadResponse,
   MarkAllNotificationsReadResponse,
+  RegisterDeviceTokenResponseData,
+  NotificationPreferencesItem,
 } from '@apnasamaj/shared-types';
-import { notificationIdParamSchema, notificationsQuerySchema } from '@apnasamaj/validation';
+import {
+  notificationIdParamSchema,
+  notificationsQuerySchema,
+  registerDeviceTokenSchema,
+  deviceTokenParamSchema,
+  updateNotificationPreferencesSchema,
+} from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
   getUnreadCount,
@@ -17,6 +25,13 @@ import {
   NotificationServiceError,
   NotificationNotFoundError,
 } from './notifications.service';
+import {
+  registerDevicePushToken,
+  deactivateDevicePushToken,
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  PushServiceError,
+} from './push-notification.service';
 
 /**
  * GET /api/v1/notifications/unread-count
@@ -306,5 +321,218 @@ export async function deleteNotificationHandler(
       timestamp: new Date().toISOString(),
     };
     res.status(500).json(response);
+  }
+}
+
+/**
+ * POST /api/v1/notifications/devices/register
+ * Registers or updates an FCM device push token for the authenticated user.
+ */
+export async function registerDeviceHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsed = registerDeviceTokenSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: parsed.error.errors[0]?.message || 'Invalid device registration data.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const data = await registerDevicePushToken(userId, parsed.data, req.db);
+
+    const response: ApiResponse<RegisterDeviceTokenResponseData> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(201).json(response);
+  } catch (err: unknown) {
+    if (err instanceof PushServiceError) {
+      res.status(err.statusCode).json({
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    console.error('[Notifications Controller] registerDevice error:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to register device token.',
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+/**
+ * DELETE /api/v1/notifications/devices/:id
+ * Deactivates a device push token for the authenticated user upon logout or unregister.
+ */
+export async function deactivateDeviceHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsed = deviceTokenParamSchema.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: parsed.error.errors[0]?.message || 'Invalid device token parameter.',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    await deactivateDevicePushToken(userId, parsed.data.id, req.db);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Device push token deactivated successfully.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof PushServiceError) {
+      res.status(err.statusCode).json({
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    console.error('[Notifications Controller] deactivateDevice error:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to deactivate device token.',
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+/**
+ * GET /api/v1/notifications/preferences
+ * Retrieves user's push notification preferences.
+ */
+export async function getNotificationPreferencesHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const data = await getNotificationPreferences(userId, req.db);
+
+    const response: ApiResponse<NotificationPreferencesItem> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof PushServiceError) {
+      res.status(err.statusCode).json({
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    console.error('[Notifications Controller] getNotificationPreferences error:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve notification preferences.',
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+/**
+ * PATCH /api/v1/notifications/preferences
+ * Updates user's push notification preferences.
+ */
+export async function updateNotificationPreferencesHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const parsed = updateNotificationPreferencesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: parsed.error.errors[0]?.message || 'Invalid notification preferences data.',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const data = await updateNotificationPreferences(userId, parsed.data, req.db);
+
+    const response: ApiResponse<NotificationPreferencesItem> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof PushServiceError) {
+      res.status(err.statusCode).json({
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    console.error('[Notifications Controller] updateNotificationPreferences error:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update notification preferences.',
+      timestamp: new Date().toISOString(),
+    });
   }
 }

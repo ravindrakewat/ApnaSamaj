@@ -18,6 +18,7 @@ import {
   ForbiddenChatError,
 } from './chat.service';
 import { createTemporarySignedChatAttachmentUrl } from '../../services/storage.service';
+import { dispatchPushNotificationToUser } from '../notifications/push-notification.service';
 
 function assertDb(db?: PrismaClient): PrismaClient {
   if (!db) {
@@ -531,6 +532,43 @@ export async function sendDirectMessage(
       lastReadAt: now,
     },
   });
+
+  // Non-blocking FCM push notification dispatch to conversation recipient
+  try {
+    const conv = await client.directConversation.findUnique({
+      where: { id: conversationId },
+      select: { userOneId: true, userTwoId: true },
+    });
+    if (conv) {
+      const recipientId = conv.userOneId === senderId ? conv.userTwoId : conv.userOneId;
+      const senderName = message.sender?.profile?.fullName || 'Community Member';
+      const pushBody = resolvedAttachment
+        ? resolvedAttachment.type === 'IMAGE'
+          ? 'Sent a photo'
+          : resolvedAttachment.type === 'VIDEO'
+          ? 'Sent a video'
+          : 'Sent a document'
+        : 'Sent you a message';
+
+      await dispatchPushNotificationToUser(
+        {
+          recipientId,
+          category: 'personalMessages',
+          title: senderName,
+          body: pushBody,
+          routingPayload: {
+            type: 'PERSONAL_CHAT',
+            conversationId,
+            entityId: message.id,
+          },
+          actorId: senderId,
+        },
+        client
+      );
+    }
+  } catch (pushErr) {
+    console.warn('[Direct Chat] FCM push notification dispatch warning (suppressed):', pushErr);
+  }
 
   return mapToDirectMessageItem(message);
 }
