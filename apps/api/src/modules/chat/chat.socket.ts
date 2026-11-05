@@ -20,6 +20,7 @@ import {
   DirectNewMessageEvent,
   DirectUserTypingEvent,
   DirectMessageReadEvent,
+  ChatAttachmentInput,
 } from '@apnasamaj/shared-types';
 
 export interface AuthenticatedSocketUser {
@@ -426,13 +427,13 @@ export function initChatSocketServer(httpServer: http.Server): Server {
     socket.on(
       'send_message',
       async (
-        payload: { groupId: string; content: string; tempId?: string },
+        payload: { groupId: string; content?: string; attachment?: ChatAttachmentInput; tempId?: string },
         callback?: (res: { success: boolean; message?: ChatMessageItem; error?: string }) => void
       ) => {
         try {
-          const { groupId, content, tempId } = payload || {};
-          if (!groupId || !content) {
-            callback?.({ success: false, error: 'Group ID and message content are required.' });
+          const { groupId, content, attachment, tempId } = payload || {};
+          if (!groupId || (!content && !attachment)) {
+            callback?.({ success: false, error: 'Group ID and message content or attachment are required.' });
             return;
           }
 
@@ -446,7 +447,7 @@ export function initChatSocketServer(httpServer: http.Server): Server {
           }
 
           // Server-side authorization & database persistence on tenant db
-          const savedMessage = await sendChatMessage(groupId, user.id, content, tempId, db);
+          const savedMessage = await sendChatMessage(groupId, user.id, content, attachment, tempId, db);
 
           // Broadcast strictly to sockets in the tenant's group room
           const eventPayload: NewChatMessageEvent = {
@@ -530,13 +531,13 @@ export function initChatSocketServer(httpServer: http.Server): Server {
     socket.on(
       'direct:send_message',
       async (
-        payload: { conversationId: string; content: string; tempId?: string },
+        payload: { conversationId: string; content?: string; attachment?: ChatAttachmentInput; tempId?: string },
         callback?: (res: { success: boolean; message?: DirectMessageItem; error?: string }) => void
       ) => {
         try {
-          const { conversationId, content, tempId } = payload || {};
-          if (!conversationId || !content) {
-            callback?.({ success: false, error: 'Conversation ID and message content are required.' });
+          const { conversationId, content, attachment, tempId } = payload || {};
+          if (!conversationId || (!content && !attachment)) {
+            callback?.({ success: false, error: 'Conversation ID and message content or attachment are required.' });
             return;
           }
 
@@ -554,6 +555,7 @@ export function initChatSocketServer(httpServer: http.Server): Server {
             conversationId,
             user.id,
             content,
+            attachment,
             tempId,
             db
           );

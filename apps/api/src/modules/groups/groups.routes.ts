@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticateToken } from '../../middleware/authenticate';
 import { requireActiveUser } from '../../middleware/authorize';
 import { requireTenantContext } from '../../middleware/tenant.middleware';
-import { singleImageUpload } from '../../middleware/upload.middleware';
+import { singleImageUpload, singleChatAttachmentUpload } from '../../middleware/upload.middleware';
 import {
   listGroupsHandler,
   getGroupBySlugHandler,
@@ -18,7 +18,11 @@ import {
   addGroupMemberHandler,
   listGroupMembersHandler,
 } from './groups.controller';
-import { getGroupMessagesHandler, sendGroupMessageHandler } from '../chat/chat.controller';
+import {
+  getGroupMessagesHandler,
+  sendGroupMessageHandler,
+  uploadGroupAttachmentHandler,
+} from '../chat/chat.controller';
 
 export const groupsRouter = Router();
 
@@ -69,5 +73,8 @@ groupsRouter.get('/:id/messages', getGroupMessagesHandler);
 
 // POST /api/v1/groups/:id/messages - Send a chat message (HTTP fallback)
 groupsRouter.post('/:id/messages', sendGroupMessageHandler);
+
+// POST /api/v1/groups/:id/attachments - Upload media attachment for group chat
+groupsRouter.post('/:id/attachments', singleChatAttachmentUpload, uploadGroupAttachmentHandler);
 
 export default groupsRouter;

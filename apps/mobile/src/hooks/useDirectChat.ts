@@ -5,6 +5,7 @@ import {
   DirectNewMessageEvent,
   DirectUserTypingEvent,
   DirectMessageReadEvent,
+  ChatAttachmentInput,
 } from '@apnasamaj/shared-types';
 import { chatApi } from '../api/chat.api';
 import { connectChatSocket, getChatSocket } from '../services/socket.service';
@@ -278,9 +279,9 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
    * Send a message with optimistic UI and graceful fallback
    */
   const sendMessage = useCallback(
-    async (content: string) => {
-      const trimmed = content.trim();
-      if (!trimmed || !conversationId) return;
+    async (content?: string, attachment?: ChatAttachmentInput) => {
+      const trimmed = content ? content.trim() : '';
+      if ((!trimmed && !attachment) || !conversationId) return;
 
       // Stop typing status immediately
       sendTypingStatus(false);
@@ -302,6 +303,20 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
             avatarUrl: (user as any)?.avatarUrl || null,
           }
           : null,
+        attachments: attachment
+          ? [
+              {
+                id: attachment.id || `temp-att-${Date.now()}`,
+                directMessageId: tempId,
+                type: attachment.type,
+                fileName: attachment.fileName,
+                mimeType: attachment.mimeType,
+                fileSizeBytes: attachment.fileSizeBytes,
+                storagePath: attachment.storagePath,
+                createdAt: nowIso,
+              },
+            ]
+          : [],
         isOptimistic: true,
         tempId,
       };
@@ -319,7 +334,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
 
             socket.emit(
               'direct:send_message',
-              { conversationId, content: trimmed, tempId },
+              { conversationId, content: trimmed, attachment, tempId },
               (res: { success: boolean; message?: DirectMessageItem; error?: string }) => {
                 clearTimeout(timeout);
                 if (res?.success && res.message) {
@@ -345,7 +360,12 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
 
       // HTTP fallback for guaranteed persistence
       try {
-        const savedMessage = await chatApi.sendDirectMessage(conversationId, trimmed, tempId);
+        const savedMessage = await chatApi.sendDirectMessage(
+          conversationId,
+          trimmed,
+          tempId,
+          attachment
+        );
 
         setMessages((prev) =>
           prev.map((m) =>
@@ -381,6 +401,8 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
       const failedMsg = messages.find((m) => m.tempId === tempId && m.isError);
       if (!failedMsg) return;
 
+      const attachment = failedMsg.attachments?.[0];
+
       // Reset error state to optimistic
       setMessages((prev) =>
         prev.map((m) =>
@@ -392,7 +414,8 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         const savedMessage = await chatApi.sendDirectMessage(
           conversationId,
           failedMsg.content,
-          tempId
+          tempId,
+          attachment
         );
 
         setMessages((prev) =>

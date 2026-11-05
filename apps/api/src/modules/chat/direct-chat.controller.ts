@@ -20,6 +20,8 @@ import {
   getDirectMessageHistory,
   sendDirectMessage,
   markDirectConversationAsRead,
+  verifyDirectConversationAccess,
+  getChatAttachmentDetails,
 } from './direct-chat.service';
 import {
   ChatServiceError,
@@ -27,6 +29,7 @@ import {
   ForbiddenChatError,
 } from './chat.service';
 import { getIO } from './chat.socket';
+import { uploadChatAttachment } from '../../services/storage.service';
 
 /**
  * GET /api/v1/chat/inbox
@@ -226,6 +229,7 @@ export async function sendDirectMessageHandler(
       parsedParams.data.id,
       userId,
       parsedBody.data.content,
+      parsedBody.data.attachment,
       parsedBody.data.tempId,
       req.db
     );
@@ -312,6 +316,116 @@ export async function markDirectConversationReadHandler(
     res.status(200).json(response);
   } catch (err: unknown) {
     handleChatError(res, err, 'Failed to mark conversation as read.');
+  }
+}
+
+/**
+ * POST /api/v1/chat/conversations/:id/attachments
+ * Uploads media attachment (image, video, document) for a direct conversation.
+ * Strictly verifies authenticated user is an active participant in this conversation.
+ */
+export async function uploadDirectAttachmentHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Invalid conversation ID format.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const conversationId = parsedParams.data.id;
+
+    // Security check: verify user is a participant of this conversation
+    await verifyDirectConversationAccess(conversationId, userId, req.db);
+
+    if (!req.file || !req.file.buffer) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'No file was provided for upload.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const tenantSlug = req.tenant?.slug || 'default';
+    const attachmentResult = await uploadChatAttachment({
+      tenantSlug,
+      conversationId,
+      fileBuffer: req.file.buffer,
+      originalName: req.file.originalname,
+    });
+
+    const response: ApiResponse<{ attachment: typeof attachmentResult }> = {
+      success: true,
+      data: { attachment: attachmentResult },
+      timestamp: new Date().toISOString(),
+    };
+    res.status(201).json(response);
+  } catch (err: unknown) {
+    handleChatError(res, err, 'Failed to upload chat attachment.');
+  }
+}
+
+/**
+ * GET /api/v1/chat/attachments/:id/url
+ * Retrieves a fresh temporary signed URL for an authorized user to access a chat attachment.
+ */
+export async function getChatAttachmentUrlHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Invalid attachment ID format.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const details = await getChatAttachmentDetails(parsedParams.data.id, userId, req.db);
+
+    const response: ApiResponse<typeof details> = {
+      success: true,
+      data: details,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleChatError(res, err, 'Failed to retrieve attachment URL.');
   }
 }
 

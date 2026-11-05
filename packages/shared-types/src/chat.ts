@@ -8,6 +8,43 @@ export interface ChatMessageSender {
   avatarUrl: string | null;
 }
 
+export type ChatAttachmentType = 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+
+/**
+ * Metadata representation of a chat media attachment (Image, Video, or Document).
+ */
+export interface ChatAttachmentItem {
+  id: string;
+  chatMessageId?: string | null;
+  directMessageId?: string | null;
+  type: ChatAttachmentType;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  storagePath: string;
+  url?: string;
+  createdAt: string;
+}
+
+/**
+ * Client input structure for attaching media to a chat message.
+ */
+export interface ChatAttachmentInput {
+  id?: string;
+  type: ChatAttachmentType;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  storagePath: string;
+}
+
+/**
+ * Response payload returned upon successful media upload.
+ */
+export interface UploadChatAttachmentResponseData {
+  attachment: ChatAttachmentItem;
+}
+
 /**
  * Standard chat message representation across backend, sockets, and frontend.
  */
@@ -19,6 +56,7 @@ export interface ChatMessageItem {
   createdAt: string;
   updatedAt: string;
   sender?: ChatMessageSender | null;
+  attachments?: ChatAttachmentItem[];
 }
 
 /**
@@ -45,7 +83,8 @@ export type ChatMessagesResponseData = PaginatedChatMessagesResponse;
  */
 export interface SendChatMessageInput {
   groupId: string;
-  content: string;
+  content?: string;
+  attachment?: ChatAttachmentInput;
   tempId?: string; // Client-generated UUID for optimistic UI matching
 }
 
@@ -88,6 +127,7 @@ export interface DirectMessageItem {
   createdAt: string;
   updatedAt: string;
   sender?: ChatMessageSender | null;
+  attachments?: ChatAttachmentItem[];
 }
 
 /**
@@ -133,7 +173,8 @@ export interface CreateDirectConversationInput {
  * Input payload for sending a direct message.
  */
 export interface SendDirectMessageInput {
-  content: string;
+  content?: string;
+  attachment?: ChatAttachmentInput;
   tempId?: string;
 }
 

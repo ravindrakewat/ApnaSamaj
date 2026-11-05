@@ -200,10 +200,6 @@ model User {
   directConversationsAsUserTwo DirectConversation[]            @relation("DirectConversationsAsUserTwo")
   directChatParticipations     DirectConversationParticipant[] @relation("DirectChatParticipants")
   sentDirectMessages           DirectMessage[]                 @relation("SentDirectMessages")
-  directConversationsAsUserOne DirectConversation[]  @relation("DirectConversationsAsUserOne")
-  directConversationsAsUserTwo DirectConversation[]  @relation("DirectConversationsAsUserTwo")
-  directChatParticipations     DirectConversationParticipant[] @relation("DirectChatParticipants")
-  sentDirectMessages           DirectMessage[]       @relation("SentDirectMessages")
   matrimonialProfile           MatrimonialProfile?
   sentMatrimonialInterests     MatrimonialInterest[]           @relation("SentMatrimonialInterests")
   receivedMatrimonialInterests MatrimonialInterest[]           @relation("ReceivedMatrimonialInterests")
@@ -445,6 +441,8 @@ model ChatMessage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  attachments ChatAttachment[]
+
   @@index([groupId, createdAt(sort: Desc)])
   @@index([senderId])
 }
@@ -497,8 +495,31 @@ model DirectMessage {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
+  attachments    ChatAttachment[]
+
   @@index([conversationId, createdAt(sort: Desc)])
   @@index([senderId])
+}
+
+// --------------------------------------------------------
+// CHAT MEDIA ATTACHMENTS (PERSONAL & GROUP CHAT)
+// --------------------------------------------------------
+
+model ChatAttachment {
+  id              String         @id @default(uuid())
+  chatMessageId   String?
+  chatMessage     ChatMessage?   @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  directMessageId String?
+  directMessage   DirectMessage? @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+  type            MediaType      @default(IMAGE)
+  fileName        String
+  mimeType        String
+  fileSizeBytes   Int
+  storagePath     String
+  createdAt       DateTime       @default(now())
+
+  @@index([chatMessageId])
+  @@index([directMessageId])
 }
 
 // MATRIMONIAL MODULE

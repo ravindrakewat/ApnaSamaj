@@ -14,11 +14,22 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GroupDetails, GroupPrivacy } from '@apnasamaj/shared-types';
-import { Typography, Card, Button } from '../../../../src/components';
+import {
+  Typography,
+  Card,
+  Button,
+  ChatAttachmentButton,
+  SelectedChatAttachment,
+  ChatAttachmentPreview,
+  ChatImageMessage,
+  ChatVideoMessage,
+  ChatDocumentMessage,
+} from '../../../../src/components';
 import { useTheme } from '../../../../src/hooks/useTheme';
 import { useLocalization } from '../../../../src/hooks/useLocalization';
 import { useAuth } from '../../../../src/hooks/useAuth';
 import { groupsApi } from '../../../../src/api/groups.api';
+import { chatApi } from '../../../../src/api/chat.api';
 import { useGroupChat, ExtendedChatMessage } from '../../../../src/hooks/useGroupChat';
 
 export default function GroupChatScreen() {
@@ -36,6 +47,8 @@ export default function GroupChatScreen() {
   const [isJoining, setIsJoining] = useState<boolean>(false);
   const [inputText, setInputText] = useState<string>('');
   const [isSending, setIsSending] = useState<boolean>(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<SelectedChatAttachment | null>(null);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState<boolean>(false);
 
   /**
    * Load group details
@@ -116,17 +129,34 @@ export default function GroupChatScreen() {
 
   const handleSend = async () => {
     const trimmed = inputText.trim();
-    if (!trimmed || isSending) return;
+    if ((!trimmed && !selectedAttachment) || isSending || isUploadingAttachment) return;
 
     setIsSending(true);
+    const attachmentToUpload = selectedAttachment;
+    const textToSend = trimmed;
+
+    // Reset input fields immediately
     setInputText('');
+    setSelectedAttachment(null);
+
     try {
-      await sendMessage(trimmed);
+      let uploadedAttachmentData = undefined;
+      if (attachmentToUpload && group?.id) {
+        setIsUploadingAttachment(true);
+        uploadedAttachmentData = await chatApi.uploadGroupAttachment(group.id, {
+          uri: attachmentToUpload.uri,
+          name: attachmentToUpload.name,
+          type: attachmentToUpload.type,
+        });
+      }
+
+      await sendMessage(textToSend, uploadedAttachmentData);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'संदेश भेजने में विफल।';
       Alert.alert(language === 'hi' ? 'त्रुटि' : 'Error', msg);
     } finally {
       setIsSending(false);
+      setIsUploadingAttachment(false);
     }
   };
 
@@ -231,10 +261,27 @@ export default function GroupChatScreen() {
               </Typography>
             )}
 
-            {/* Message Body */}
-            <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
-              {item.content}
-            </Typography>
+            {/* Attachment Rendering */}
+            {item.attachments && item.attachments.length > 0 && (
+              <View style={styles.attachmentsWrapper}>
+                {item.attachments.map((att) => {
+                  if (att.type === 'IMAGE') {
+                    return <ChatImageMessage key={att.id} attachment={att} />;
+                  }
+                  if (att.type === 'VIDEO') {
+                    return <ChatVideoMessage key={att.id} attachment={att} />;
+                  }
+                  return <ChatDocumentMessage key={att.id} attachment={att} />;
+                })}
+              </View>
+            )}
+
+            {/* Message Body (only rendered if non-empty content exists) */}
+            {item.content && item.content.trim().length > 0 ? (
+              <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
+                {item.content}
+              </Typography>
+            ) : null}
 
             {/* Timestamp & Status Metadata */}
             <View style={styles.messageMeta}>
@@ -415,35 +462,55 @@ export default function GroupChatScreen() {
             ]}
           >
             {isMember ? (
-              <View style={styles.inputRow}>
-                <View style={[styles.inputPill, { backgroundColor: theme.colors.surfaceSubtle }]}>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder={language === 'hi' ? 'संदेश लिखें...' : 'Type a message...'}
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={inputText}
-                    onChangeText={handleInputChange}
-                    multiline
-                    maxLength={2000}
+              <View style={styles.composerWrapper}>
+                {selectedAttachment && (
+                  <ChatAttachmentPreview
+                    attachment={selectedAttachment}
+                    onCancel={() => setSelectedAttachment(null)}
+                    isUploading={isUploadingAttachment}
                   />
-                </View>
+                )}
+                <View style={styles.inputRow}>
+                  <ChatAttachmentButton
+                    onSelect={(att) => setSelectedAttachment(att)}
+                    disabled={isSending || isUploadingAttachment}
+                  />
+                  <View style={[styles.inputPill, { backgroundColor: theme.colors.surfaceSubtle }]}>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder={language === 'hi' ? 'संदेश लिखें...' : 'Type a message...'}
+                      placeholderTextColor={theme.colors.textMuted}
+                      value={inputText}
+                      onChangeText={handleInputChange}
+                      multiline
+                      maxLength={2000}
+                    />
+                  </View>
 
-                <Pressable
-                  onPress={handleSend}
-                  disabled={!inputText.trim() || isSending}
-                  style={[
-                    styles.sendButton,
-                    {
-                      backgroundColor: inputText.trim() ? '#10B981' : '#CBD5E1',
-                    },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={language === 'hi' ? 'भेजें' : 'Send'}
-                >
-                  <Typography variant="md" color="#FFFFFF" weight="bold">
-                    ➤
-                  </Typography>
-                </Pressable>
+                  <Pressable
+                    onPress={handleSend}
+                    disabled={(!inputText.trim() && !selectedAttachment) || isSending || isUploadingAttachment}
+                    style={[
+                      styles.sendButton,
+                      {
+                        backgroundColor:
+                          (inputText.trim() || selectedAttachment) && !isSending && !isUploadingAttachment
+                            ? '#10B981'
+                            : '#CBD5E1',
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={language === 'hi' ? 'भेजें' : 'Send'}
+                  >
+                    {isSending || isUploadingAttachment ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Typography variant="md" color="#FFFFFF" weight="bold">
+                        ➤
+                      </Typography>
+                    )}
+                  </Pressable>
+                </View>
               </View>
             ) : (
               <View style={styles.joinPromptContainer}>
@@ -592,6 +659,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
     borderColor: '#EF4444',
     borderWidth: 1,
+  },
+  attachmentsWrapper: {
+    marginBottom: 4,
+  },
+  composerWrapper: {
+    width: '100%',
   },
   senderName: {
     marginBottom: 2,

@@ -2,6 +2,8 @@ import { Prisma, PrismaClient } from '@apnasamaj/database';
 import {
   ChatMessageItem,
   ChatMessagesResponseData,
+  ChatAttachmentItem,
+  ChatAttachmentInput,
 } from '@apnasamaj/shared-types';
 import { ListGroupMessagesQueryInput } from '@apnasamaj/validation';
 
@@ -45,13 +47,14 @@ const chatMessageInclude = {
       },
     },
   },
+  attachments: true,
 } satisfies Prisma.ChatMessageInclude;
 
 type RawChatMessage = Prisma.ChatMessageGetPayload<{
   include: typeof chatMessageInclude;
 }>;
 
-function mapToChatMessageItem(item: RawChatMessage): ChatMessageItem {
+export function mapToChatMessageItem(item: RawChatMessage): ChatMessageItem {
   return {
     id: item.id,
     groupId: item.groupId,
@@ -66,6 +69,17 @@ function mapToChatMessageItem(item: RawChatMessage): ChatMessageItem {
           avatarUrl: item.sender.profile?.avatarUrl || null,
         }
       : null,
+    attachments: ((item as any).attachments || []).map((att: any) => ({
+      id: att.id,
+      chatMessageId: att.chatMessageId,
+      type: att.type,
+      fileName: att.fileName,
+      mimeType: att.mimeType,
+      fileSizeBytes: att.fileSizeBytes,
+      storagePath: att.storagePath,
+      url: `https://mock-storage.apnasamaj.local/chat-attachments/${att.storagePath}?token=mock-signed-token&expires=3600`,
+      createdAt: att.createdAt instanceof Date ? att.createdAt.toISOString() : att.createdAt,
+    })),
   };
 }
 
@@ -173,23 +187,53 @@ export async function getGroupChatHistory(
 /**
  * Saves a new chat message to PostgreSQL using Prisma.
  * Verifies active membership on the server before writing.
+ * Overload-safe: supports both (groupId, senderId, content, tempId?, db?, attachment?) and (groupId, senderId, content, attachment?, tempId?, db?).
  */
 export async function sendChatMessage(
   groupIdOrSlug: string,
   senderId: string,
-  content: string,
-  _tempId?: string,
-  db?: PrismaClient
+  content?: string,
+  attachmentOrTempId?: string | ChatAttachmentInput,
+  tempIdOrDb?: string | PrismaClient,
+  db?: PrismaClient,
+  attachment?: ChatAttachmentInput
 ): Promise<ChatMessageItem> {
-  const client = assertDb(db);
+  let resolvedTempId: string | undefined;
+  let resolvedDb: PrismaClient | undefined;
+  let resolvedAttachment: ChatAttachmentInput | undefined;
+
+  if (typeof attachmentOrTempId === 'string' || attachmentOrTempId === undefined) {
+    resolvedTempId = attachmentOrTempId;
+    resolvedDb = tempIdOrDb as PrismaClient | undefined;
+    resolvedAttachment = (db as unknown as ChatAttachmentInput) || attachment;
+  } else {
+    resolvedAttachment = attachmentOrTempId;
+    resolvedTempId = typeof tempIdOrDb === 'string' ? tempIdOrDb : undefined;
+    resolvedDb = db || (typeof tempIdOrDb !== 'string' ? (tempIdOrDb as PrismaClient) : undefined);
+  }
+
+  const client = assertDb(resolvedDb);
   const { group } = await verifyGroupChatAccess(groupIdOrSlug, senderId, true, client);
 
   const trimmed = content ? content.trim() : '';
-  if (!trimmed || trimmed.length < 1) {
-    throw new ChatServiceError('Message content cannot be empty.', 400);
+  if (!trimmed && !resolvedAttachment) {
+    throw new ChatServiceError('Message content or attachment cannot be empty.', 400);
   }
   if (trimmed.length > 2000) {
     throw new ChatServiceError('Message content cannot exceed 2000 characters.', 400);
+  }
+
+  if (resolvedAttachment) {
+    if (!resolvedAttachment.storagePath || !resolvedAttachment.storagePath.includes(group.id)) {
+      throw new ChatServiceError('Invalid attachment path for this group.', 400);
+    }
+    const existingAttachment = await client.chatAttachment.findFirst({
+      where: { storagePath: resolvedAttachment.storagePath },
+      select: { id: true },
+    });
+    if (existingAttachment) {
+      throw new ChatServiceError('Attachment has already been associated with an existing message.', 400);
+    }
   }
 
   try {
@@ -198,6 +242,19 @@ export async function sendChatMessage(
         groupId: group.id,
         senderId,
         content: trimmed,
+        ...(resolvedAttachment
+          ? {
+              attachments: {
+                create: {
+                  type: resolvedAttachment.type,
+                  fileName: resolvedAttachment.fileName,
+                  mimeType: resolvedAttachment.mimeType,
+                  fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                  storagePath: resolvedAttachment.storagePath,
+                },
+              },
+            }
+          : {}),
       },
       include: chatMessageInclude,
     });

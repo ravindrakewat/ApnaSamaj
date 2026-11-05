@@ -2,12 +2,15 @@ import { Router } from 'express';
 import { authenticateToken } from '../../middleware/authenticate';
 import { requireActiveUser } from '../../middleware/authorize';
 import { requireTenantContext } from '../../middleware/tenant.middleware';
+import { singleChatAttachmentUpload } from '../../middleware/upload.middleware';
 import {
   getDirectInboxHandler,
   createDirectConversationHandler,
   getDirectMessagesHandler,
   sendDirectMessageHandler,
   markDirectConversationReadHandler,
+  uploadDirectAttachmentHandler,
+  getChatAttachmentUrlHandler,
 } from './direct-chat.controller';
 
 export const chatRouter = Router();
@@ -26,6 +29,16 @@ chatRouter.get('/conversations/:id/messages', getDirectMessagesHandler);
 
 // POST /api/v1/chat/conversations/:id/messages - Send a direct message
 chatRouter.post('/conversations/:id/messages', sendDirectMessageHandler);
+
+// POST /api/v1/chat/conversations/:id/attachments - Upload media attachment
+chatRouter.post(
+  '/conversations/:id/attachments',
+  singleChatAttachmentUpload,
+  uploadDirectAttachmentHandler
+);
+
+// GET /api/v1/chat/attachments/:id/url - Get authorized temporary signed URL for attachment
+chatRouter.get('/attachments/:id/url', getChatAttachmentUrlHandler);
 
 // POST /api/v1/chat/conversations/:id/read - Mark conversation as read
 chatRouter.post('/conversations/:id/read', markDirectConversationReadHandler);

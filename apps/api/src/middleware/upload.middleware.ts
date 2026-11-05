@@ -287,3 +287,111 @@ export const singleDocumentUpload = (
     next();
   });
 };
+
+// -----------------------------------------------------------------------------
+// CHAT MEDIA ATTACHMENTS UPLOAD MIDDLEWARE (UP TO 50MB)
+// -----------------------------------------------------------------------------
+
+const chatAllowedMimes = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/quicktime',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/octet-stream', // Generic binary often used by mobile pickers for Office docs
+];
+
+function chatAttachmentFileFilter(
+  _req: Request,
+  file: Express.Multer.File,
+  callback: FileFilterCallback
+): void {
+  const mime = file.mimetype.toLowerCase();
+  const ext = path.extname(file.originalname).toLowerCase();
+  const validExtensions = new Set([
+    '.jpg', '.jpeg', '.png', '.webp',
+    '.mp4', '.mov',
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx',
+  ]);
+
+  if (chatAllowedMimes.includes(mime) || validExtensions.has(ext)) {
+    callback(null, true);
+  } else {
+    callback(new Error('INVALID_MIME_TYPE'));
+  }
+}
+
+const chatUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB max ceiling (video limit)
+    files: 1,
+  },
+  fileFilter: chatAttachmentFileFilter,
+});
+
+export const singleChatAttachmentUpload = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  chatUpload.single('file')(req, res, (err: unknown) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          const response: ApiResponse = {
+            success: false,
+            error: 'File size exceeds maximum allowed upload limit (50MB).',
+            timestamp: new Date().toISOString(),
+          };
+          res.status(400).json(response);
+          return;
+        }
+
+        const response: ApiResponse = {
+          success: false,
+          error: `Upload error: ${err.message}`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      if ((err as Error)?.message === 'INVALID_MIME_TYPE') {
+        const response: ApiResponse = {
+          success: false,
+          error:
+            'Unsupported file format. Supported formats: Images (JPEG, PNG, WebP), Videos (MP4, MOV), and Documents (PDF, DOC, DOCX, XLS, XLSX).',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      const response: ApiResponse = {
+        success: false,
+        error: (err as Error)?.message || 'Failed to process file upload.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (!req.file) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'No attachment file was provided in the request.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    next();
+  });
+};

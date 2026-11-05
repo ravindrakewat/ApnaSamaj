@@ -7,6 +7,8 @@ import {
   DirectInboxResponseData,
   DirectMessagesResponseData,
   DirectMessageItem,
+  ChatAttachmentItem,
+  ChatAttachmentInput,
 } from '@apnasamaj/shared-types';
 
 export interface ListGroupMessagesParams {
@@ -22,6 +24,12 @@ export interface ListDirectMessagesParams {
 export interface ListDirectInboxParams {
   limit?: number;
   cursor?: string;
+}
+
+export interface UploadAttachmentFile {
+  uri: string;
+  name: string;
+  type: string;
 }
 
 export const chatApi = {
@@ -59,25 +67,27 @@ export const chatApi = {
 
   /**
    * HTTP fallback for sending a chat message to a group.
-   * Used when Socket.IO connection is unavailable or for guaranteed persistence.
+   * Supports text-only, attachment-only, and text + attachment.
    */
   async sendGroupMessage(
     groupId: string,
-    content: string,
-    tempId?: string
+    content?: string,
+    tempId?: string,
+    attachment?: ChatAttachmentInput
   ): Promise<ChatMessageItem> {
     if (!groupId || !groupId.trim()) {
       throw new Error('Group ID is required to send message.');
     }
     const trimmed = content ? content.trim() : '';
-    if (!trimmed) {
-      throw new Error('Message content cannot be empty.');
+    if (!trimmed && !attachment) {
+      throw new Error('Message content or an attachment is required.');
     }
 
     const response = await apiClient.post<ApiResponse<ChatMessageItem>>(
       `/groups/${encodeURIComponent(groupId.trim())}/messages`,
       {
         content: trimmed,
+        attachment,
         tempId,
       }
     );
@@ -87,6 +97,36 @@ export const chatApi = {
     }
 
     return response.data;
+  },
+
+  /**
+   * Uploads a media attachment (image, video, document) for a community group chat.
+   */
+  async uploadGroupAttachment(
+    groupId: string,
+    file: UploadAttachmentFile
+  ): Promise<ChatAttachmentItem> {
+    if (!groupId || !groupId.trim()) {
+      throw new Error('Group ID is required to upload attachment.');
+    }
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri: file.uri,
+      name: file.name,
+      type: file.type,
+    } as any);
+
+    const response = await apiClient.upload<ApiResponse<{ attachment: ChatAttachmentItem }>>(
+      `/groups/${encodeURIComponent(groupId.trim())}/attachments`,
+      formData
+    );
+
+    if (!response.success || !response.data?.attachment) {
+      throw new Error(response.error || 'Failed to upload group attachment.');
+    }
+
+    return response.data.attachment;
   },
 
   // -------------------------------------------------------------
@@ -161,24 +201,27 @@ export const chatApi = {
 
   /**
    * HTTP fallback for sending a direct message in a conversation.
+   * Supports text-only, attachment-only, and text + attachment.
    */
   async sendDirectMessage(
     conversationId: string,
-    content: string,
-    tempId?: string
+    content?: string,
+    tempId?: string,
+    attachment?: ChatAttachmentInput
   ): Promise<DirectMessageItem> {
     if (!conversationId || !conversationId.trim()) {
       throw new Error('Conversation ID is required to send message.');
     }
     const trimmed = content ? content.trim() : '';
-    if (!trimmed) {
-      throw new Error('Message content cannot be empty.');
+    if (!trimmed && !attachment) {
+      throw new Error('Message content or an attachment is required.');
     }
 
     const response = await apiClient.post<ApiResponse<DirectMessageItem>>(
       `/chat/conversations/${encodeURIComponent(conversationId.trim())}/messages`,
       {
         content: trimmed,
+        attachment,
         tempId,
       }
     );
@@ -188,6 +231,55 @@ export const chatApi = {
     }
 
     return response.data;
+  },
+
+  /**
+   * Uploads a media attachment (image, video, document) for a direct conversation.
+   */
+  async uploadDirectAttachment(
+    conversationId: string,
+    file: UploadAttachmentFile
+  ): Promise<ChatAttachmentItem> {
+    if (!conversationId || !conversationId.trim()) {
+      throw new Error('Conversation ID is required to upload attachment.');
+    }
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri: file.uri,
+      name: file.name,
+      type: file.type,
+    } as any);
+
+    const response = await apiClient.upload<ApiResponse<{ attachment: ChatAttachmentItem }>>(
+      `/chat/conversations/${encodeURIComponent(conversationId.trim())}/attachments`,
+      formData
+    );
+
+    if (!response.success || !response.data?.attachment) {
+      throw new Error(response.error || 'Failed to upload chat attachment.');
+    }
+
+    return response.data.attachment;
+  },
+
+  /**
+   * Retrieves a refreshed signed URL for viewing or downloading a chat attachment.
+   */
+  async getAttachmentUrl(attachmentId: string): Promise<string> {
+    if (!attachmentId || !attachmentId.trim()) {
+      throw new Error('Attachment ID is required.');
+    }
+
+    const response = await apiClient.get<ApiResponse<{ url: string }>>(
+      `/chat/attachments/${encodeURIComponent(attachmentId.trim())}/url`
+    );
+
+    if (!response.success || !response.data?.url) {
+      throw new Error(response.error || 'Failed to get attachment URL.');
+    }
+
+    return response.data.url;
   },
 
   /**

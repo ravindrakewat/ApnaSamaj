@@ -1,14 +1,35 @@
 import { z } from 'zod';
 
-export const sendChatMessageSchema = z.object({
-  groupId: z.string().min(1, 'Group ID is required'),
-  content: z
-    .string()
-    .trim()
-    .min(1, 'Message content cannot be empty')
-    .max(2000, 'Message content cannot exceed 2000 characters'),
-  tempId: z.string().optional(),
+export const chatAttachmentInputSchema = z.object({
+  id: z.string().optional(),
+  type: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT']),
+  fileName: z.string().min(1, 'Filename is required').max(255),
+  mimeType: z.string().min(1, 'MIME type is required').max(100),
+  fileSizeBytes: z.number().int().positive().max(52428800, 'File size exceeds maximum allowed limit (50MB)'),
+  storagePath: z.string().min(1, 'Storage path is required').max(500),
 });
+
+export type ChatAttachmentInputSchema = z.infer<typeof chatAttachmentInputSchema>;
+
+export const sendChatMessageSchema = z
+  .object({
+    groupId: z.string().min(1, 'Group ID is required'),
+    content: z
+      .string()
+      .trim()
+      .max(2000, 'Message content cannot exceed 2000 characters')
+      .optional()
+      .default(''),
+    attachment: chatAttachmentInputSchema.optional(),
+    tempId: z.string().optional(),
+  })
+  .refine(
+    (data) => (data.content && data.content.trim().length > 0) || !!data.attachment,
+    {
+      message: 'Either message content or an attachment is required.',
+      path: ['content'],
+    }
+  );
 
 export type SendChatMessageSchemaInput = z.infer<typeof sendChatMessageSchema>;
 
@@ -25,14 +46,24 @@ export const createDirectConversationSchema = z.object({
 
 export type CreateDirectConversationSchemaInput = z.infer<typeof createDirectConversationSchema>;
 
-export const sendDirectMessageSchema = z.object({
-  content: z
-    .string()
-    .trim()
-    .min(1, 'Message content cannot be empty')
-    .max(2000, 'Message content cannot exceed 2000 characters'),
-  tempId: z.string().optional(),
-});
+export const sendDirectMessageSchema = z
+  .object({
+    content: z
+      .string()
+      .trim()
+      .max(2000, 'Message content cannot exceed 2000 characters')
+      .optional()
+      .default(''),
+    attachment: chatAttachmentInputSchema.optional(),
+    tempId: z.string().optional(),
+  })
+  .refine(
+    (data) => (data.content && data.content.trim().length > 0) || !!data.attachment,
+    {
+      message: 'Either message content or an attachment is required.',
+      path: ['content'],
+    }
+  );
 
 export type SendDirectMessageSchemaInput = z.infer<typeof sendDirectMessageSchema>;
 

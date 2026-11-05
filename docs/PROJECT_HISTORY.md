@@ -61,12 +61,14 @@ The following milestone checkpoint commits have been independently inspected in 
 | `3ed38e5` | `3ed38e5ee1dc4ae068f90b03cf2a7bdaf6a84f08` | `fix(feed): resolve post image upload failure, add composer retry ux, and tune database connection pool` | Post Image Fix | **Confirmed** | **Confirmed (Pushed)** |
 | `a4895ad` | `a4895ade19cc38a63db6f3c309480561ac17c58b` | `feat(matrimonial): complete matrimonial moderation, verification system, security remediation, and batch 15i.2 reports` | Matrimonial Moderation & Verification | **Confirmed** | **Confirmed (Pushed)** |
 | `0f209e9` | `0f209e97de4c8e29cfeff48f79583d367ccceaec` | `feat(mobile): complete mobile app batches 1-5` | Mobile App Foundation & Core Modules | **Confirmed** | **Confirmed (Pushed)** |
+| `0c8b73b` | `0c8b73b806c7881e7cc64d12b722abebc997e733` | `feat(mobile): complete UI & navigation audit, remediate safe area insets, and add user flow test suite` | Mobile UI & Navigation Audit | **Confirmed** | **Confirmed (Pushed)** |
+| `a415dba` | `a415dba57ad46ec116101e8f57771641c998c6dd` | `chore: sync complete Apna Samaj development progress` | Batches 6, 7, 8.1, 8.2, 8.3 Checkpoint Sync | **Confirmed** | **Confirmed (Pushed)** |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current HEAD:** `3ed38e5ee1dc4ae068f90b03cf2a7bdaf6a84f08` (`3ed38e5`)
+- **Current HEAD:** `a415dba57ad46ec116101e8f57771641c998c6dd` (`a415dba`)
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
-- **Upstream Sync Status:** Synchronized with `origin/main` following user push request.
+- **Upstream Sync Status:** Synchronized with `origin/main` (at `a415dba`).
 
 ---
 
@@ -218,78 +220,49 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **Mobile 7** | Mobile Standalone Profile & Settings Module | Transitioned inline profile modal and top-bar language toggles into dedicated standalone screens (`app/(app)/profile/index.tsx` and `app/(app)/profile/settings.tsx`). Features hero avatar with photo upload (`POST /api/v1/users/me/avatar`), comprehensive personal details, profile editing modal (`PATCH /api/v1/users/me/profile`), instant language switcher (Hindi/English with persistence), multi-tenant community switcher with physical tenant isolation warnings & session termination, account overview, confirmed logout with server token revocation, and updated 5-tab BottomNavigation. Added 11 automated tests (cumulative 151 mobile assertions passing); clean 9-workspace typecheck. | docs/BATCH_7_MOBILE_PROFILE_SETTINGS_REPORT.md | Verified Pass (151/151 mobile tests, 0 typecheck errors across all 9 workspaces) | Working Tree | Ready for user review |
 | **Mobile 8.1** | Mobile WhatsApp-Style Group Chat | Implemented native Community Group Chat in `apps/mobile`: dedicated group chat screen (`app/(app)/group/[slug]/chat.tsx`) with WhatsApp-inspired message bubbles, inverted FlatList with cursor-based pagination, dynamic date separators, auto-scroll, live typing indicators, optimistic UI with tempId, public group membership gates, and private group lockouts. Created `chatApi` wrapping `GET/POST /groups/:id/messages` and `socket.service.ts` singleton managing Socket.IO connection with tenant context. Added Live Group Chat entry CTA button in `group/[slug].tsx`. 12 automated unit & integration tests passing (cumulative 163 mobile tests); 0 typecheck errors across all 9 workspaces. | docs/BATCH_8_1_MOBILE_GROUP_CHAT_REPORT.md | Verified Pass (163/163 mobile tests, 0 typecheck errors across all 9 workspaces) | Working Tree | Ready for user review |
 | **8.2** | Personal One-to-One Messaging Backend | Implemented complete backend foundation for private one-to-one messaging in Apna Samaj without mutating database data. Added `DirectConversation`, `DirectConversationParticipant`, and `DirectMessage` Prisma models with `@@unique([userOneId, userTwoId])` duplicate prevention; generated migration SQL artifact (`20261104203000_add_direct_messaging`); added shared types and Zod schemas; built `direct-chat.service.ts` and `direct-chat.controller.ts` mounted at `/api/v1/chat` (`/inbox`, `/direct`, `/conversations/:id/messages`, `/conversations/:id/read`); added Socket.IO events (`direct:join`, `direct:leave`, `direct:send_message`, `direct:user_typing`, `direct:message_read`) with tenant isolation and server-side authorization. Added 41 automated backend tests (12 scenarios); verified 0 typecheck errors across all 9 workspaces. | docs/BATCH_8_2_PERSONAL_CHAT_BACKEND_REPORT.md | Verified Pass (41/41 direct messaging tests, 47/47 chat isolation tests, 163/163 mobile tests, clean monorepo typecheck) | Working Tree | Ready for user review |
-| **Mobile 8.3** | Mobile Personal One-to-One Chat UI & Unified Chat Inbox | Implemented WhatsApp-style personal one-to-one messaging and unified chat inbox in `apps/mobile`: Member Profile Message button entry point (`apps/mobile/app/(app)/directory/[id].tsx`) with self-chat prevention; Personal Chat screen (`apps/mobile/app/(app)/chat/[id].tsx`) with inverted FlatList, optimistic messages, blue-tick read receipts (`✓✓`), live typing indicators, date separators, and failed message retry; Unified Chat Inbox (`apps/mobile/app/(app)/chat/index.tsx`) with three-way tabs (All Chats, Personal, Groups), combined sorting, live unread badges, and search; dedicated `useDirectChat` hook; expanded `BottomNavigation` with 6 compact tabs; updated Expo Router stack; 16 new automated tests (cumulative 179 mobile tests passing); 0 typecheck errors across all 9 workspaces; Expo Web export bundled in 6.9s. | docs/BATCH_8_3_MOBILE_PERSONAL_CHAT_REPORT.md | Verified Pass (179/179 mobile tests, 41 direct messaging tests, 47 chat isolation tests, 0 typecheck errors across all 9 workspaces, clean Expo Web export) | Working Tree | Ready for user review |
+| **Mobile 8.3** | Mobile Personal One-to-One Chat UI & Unified Chat Inbox | Implemented WhatsApp-style personal one-to-one messaging and unified chat inbox in `apps/mobile`: Member Profile Message button entry point (`apps/mobile/app/(app)/directory/[id].tsx`) with self-chat prevention; Personal Chat screen (`apps/mobile/app/(app)/chat/[id].tsx`) with inverted FlatList, optimistic messages, blue-tick read receipts (`✓✓`), live typing indicators, date separators, and failed message retry; Unified Chat Inbox (`apps/mobile/app/(app)/chat/index.tsx`) with three-way tabs (All Chats, Personal, Groups), combined sorting, live unread badges, and search; dedicated `useDirectChat` hook; expanded `BottomNavigation` with 6 compact tabs; updated Expo Router stack; 16 new automated tests (cumulative 179 mobile tests passing); 0 typecheck errors across all 9 workspaces; Expo Web export bundled in 6.9s. | docs/BATCH_8_3_MOBILE_PERSONAL_CHAT_REPORT.md | Verified Pass (179/179 mobile tests, 41 direct messaging tests, 47 chat isolation tests, 0 typecheck errors across all 9 workspaces, clean Expo Web export) | a415dba | Confirmed (Pushed) | Committed & pushed in a415dba. |
+| **Mobile 8.4** | Chat Media Attachments (Images, Videos & Documents) | Implemented full media attachment pipeline across backend and mobile: added `ChatAttachment` model and migration SQL artifact (`20261105153000_add_chat_attachments`); private Supabase storage bucket `chat-attachments` (`public: false`) with 15-min signed URLs; magic-byte file detection and strict executable rejection; upload endpoints (`POST /api/v1/chat/conversations/:id/attachments`, `POST /api/v1/groups/:id/attachments`); Socket.IO media broadcasting; React Native `expo-document-picker@~13.0.3` integration; `ChatAttachmentButton`, `ChatAttachmentPreview`, `ChatImageMessage`, `ChatVideoMessage`, `ChatDocumentMessage`, `ChatUploadProgress` components in `chat/[id].tsx` and `group/[slug]/chat.tsx`; text-only message backward compatibility; 26 backend tests + 11 mobile flow tests (cumulative 190 mobile tests passing); 0 typecheck errors across all 9 workspaces; Expo web bundle export passed. | docs/BATCH_8_4_CHAT_MEDIA_ATTACHMENTS_REPORT.md | Verified Pass (26 backend tests, 41 direct messaging tests, 47 chat isolation tests, 190/190 mobile tests, 0 typecheck errors across 9 workspaces, clean Expo Web export) | Working Tree | Ready for user review |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `0c8b73b3e0cb3a0c0ad51b54ca0df82688009a25` (`0c8b73b`)
-- **Upstream Tracking:** Synchronized with `origin/main` (at `0c8b73b`).
+- **Current HEAD:** `a415dba57ad46ec116101e8f57771641c998c6dd` (`a415dba`)
+- **Upstream Tracking:** Synchronized with `origin/main` (at `a415dba`).
 - **Actual `git status --short`:**
   ```text
-  M apps/api/src/app.ts
+  M apps/api/src/middleware/upload.middleware.ts
+  M apps/api/src/modules/chat/chat.controller.ts
+  M apps/api/src/modules/chat/chat.routes.ts
+  M apps/api/src/modules/chat/chat.service.ts
   M apps/api/src/modules/chat/chat.socket.ts
-  M apps/api/src/modules/chat/index.ts
-  M apps/mobile/app.json
-  M apps/mobile/app/(app)/_layout.tsx
-  M apps/mobile/app/(app)/directory/[id].tsx
-  M apps/mobile/app/(app)/group/[slug].tsx
-  M apps/mobile/app/(app)/index.tsx
-  M apps/mobile/app/(auth)/login.tsx
-  M apps/mobile/app/(auth)/register.tsx
-  M apps/mobile/metro.config.js
-  M apps/mobile/src/api/auth.api.ts
-  M apps/mobile/src/api/client.ts
-  M apps/mobile/src/api/users.api.ts
-  M apps/mobile/src/components/BottomNavigation.tsx
+  M apps/api/src/modules/chat/direct-chat.controller.ts
+  M apps/api/src/modules/chat/direct-chat.service.ts
+  M apps/api/src/modules/groups/groups.routes.ts
+  M apps/api/src/services/storage.service.ts
+  M apps/mobile/app/(app)/chat/[id].tsx
+  M apps/mobile/app/(app)/group/[slug]/chat.tsx
+  M apps/mobile/package.json
+  M apps/mobile/src/api/chat.api.ts
   M apps/mobile/src/components/index.ts
-  M apps/mobile/src/constants/config.ts
-  M apps/mobile/src/context/AuthContext.tsx
-  M apps/mobile/src/services/storage.service.ts
+  M apps/mobile/src/hooks/useDirectChat.ts
+  M apps/mobile/src/hooks/useGroupChat.ts
   M apps/mobile/src/tests/test-runner.ts
   M docs/PROJECT_HISTORY.md
-  M package.json
+  M package-lock.json
   M packages/database/prisma/schema.prisma
   M packages/shared-types/src/chat.ts
-  M packages/shared-types/src/index.ts
   M packages/validation/src/chat.ts
-  ?? .expo/
-  ?? App.js
-  ?? apps/api/src/modules/chat/chat.routes.ts
-  ?? apps/api/src/modules/chat/direct-chat.controller.ts
-  ?? apps/api/src/modules/chat/direct-chat.service.ts
-  ?? apps/api/src/tests/direct-messaging-flow.test.ts
-  ?? apps/mobile/app/(app)/chat/
-  ?? apps/mobile/app/(app)/group/[slug]/
-  ?? apps/mobile/app/(app)/matrimonial/
-  ?? apps/mobile/app/(app)/profile/
-  ?? apps/mobile/src/api/chat.api.ts
-  ?? apps/mobile/src/api/matrimonial.api.ts
-  ?? apps/mobile/src/components/MatrimonialCard.tsx
-  ?? apps/mobile/src/hooks/useDirectChat.ts
-  ?? apps/mobile/src/hooks/useGroupChat.ts
-  ?? apps/mobile/src/services/socket.service.ts
-  ?? apps/mobile/src/tests/group-chat-flow.test.ts
-  ?? apps/mobile/src/tests/matrimonial-flow.test.ts
-  ?? apps/mobile/src/tests/personal-chat-flow.test.ts
-  ?? apps/mobile/src/tests/profile-settings-flow.test.ts
-  ?? apps/mobile/src/tests/session-persistence.test.ts
-  ?? docs/BATCH_6_MOBILE_MATRIMONIAL_REPORT.md
-  ?? docs/BATCH_7_MOBILE_PROFILE_SETTINGS_REPORT.md
-  ?? docs/BATCH_8_1_MOBILE_GROUP_CHAT_REPORT.md
-  ?? docs/BATCH_8_2_PERSONAL_CHAT_BACKEND_REPORT.md
-  ?? docs/BATCH_8_3_MOBILE_PERSONAL_CHAT_REPORT.md
-  ?? docs/BATCH_8_MESSAGING_BACKEND_AUDIT.md
-  ?? docs/MOBILE_APP_DEVELOPMENT_DASHBOARD.md
-  ?? docs/MOBILE_SESSION_PERSISTENCE_FIX_REPORT.md
-  ?? packages/database/prisma/migrations/20261104203000_add_direct_messaging/
-  ?? tsconfig.json
+  ?? apps/api/src/tests/chat-media-attachments.test.ts
+  ?? apps/mobile/src/components/chat/
+  ?? apps/mobile/src/tests/chat-media-attachments-flow.test.ts
+  ?? docs/BATCH_8_4_CHAT_MEDIA_ATTACHMENTS_REPORT.md
+  ?? packages/database/prisma/migrations/20261105153000_add_chat_attachments/
   ```
-- **Latest Completed Batch:** **Batch 8.3 (Mobile Track) — Mobile Personal One-to-One Chat UI & Unified Chat Inbox**.
+- **Latest Completed Batch:** **Batch 8.4 (Mobile Track) — Chat Media Attachments (Images, Videos & Documents)**.
 - **Current In-Progress Batch:** Completed and verified; ready for user review.
-- **Exact Next Recommended Batch:** **Batch 8.4 (Mobile Track) — Mobile Chat Polish & Message Actions**.
+- **Exact Next Recommended Batch:** **Batch 8.5 (Mobile Track) — Mobile Push Notifications & Offline Sync or Voice Notes**.
 
 ---
 

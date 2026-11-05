@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 import { UploadMediaResponseData } from '@apnasamaj/shared-types';
 import { config } from '../config/env';
 import { getSupabaseClient } from '../config/supabase';
@@ -783,3 +784,358 @@ export async function deleteMatrimonialDocumentObject(storagePath: string): Prom
     console.warn('[Storage Service] Failed to delete document from private bucket:', err);
   }
 }
+
+// -----------------------------------------------------------------------------
+// CHAT MEDIA ATTACHMENTS (IMAGES, VIDEOS, DOCUMENTS - PRIVATE BUCKET)
+// -----------------------------------------------------------------------------
+
+export const CHAT_ATTACHMENTS_BUCKET =
+  config.supabasePrivateStorageBucket || 'chat-attachments';
+
+export const CHAT_MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
+export const CHAT_MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50MB
+export const CHAT_MAX_DOCUMENT_BYTES = 20 * 1024 * 1024; // 20MB
+
+const FORBIDDEN_EXTENSIONS = new Set([
+  '.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.phtml',
+  '.js', '.ts', '.mjs', '.apk', '.jar', '.msi', '.bin',
+  '.com', '.vbs', '.py', '.pl', '.cgi',
+]);
+
+export interface DetectedChatAttachment {
+  type: 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  mimeType: string;
+  extension: string;
+}
+
+/**
+ * Validates file content magic bytes and matches against supported chat formats.
+ * Strictly rejects scripts, executables, and spoofed file types.
+ */
+export function detectChatAttachmentTypeAndMime(
+  buffer: Buffer,
+  originalName: string
+): DetectedChatAttachment | null {
+  if (!buffer || buffer.length < 4) return null;
+
+  const ext = (path.extname(originalName || '').toLowerCase());
+  if (FORBIDDEN_EXTENSIONS.has(ext)) {
+    return null;
+  }
+
+  // Reject Windows executables (MZ)
+  if (buffer[0] === 0x4d && buffer[1] === 0x5a) {
+    return null;
+  }
+
+  // Reject Linux/Unix ELF binaries
+  if (buffer[0] === 0x7f && buffer[1] === 0x45 && buffer[2] === 0x4c && buffer[3] === 0x46) {
+    return null;
+  }
+
+  // Reject Shell scripts
+  if (buffer[0] === 0x23 && buffer[1] === 0x21) {
+    return null;
+  }
+
+  // 1. Check Images (JPEG, PNG, WebP)
+  const imageMime = detectImageMimeType(buffer);
+  if (imageMime && imageMime !== 'image/gif') {
+    const imgExt = imageMime === 'image/jpeg' ? 'jpg' : (imageMime === 'image/png' ? 'png' : 'webp');
+    return {
+      type: 'IMAGE',
+      mimeType: imageMime,
+      extension: imgExt,
+    };
+  }
+
+  // 2. Check Videos (MP4, MOV / QuickTime)
+  if (buffer.length >= 12) {
+    // ISO BMFF box at offset 4: ftyp, moov, mdat, wide
+    const isIsoBmff =
+      (buffer[4] === 0x66 && buffer[5] === 0x74 && buffer[6] === 0x79 && buffer[7] === 0x70) || // ftyp
+      (buffer[4] === 0x6d && buffer[5] === 0x6f && buffer[6] === 0x6f && buffer[7] === 0x76) || // moov
+      (buffer[4] === 0x6d && buffer[5] === 0x64 && buffer[6] === 0x61 && buffer[7] === 0x74) || // mdat
+      (buffer[4] === 0x77 && buffer[5] === 0x69 && buffer[6] === 0x64 && buffer[7] === 0x65);   // wide
+
+    if (isIsoBmff) {
+      const isMov = ext === '.mov' || (buffer.length >= 12 && buffer.toString('latin1', 8, 12) === 'qt  ');
+      return {
+        type: 'VIDEO',
+        mimeType: isMov ? 'video/quicktime' : 'video/mp4',
+        extension: isMov ? 'mov' : 'mp4',
+      };
+    }
+  }
+
+  // 3. Check Documents (PDF, DOC, DOCX, XLS, XLSX)
+  // PDF: %PDF- (0x25 0x50 0x44 0x46)
+  if (
+    buffer[0] === 0x25 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x44 &&
+    buffer[3] === 0x46
+  ) {
+    return {
+      type: 'DOCUMENT',
+      mimeType: 'application/pdf',
+      extension: 'pdf',
+    };
+  }
+
+  // CFBF / OLE Compound File (Legacy DOC and XLS): D0 CF 11 E0 A1 B1 1A E1
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0xd0 &&
+    buffer[1] === 0xcf &&
+    buffer[2] === 0x11 &&
+    buffer[3] === 0xe0 &&
+    buffer[4] === 0xa1 &&
+    buffer[5] === 0xb1 &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0xe1
+  ) {
+    if (ext === '.xls') {
+      return {
+        type: 'DOCUMENT',
+        mimeType: 'application/vnd.ms-excel',
+        extension: 'xls',
+      };
+    }
+    return {
+      type: 'DOCUMENT',
+      mimeType: 'application/msword',
+      extension: 'doc',
+    };
+  }
+
+  // PK Zip Container (Modern DOCX and XLSX): 50 4B 03 04 or 05 06 or 07 08
+  if (
+    buffer[0] === 0x50 &&
+    buffer[1] === 0x4b &&
+    (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07)
+  ) {
+    if (ext === '.xlsx') {
+      return {
+        type: 'DOCUMENT',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        extension: 'xlsx',
+      };
+    }
+    if (ext === '.docx' || ext === '.doc') {
+      return {
+        type: 'DOCUMENT',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        extension: 'docx',
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Ensures that the dedicated private storage bucket exists for chat attachments.
+ * Strictly private (public: false) with a 50MB file size limit.
+ */
+export async function ensureChatAttachmentBucketExists(): Promise<void> {
+  if (!config.supabaseUrl || !config.supabaseSecretKey) {
+    return;
+  }
+  let supabase;
+  try {
+    supabase = getSupabaseClient();
+  } catch {
+    return;
+  }
+
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+  if (listError) {
+    console.warn('[Storage Service] Could not verify chat attachment bucket list:', listError.message);
+    return;
+  }
+
+  const exists = buckets?.some((b) => b.name === CHAT_ATTACHMENTS_BUCKET);
+  if (!exists) {
+    const { error: createError } = await supabase.storage.createBucket(CHAT_ATTACHMENTS_BUCKET, {
+      public: false, // STRICTLY PRIVATE
+      fileSizeLimit: 52428800, // 50MB limit
+      allowedMimeTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'video/mp4',
+        'video/quicktime',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ],
+    });
+
+    if (createError && !createError.message.includes('already exists')) {
+      console.error('[Storage Service] Failed to create chat attachment bucket:', createError.message);
+    }
+  }
+}
+
+export interface UploadChatAttachmentParams {
+  tenantSlug: string;
+  conversationId?: string;
+  groupId?: string;
+  fileBuffer: Buffer;
+  originalName: string;
+}
+
+export interface UploadChatAttachmentResult {
+  id: string;
+  type: 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  storagePath: string;
+  url: string;
+  createdAt: string;
+}
+
+/**
+ * Uploads a validated chat attachment to private storage with tenant & conversation isolation.
+ */
+export async function uploadChatAttachment(
+  params: UploadChatAttachmentParams
+): Promise<UploadChatAttachmentResult> {
+  const { tenantSlug, conversationId, groupId, fileBuffer, originalName } = params;
+
+  if (!fileBuffer || fileBuffer.length === 0) {
+    throw new StorageError('Uploaded file is empty.', 400);
+  }
+
+  // 1. Content & magic bytes inspection
+  const detected = detectChatAttachmentTypeAndMime(fileBuffer, originalName);
+  if (!detected) {
+    throw new InvalidMimeTypeError(
+      'Unsupported file format or corrupted content. Supported types: Images (JPEG, PNG, WebP), Videos (MP4, MOV), and Documents (PDF, DOC, DOCX, XLS, XLSX).'
+    );
+  }
+
+  // 2. Strict size validation per attachment type
+  if (detected.type === 'IMAGE' && fileBuffer.length > CHAT_MAX_IMAGE_BYTES) {
+    throw new OversizedFileError(CHAT_MAX_IMAGE_BYTES);
+  }
+  if (detected.type === 'VIDEO' && fileBuffer.length > CHAT_MAX_VIDEO_BYTES) {
+    throw new OversizedFileError(CHAT_MAX_VIDEO_BYTES);
+  }
+  if (detected.type === 'DOCUMENT' && fileBuffer.length > CHAT_MAX_DOCUMENT_BYTES) {
+    throw new OversizedFileError(CHAT_MAX_DOCUMENT_BYTES);
+  }
+
+  // 3. Safe filename and storage path generation
+  const safeName = path.basename(originalName || `attachment.${detected.extension}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const fileId = crypto.randomUUID();
+  const folder = conversationId
+    ? `direct/${tenantSlug}/${conversationId}`
+    : `groups/${tenantSlug}/${groupId}`;
+  const storagePath = `${folder}/${fileId}.${detected.extension}`;
+
+  let signedUrl = '';
+
+  // 4. Upload to Supabase Storage if configured
+  if (config.supabaseUrl && config.supabaseSecretKey) {
+    try {
+      const supabase = getSupabaseClient();
+      let { error: uploadError } = await supabase.storage
+        .from(CHAT_ATTACHMENTS_BUCKET)
+        .upload(storagePath, fileBuffer, {
+          contentType: detected.mimeType,
+          upsert: false,
+        });
+
+      if (
+        uploadError &&
+        (uploadError.message.toLowerCase().includes('not found') ||
+          uploadError.message.toLowerCase().includes('bucket'))
+      ) {
+        try {
+          await ensureChatAttachmentBucketExists();
+          const retry = await supabase.storage
+            .from(CHAT_ATTACHMENTS_BUCKET)
+            .upload(storagePath, fileBuffer, {
+              contentType: detected.mimeType,
+              upsert: false,
+            });
+          uploadError = retry.error;
+        } catch (retryErr) {
+          console.warn('[Storage Service] Chat attachment bucket auto-creation retry failed:', retryErr);
+        }
+      }
+
+      if (uploadError) {
+        console.error('[Storage Service] Supabase chat attachment upload failed:', uploadError.message);
+        throw new StorageError(`Failed to upload attachment: ${uploadError.message}`, 500);
+      }
+
+      // Generate initial 1-hour signed URL
+      const { data: signedData, error: signError } = await supabase.storage
+        .from(CHAT_ATTACHMENTS_BUCKET)
+        .createSignedUrl(storagePath, 3600);
+
+      if (!signError && signedData?.signedUrl) {
+        signedUrl = signedData.signedUrl;
+      }
+    } catch (err: unknown) {
+      if (err instanceof StorageError) throw err;
+      throw new StorageError(
+        `Failed to upload attachment: ${err instanceof Error ? err.message : 'Unknown storage error'}`,
+        500
+      );
+    }
+  }
+
+  if (!signedUrl) {
+    signedUrl = `https://mock-storage.apnasamaj.local/${CHAT_ATTACHMENTS_BUCKET}/${storagePath}?token=mock-signed-token&expires=3600`;
+  }
+
+  return {
+    id: fileId,
+    type: detected.type,
+    fileName: safeName,
+    mimeType: detected.mimeType,
+    fileSizeBytes: fileBuffer.length,
+    storagePath,
+    url: signedUrl,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Generates a short-lived signed URL for an authorized user to access a private chat attachment.
+ */
+export async function createTemporarySignedChatAttachmentUrl(
+  storagePath: string,
+  expiresInSeconds: number = 3600
+): Promise<string> {
+  if (config.supabaseUrl && config.supabaseSecretKey) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.storage
+        .from(CHAT_ATTACHMENTS_BUCKET)
+        .createSignedUrl(storagePath, expiresInSeconds);
+
+      if (error) {
+        console.warn('[Storage Service] Supabase createSignedUrl notice:', error.message);
+        // Fallback for mock/test objects that were not uploaded to live Supabase
+        return `https://mock-storage.apnasamaj.local/${CHAT_ATTACHMENTS_BUCKET}/${storagePath}?token=mock-signed-token&expires=${expiresInSeconds}`;
+      }
+      if (data?.signedUrl) {
+        return data.signedUrl;
+      }
+    } catch (err) {
+      console.warn('[Storage Service] Supabase signed URL exception:', err);
+    }
+  }
+
+  // Development / test fallback
+  return `https://mock-storage.apnasamaj.local/${CHAT_ATTACHMENTS_BUCKET}/${storagePath}?token=mock-signed-token&expires=${expiresInSeconds}`;
+}
+

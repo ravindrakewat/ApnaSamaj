@@ -11,4 +11,5 @@ export * from './BottomNavigation';
 export * from './MemberCard';
 export * from './GroupCard';
 export * from './MatrimonialCard';
+export * from './chat';
 

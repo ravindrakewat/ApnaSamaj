@@ -13,7 +13,17 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Typography, Card, Button } from '../../../src/components';
+import {
+  Typography,
+  Card,
+  Button,
+  ChatAttachmentButton,
+  SelectedChatAttachment,
+  ChatAttachmentPreview,
+  ChatImageMessage,
+  ChatVideoMessage,
+  ChatDocumentMessage,
+} from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
 import { useAuth } from '../../../src/hooks/useAuth';
@@ -32,6 +42,8 @@ export default function PersonalChatScreen() {
 
   const [inputText, setInputText] = useState<string>('');
   const [isSending, setIsSending] = useState<boolean>(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<SelectedChatAttachment | null>(null);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState<boolean>(false);
   const [resolvedParticipant, setResolvedParticipant] = useState<{
     fullName: string;
     avatarUrl: string | null;
@@ -70,7 +82,7 @@ export default function PersonalChatScreen() {
             });
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [conversationId, resolvedParticipant]);
 
@@ -97,14 +109,37 @@ export default function PersonalChatScreen() {
 
   const handleSend = async () => {
     const trimmed = inputText.trim();
-    if (!trimmed || isSending) return;
+    if ((!trimmed && !selectedAttachment) || isSending || isUploadingAttachment) return;
 
-    setInputText('');
     setIsSending(true);
+    const attachmentToUpload = selectedAttachment;
+    const textToSend = trimmed;
+
+    // Reset input fields immediately
+    setInputText('');
+    setSelectedAttachment(null);
+
     try {
-      await sendMessage(trimmed);
+      let uploadedAttachmentData = undefined;
+      if (attachmentToUpload && conversationId) {
+        setIsUploadingAttachment(true);
+        uploadedAttachmentData = await chatApi.uploadDirectAttachment(conversationId, {
+          uri: attachmentToUpload.uri,
+          name: attachmentToUpload.name,
+          type: attachmentToUpload.type,
+        });
+      }
+
+      await sendMessage(textToSend, uploadedAttachmentData);
+    } catch (err: unknown) {
+      console.warn('[PersonalChatScreen] Failed to send message:', err);
+      Alert.alert(
+        language === 'hi' ? 'त्रुटि' : 'Error',
+        language === 'hi' ? 'संदेश भेजने में त्रुटि हुई।' : 'Failed to send message.'
+      );
     } finally {
       setIsSending(false);
+      setIsUploadingAttachment(false);
     }
   };
 
@@ -182,10 +217,27 @@ export default function PersonalChatScreen() {
               item.isError && styles.bubbleError,
             ]}
           >
-            {/* Message Body */}
-            <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
-              {item.content}
-            </Typography>
+            {/* Attachment Rendering */}
+            {item.attachments && item.attachments.length > 0 && (
+              <View style={styles.attachmentsWrapper}>
+                {item.attachments.map((att) => {
+                  if (att.type === 'IMAGE') {
+                    return <ChatImageMessage key={att.id} attachment={att} />;
+                  }
+                  if (att.type === 'VIDEO') {
+                    return <ChatVideoMessage key={att.id} attachment={att} />;
+                  }
+                  return <ChatDocumentMessage key={att.id} attachment={att} />;
+                })}
+              </View>
+            )}
+
+            {/* Message Body (only rendered if non-empty content exists) */}
+            {item.content && item.content.trim().length > 0 ? (
+              <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
+                {item.content}
+              </Typography>
+            ) : null}
 
             {/* Timestamp & Status Metadata */}
             <View style={styles.messageMeta}>
@@ -200,10 +252,10 @@ export default function PersonalChatScreen() {
                     item.isError
                       ? theme.colors.error
                       : isReadByRecipient
-                      ? '#0284C7' // WhatsApp blue ticks
-                      : item.isOptimistic
-                      ? '#94A3B8'
-                      : '#64748B'
+                        ? '#0284C7' // WhatsApp blue ticks
+                        : item.isOptimistic
+                          ? '#94A3B8'
+                          : '#64748B'
                   }
                   style={styles.statusIndicator}
                 >
@@ -370,6 +422,15 @@ export default function PersonalChatScreen() {
           </View>
         )}
 
+        {/* Attachment preview if selected */}
+        {selectedAttachment && (
+          <ChatAttachmentPreview
+            attachment={selectedAttachment}
+            onCancel={() => setSelectedAttachment(null)}
+            isUploading={isUploadingAttachment}
+          />
+        )}
+
         {/* Message Input Composer */}
         <View
           style={[
@@ -381,6 +442,11 @@ export default function PersonalChatScreen() {
             },
           ]}
         >
+          <ChatAttachmentButton
+            onSelect={(att) => setSelectedAttachment(att)}
+            disabled={isSending || isUploadingAttachment}
+          />
+
           <TextInput
             style={[
               styles.inputField,
@@ -400,18 +466,20 @@ export default function PersonalChatScreen() {
 
           <Pressable
             onPress={handleSend}
-            disabled={!inputText.trim() || isSending}
+            disabled={(!inputText.trim() && !selectedAttachment) || isSending || isUploadingAttachment}
             style={[
               styles.sendButton,
               {
                 backgroundColor:
-                  inputText.trim() && !isSending ? theme.colors.primary : theme.colors.border,
+                  (inputText.trim() || selectedAttachment) && !isSending && !isUploadingAttachment
+                    ? theme.colors.primary
+                    : theme.colors.border,
               },
             ]}
             accessibilityRole="button"
             accessibilityLabel={language === 'hi' ? 'भेजें' : 'Send'}
           >
-            {isSending ? (
+            {isSending || isUploadingAttachment ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Typography variant="sm" weight="bold" color="#FFFFFF">
@@ -545,6 +613,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
     borderWidth: 1,
     borderColor: '#EF4444',
+  },
+  attachmentsWrapper: {
+    marginBottom: 4,
   },
   messageContent: {
     lineHeight: 20,

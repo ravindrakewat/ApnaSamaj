@@ -39,6 +39,8 @@ async function runAll() {
   await runGroupChatFlowTests();
   const { runPersonalChatFlowTests } = await import('./personal-chat-flow.test');
   await runPersonalChatFlowTests();
+  const { runChatMediaAttachmentsFlowTests } = await import('./chat-media-attachments-flow.test');
+  await runChatMediaAttachmentsFlowTests();
 }
 
 runAll();

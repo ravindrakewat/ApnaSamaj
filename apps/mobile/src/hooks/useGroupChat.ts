@@ -4,6 +4,7 @@ import {
   ChatMessageItem,
   NewChatMessageEvent,
   UserTypingEvent,
+  ChatAttachmentInput,
 } from '@apnasamaj/shared-types';
 import { chatApi } from '../api/chat.api';
 import { connectChatSocket, getChatSocket } from '../services/socket.service';
@@ -238,9 +239,9 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
    * Send a chat message with optimistic updates & socket/HTTP fallback
    */
   const sendMessage = useCallback(
-    async (content: string): Promise<boolean> => {
+    async (content?: string, attachment?: ChatAttachmentInput): Promise<boolean> => {
       const trimmed = content ? content.trim() : '';
-      if (!trimmed || !groupId) return false;
+      if ((!trimmed && !attachment) || !groupId) return false;
 
       if (!isMember) {
         throw new Error('You must be a member of this group to send messages.');
@@ -260,18 +261,33 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
       }
 
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const nowIso = new Date().toISOString();
       const optimisticMsg: ExtendedChatMessage = {
         id: tempId,
         groupId,
         senderId: user?.id || '',
         content: trimmed,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
         sender: {
           id: user?.id || '',
           fullName: user?.fullName || 'You',
           avatarUrl: null,
         },
+        attachments: attachment
+          ? [
+              {
+                id: attachment.id || `temp-att-${Date.now()}`,
+                chatMessageId: tempId,
+                type: attachment.type,
+                fileName: attachment.fileName,
+                mimeType: attachment.mimeType,
+                fileSizeBytes: attachment.fileSizeBytes,
+                storagePath: attachment.storagePath,
+                createdAt: nowIso,
+              },
+            ]
+          : [],
         isOptimistic: true,
         tempId,
       };
@@ -284,7 +300,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
       if (socket && socket.connected) {
         socket.emit(
           'send_message',
-          { groupId, content: trimmed, tempId },
+          { groupId, content: trimmed, attachment, tempId },
           (res: { success: boolean; message?: ChatMessageItem; error?: string }) => {
             if (res?.success && res.message) {
               setMessages((prev) =>
@@ -307,7 +323,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
       } else {
         // HTTP fallback
         try {
-          const saved = await chatApi.sendGroupMessage(groupId, trimmed, tempId);
+          const saved = await chatApi.sendGroupMessage(groupId, trimmed, tempId, attachment);
           setMessages((prev) =>
             prev.map((m) => (m.tempId === tempId ? { ...saved, isOptimistic: false } : m))
           );

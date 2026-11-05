@@ -5,6 +5,8 @@ import {
   DirectConversationItem,
   DirectInboxResponseData,
   DirectChatParticipant,
+  ChatAttachmentItem,
+  ChatAttachmentInput,
 } from '@apnasamaj/shared-types';
 import {
   ListDirectMessagesQueryInput,
@@ -15,6 +17,7 @@ import {
   ChatNotFoundError,
   ForbiddenChatError,
 } from './chat.service';
+import { createTemporarySignedChatAttachmentUrl } from '../../services/storage.service';
 
 function assertDb(db?: PrismaClient): PrismaClient {
   if (!db) {
@@ -35,6 +38,7 @@ const directMessageInclude = {
       },
     },
   },
+  attachments: true,
 } satisfies Prisma.DirectMessageInclude;
 
 type RawDirectMessage = Prisma.DirectMessageGetPayload<{
@@ -56,6 +60,17 @@ export function mapToDirectMessageItem(item: RawDirectMessage): DirectMessageIte
           avatarUrl: item.sender.profile?.avatarUrl || null,
         }
       : null,
+    attachments: ((item as any).attachments || []).map((att: any) => ({
+      id: att.id,
+      directMessageId: att.directMessageId,
+      type: att.type,
+      fileName: att.fileName,
+      mimeType: att.mimeType,
+      fileSizeBytes: att.fileSizeBytes,
+      storagePath: att.storagePath,
+      url: `https://mock-storage.apnasamaj.local/chat-attachments/${att.storagePath}?token=mock-signed-token&expires=3600`,
+      createdAt: att.createdAt instanceof Date ? att.createdAt.toISOString() : att.createdAt,
+    })),
   };
 }
 
@@ -422,23 +437,53 @@ export async function getDirectMessageHistory(
 
 /**
  * Sends a direct message inside a conversation and updates conversation timestamp and read status.
+ * Overload-safe: supports both (convId, senderId, content, tempId?, db?, attachment?) and (convId, senderId, content, attachment?, tempId?, db?).
  */
 export async function sendDirectMessage(
   conversationId: string,
   senderId: string,
-  content: string,
-  _tempId?: string,
-  db?: PrismaClient
+  content?: string,
+  attachmentOrTempId?: string | ChatAttachmentInput,
+  tempIdOrDb?: string | PrismaClient,
+  db?: PrismaClient,
+  attachment?: ChatAttachmentInput
 ): Promise<DirectMessageItem> {
-  const client = assertDb(db);
-  await verifyDirectConversationAccess(conversationId, senderId, db);
+  let resolvedTempId: string | undefined;
+  let resolvedDb: PrismaClient | undefined;
+  let resolvedAttachment: ChatAttachmentInput | undefined;
 
-  const trimmed = content.trim();
-  if (!trimmed) {
-    throw new ChatServiceError('Message content cannot be empty.', 400);
+  if (typeof attachmentOrTempId === 'string' || attachmentOrTempId === undefined) {
+    resolvedTempId = attachmentOrTempId;
+    resolvedDb = tempIdOrDb as PrismaClient | undefined;
+    resolvedAttachment = (db as unknown as ChatAttachmentInput) || attachment;
+  } else {
+    resolvedAttachment = attachmentOrTempId;
+    resolvedTempId = typeof tempIdOrDb === 'string' ? tempIdOrDb : undefined;
+    resolvedDb = db || (typeof tempIdOrDb !== 'string' ? (tempIdOrDb as PrismaClient) : undefined);
+  }
+
+  const client = assertDb(resolvedDb);
+  await verifyDirectConversationAccess(conversationId, senderId, client);
+
+  const trimmed = content ? content.trim() : '';
+  if (!trimmed && !resolvedAttachment) {
+    throw new ChatServiceError('Message content or attachment cannot be empty.', 400);
   }
   if (trimmed.length > 2000) {
     throw new ChatServiceError('Message content cannot exceed 2000 characters.', 400);
+  }
+
+  if (resolvedAttachment) {
+    if (!resolvedAttachment.storagePath || !resolvedAttachment.storagePath.includes(conversationId)) {
+      throw new ChatServiceError('Invalid attachment path for this conversation.', 400);
+    }
+    const existingAttachment = await client.chatAttachment.findFirst({
+      where: { storagePath: resolvedAttachment.storagePath },
+      select: { id: true },
+    });
+    if (existingAttachment) {
+      throw new ChatServiceError('Attachment has already been associated with an existing message.', 400);
+    }
   }
 
   const now = new Date();
@@ -449,6 +494,19 @@ export async function sendDirectMessage(
       conversationId,
       senderId,
       content: trimmed,
+      ...(resolvedAttachment
+        ? {
+            attachments: {
+              create: {
+                type: resolvedAttachment.type,
+                fileName: resolvedAttachment.fileName,
+                mimeType: resolvedAttachment.mimeType,
+                fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                storagePath: resolvedAttachment.storagePath,
+              },
+            },
+          }
+        : {}),
     },
     include: directMessageInclude,
   });
@@ -509,5 +567,83 @@ export async function markDirectConversationAsRead(
     conversationId,
     userId,
     readAt: now.toISOString(),
+  };
+}
+
+/**
+ * Authorizes and retrieves the signed URL for a chat media attachment.
+ * Strictly guarantees that only authorized direct conversation participants
+ * or authorized group members can access the private storage object.
+ */
+export async function getChatAttachmentDetails(
+  attachmentId: string,
+  userId: string,
+  db?: PrismaClient
+): Promise<{
+  id: string;
+  type: string;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  storagePath: string;
+  url: string;
+}> {
+  const client = assertDb(db);
+  const attachment = await client.chatAttachment.findUnique({
+    where: { id: attachmentId },
+    include: {
+      directMessage: {
+        include: {
+          conversation: true,
+        },
+      },
+      chatMessage: {
+        include: {
+          group: true,
+        },
+      },
+    },
+  });
+
+  if (!attachment) {
+    throw new ChatNotFoundError('Attachment not found.');
+  }
+
+  // 1. Direct message access authorization
+  if (attachment.directMessage) {
+    const conv = attachment.directMessage.conversation;
+    if (conv.userOneId !== userId && conv.userTwoId !== userId) {
+      throw new ForbiddenChatError('Access denied: You are not a participant in this conversation.');
+    }
+  }
+
+  // 2. Group chat access authorization
+  if (attachment.chatMessage) {
+    const group = attachment.chatMessage.group;
+    if (group.privacy === 'PRIVATE') {
+      const membership = await client.groupMember.findUnique({
+        where: {
+          groupId_userId: {
+            groupId: group.id,
+            userId,
+          },
+        },
+      });
+      if (!membership) {
+        throw new ForbiddenChatError('Access denied: You are not a member of this private group.');
+      }
+    }
+  }
+
+  const signedUrl = await createTemporarySignedChatAttachmentUrl(attachment.storagePath, 3600);
+
+  return {
+    id: attachment.id,
+    type: attachment.type,
+    fileName: attachment.fileName,
+    mimeType: attachment.mimeType,
+    fileSizeBytes: attachment.fileSizeBytes,
+    storagePath: attachment.storagePath,
+    url: signedUrl,
   };
 }
