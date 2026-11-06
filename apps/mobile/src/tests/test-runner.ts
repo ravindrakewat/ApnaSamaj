@@ -55,6 +55,8 @@ async function runAll() {
   await runVoiceNotesFlowTests();
   const { runChatReactionsRepliesFlowTests } = await import('./chat-reactions-replies-flow.test');
   await runChatReactionsRepliesFlowTests();
+  const { runChatSearchMediaMobileTests } = await import('./chat-search-media-flow.test');
+  await runChatSearchMediaMobileTests();
 }
 
 runAll()

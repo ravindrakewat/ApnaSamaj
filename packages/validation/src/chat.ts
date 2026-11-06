@@ -95,3 +95,29 @@ export const listDirectInboxQuerySchema = z.object({
 });
 
 export type ListDirectInboxQueryInput = z.infer<typeof listDirectInboxQuerySchema>;
+
+export const chatSearchQuerySchema = z.object({
+  q: z.string().trim().min(1, 'Search query is required').max(100, 'Search query cannot exceed 100 characters'),
+  senderId: z.string().trim().uuid('Invalid sender ID format').optional(),
+  startDate: z.string().trim().optional(),
+  endDate: z.string().trim().optional(),
+  cursor: z.string().trim().optional(),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+});
+
+export type ChatSearchQueryInput = z.infer<typeof chatSearchQuerySchema>;
+
+export const chatMediaQuerySchema = z.object({
+  type: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT', 'AUDIO']).optional(),
+  cursor: z.string().trim().optional(),
+  limit: z.coerce.number().int().positive().max(50).default(30),
+});
+
+export type ChatMediaQueryInput = z.infer<typeof chatMediaQuerySchema>;
+
+export const chatMessageContextParamSchema = z.object({
+  id: z.string().min(1, 'Conversation or Group ID is required'),
+  messageId: z.string().min(1, 'Message ID is required'),
+});
+
+export type ChatMessageContextParamInput = z.infer<typeof chatMessageContextParamSchema>;

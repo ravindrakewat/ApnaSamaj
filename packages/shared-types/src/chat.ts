@@ -314,6 +314,96 @@ export interface ToggleChatReactionResponseData {
 }
 
 /**
+ * Query parameters for searching chat messages.
+ */
+export interface ChatSearchQueryParams {
+  q: string;
+  senderId?: string;
+  startDate?: string;
+  endDate?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * Standardized search result item representing a matching message.
+ */
+export interface ChatSearchResultItem {
+  id: string; // message ID
+  conversationId?: string;
+  groupId?: string;
+  conversationType: 'DIRECT' | 'GROUP';
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl: string | null;
+  content: string;
+  createdAt: string;
+  attachmentType?: ChatAttachmentType | null;
+  attachmentName?: string | null;
+  matchSource: 'local' | 'remote';
+  matchedSubstring?: string;
+}
+
+/**
+ * Response structure for paginated chat search results.
+ */
+export interface PaginatedChatSearchResponse {
+  results: ChatSearchResultItem[];
+  nextCursor?: string | null;
+  hasMore: boolean;
+  totalMatches?: number;
+}
+
+/**
+ * Query parameters for browsing the in-chat media gallery.
+ */
+export interface ChatMediaGalleryQueryParams {
+  type?: ChatAttachmentType;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * Media item structure for photos, videos, audio/voice notes, and documents in the gallery.
+ */
+export interface ChatMediaGalleryItem {
+  id: string; // attachment ID
+  messageId: string;
+  conversationId?: string;
+  groupId?: string;
+  type: ChatAttachmentType;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  storagePath: string;
+  url: string;
+  duration?: number;
+  createdAt: string;
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl?: string | null;
+}
+
+/**
+ * Response structure for paginated chat media gallery queries.
+ */
+export interface PaginatedChatMediaResponse {
+  media: ChatMediaGalleryItem[];
+  nextCursor?: string | null;
+  hasMore: boolean;
+}
+
+/**
+ * Response structure when fetching context around a specific message (for jump navigation).
+ */
+export interface ChatMessageContextResponse {
+  targetMessageId: string;
+  messages: (ChatMessageItem | DirectMessageItem)[];
+  targetIndex: number;
+}
+
+
+/**
  * Real-time event payload broadcasted when a message reaction changes.
  */
 export interface ChatReactionEventPayload {
@@ -325,3 +415,182 @@ export interface ChatReactionEventPayload {
   emoji: string;
   action: 'added' | 'removed' | 'updated';
 }
+
+/**
+ * Query parameters for searching chat messages.
+ */
+export interface ChatSearchQueryParams {
+  q: string;
+  senderId?: string;
+  startDate?: string;
+  endDate?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * Standardized search result item representing a matching message.
+ */
+export interface ChatSearchResultItem {
+  id: string; // message ID
+  conversationId?: string;
+  groupId?: string;
+  conversationType: 'DIRECT' | 'GROUP';
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl: string | null;
+  content: string;
+  createdAt: string;
+  attachmentType?: ChatAttachmentType | null;
+  attachmentName?: string | null;
+  matchSource: 'local' | 'remote';
+  matchedSubstring?: string;
+}
+
+/**
+ * Response structure for paginated chat search results.
+ */
+export interface PaginatedChatSearchResponse {
+  results: ChatSearchResultItem[];
+  nextCursor?: string | null;
+  hasMore: boolean;
+  totalMatches?: number;
+}
+
+/**
+ * Query parameters for browsing the in-chat media gallery.
+ */
+export interface ChatMediaGalleryQueryParams {
+  type?: ChatAttachmentType;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * Media item structure for photos, videos, audio/voice notes, and documents in the gallery.
+ */
+export interface ChatMediaGalleryItem {
+  id: string; // attachment ID
+  messageId: string;
+  conversationId?: string;
+  groupId?: string;
+  type: ChatAttachmentType;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  storagePath: string;
+  url: string;
+  duration?: number;
+  createdAt: string;
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl?: string | null;
+}
+
+/**
+ * Response structure for paginated chat media gallery queries.
+ */
+export interface PaginatedChatMediaResponse {
+  media: ChatMediaGalleryItem[];
+  nextCursor?: string | null;
+  hasMore: boolean;
+}
+
+/**
+ * Response structure when fetching context around a specific message (for jump navigation).
+ */
+export interface ChatMessageContextResponse {
+  targetMessageId: string;
+  messages: (ChatMessageItem | DirectMessageItem)[];
+  targetIndex: number;
+}
+
+/**
+ * Query parameters for searching chat messages.
+ */
+export interface ChatSearchQueryParams {
+  q: string;
+  senderId?: string;
+  startDate?: string;
+  endDate?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * Standardized search result item representing a matching message.
+ */
+export interface ChatSearchResultItem {
+  id: string; // message ID
+  conversationId?: string;
+  groupId?: string;
+  conversationType: 'DIRECT' | 'GROUP';
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl: string | null;
+  content: string;
+  createdAt: string;
+  attachmentType?: ChatAttachmentType | null;
+  attachmentName?: string | null;
+  matchSource: 'local' | 'remote';
+  matchedSubstring?: string;
+}
+
+/**
+ * Response structure for paginated chat search results.
+ */
+export interface PaginatedChatSearchResponse {
+  results: ChatSearchResultItem[];
+  nextCursor?: string | null;
+  hasMore: boolean;
+  totalMatches?: number;
+}
+
+/**
+ * Query parameters for browsing the in-chat media gallery.
+ */
+export interface ChatMediaGalleryQueryParams {
+  type?: ChatAttachmentType;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * Media item structure for photos, videos, audio/voice notes, and documents in the gallery.
+ */
+export interface ChatMediaGalleryItem {
+  id: string; // attachment ID
+  messageId: string;
+  conversationId?: string;
+  groupId?: string;
+  type: ChatAttachmentType;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  storagePath: string;
+  url: string;
+  duration?: number;
+  createdAt: string;
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl?: string | null;
+}
+
+/**
+ * Response structure for paginated chat media gallery queries.
+ */
+export interface PaginatedChatMediaResponse {
+  media: ChatMediaGalleryItem[];
+  nextCursor?: string | null;
+  hasMore: boolean;
+}
+
+/**
+ * Response structure when fetching context around a specific message (for jump navigation).
+ */
+export interface ChatMessageContextResponse {
+  targetMessageId: string;
+  messages: (ChatMessageItem | DirectMessageItem)[];
+  targetIndex: number;
+}
+

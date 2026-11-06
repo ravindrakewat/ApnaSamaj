@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GroupDetails, GroupPrivacy, ChatAttachmentInput } from '@apnasamaj/shared-types';
+import { Ionicons } from '@expo/vector-icons';
+import { GroupDetails, GroupPrivacy, ChatAttachmentInput, ChatSearchResultItem } from '@apnasamaj/shared-types';
 import {
   Typography,
   Card,
@@ -31,6 +32,9 @@ import {
   ReactionBadgeList,
   EmojiReactionSelector,
   ReplyComposerBar,
+  ChatSearchBar,
+  ChatSearchResultsModal,
+  ChatMediaGalleryModal,
 } from '../../../../src/components';
 import { useTheme } from '../../../../src/hooks/useTheme';
 import { useLocalization } from '../../../../src/hooks/useLocalization';
@@ -38,7 +42,7 @@ import { useAuth } from '../../../../src/hooks/useAuth';
 import { groupsApi } from '../../../../src/api/groups.api';
 import { chatApi } from '../../../../src/api/chat.api';
 import { useGroupChat, ExtendedChatMessage } from '../../../../src/hooks/useGroupChat';
-import { voicePlaybackService, voiceRecordingService } from '../../../../src/services';
+import { voicePlaybackService, voiceRecordingService, chatPersistenceService } from '../../../../src/services';
 
 export default function GroupChatScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -83,8 +87,8 @@ export default function GroupChatScreen() {
   // Screen unmount hardware audio resource release
   useEffect(() => {
     return () => {
-      voicePlaybackService.stop().catch(() => {});
-      voiceRecordingService.cancelRecording().catch(() => {});
+      voicePlaybackService.stop().catch(() => { });
+      voiceRecordingService.cancelRecording().catch(() => { });
     };
   }, []);
 
@@ -109,6 +113,7 @@ export default function GroupChatScreen() {
     replyingToMessage,
     setReplyingToMessage,
     toggleReaction,
+    jumpToMessage,
   } = useGroupChat({
     groupId: group?.id || '',
     isMember,
@@ -118,18 +123,129 @@ export default function GroupChatScreen() {
   const [reactionTargetMessage, setReactionTargetMessage] = useState<ExtendedChatMessage | null>(null);
   const flatListRef = useRef<FlatList<ExtendedChatMessage>>(null);
 
-  const handleScrollToMessage = useCallback(
-    (targetId: string) => {
-      const index = messages.findIndex((m) => m.id === targetId || m.tempId === targetId);
-      if (index >= 0) {
+  // Search & Media Gallery state
+  const [isSearchVisible, setIsSearchVisible] = useState<boolean>(false);
+  const [isSearchResultsModalVisible, setIsSearchResultsModalVisible] = useState<boolean>(false);
+  const [isGalleryVisible, setIsGalleryVisible] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<ChatSearchResultItem[]>([]);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(0);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { communitySlug } = useAuth();
+
+  // Debounced search over local cache and remote server
+  useEffect(() => {
+    if (!isSearchVisible || !searchQuery.trim() || !group?.id) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    setIsSearching(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      const q = searchQuery.trim();
+      try {
+        // 1. Search locally persisted messages
+        const localMatches = await chatPersistenceService.searchLocalMessages(
+          group.id,
+          communitySlug || '',
+          user?.id || '',
+          q
+        );
+
+        // 2. Search remote server messages
+        let remoteMatches: ChatSearchResultItem[] = [];
         try {
-          flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+          const remoteRes = await chatApi.searchGroupMessages(group.id, { q, limit: 30 });
+          remoteMatches = remoteRes.results || [];
+        } catch (remoteErr) {
+          console.warn('[GroupChat] Remote search error:', remoteErr);
+        }
+
+        // 3. Deduplicate
+        const seenIds = new Set<string>();
+        const merged: ChatSearchResultItem[] = [];
+
+        for (const item of localMatches) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            merged.push(item);
+          }
+        }
+        for (const item of remoteMatches) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            merged.push(item);
+          }
+        }
+
+        setSearchResults(merged);
+        setCurrentMatchIndex(0);
+      } catch (err) {
+        console.warn('[GroupChat] Search execution error:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [searchQuery, isSearchVisible, group?.id, communitySlug, user?.id]);
+
+  const handleScrollToTargetMessage = useCallback(
+    async (targetId: string) => {
+      const targetIndex = await jumpToMessage(targetId);
+      if (targetIndex >= 0) {
+        try {
+          flatListRef.current?.scrollToIndex({
+            index: targetIndex,
+            animated: true,
+            viewPosition: 0.5,
+          });
         } catch {
-          // Fallback if index not in current virtualized window
+          setTimeout(() => {
+            try {
+              flatListRef.current?.scrollToIndex({
+                index: targetIndex,
+                animated: true,
+                viewPosition: 0.5,
+              });
+            } catch { }
+          }, 250);
         }
       }
     },
-    [messages]
+    [jumpToMessage]
+  );
+
+  const handleNextSearchMatch = () => {
+    if (searchResults.length === 0) return;
+    const nextIdx = (currentMatchIndex + 1) % searchResults.length;
+    setCurrentMatchIndex(nextIdx);
+    handleScrollToTargetMessage(searchResults[nextIdx].id);
+  };
+
+  const handlePrevSearchMatch = () => {
+    if (searchResults.length === 0) return;
+    const prevIdx = (currentMatchIndex - 1 + searchResults.length) % searchResults.length;
+    setCurrentMatchIndex(prevIdx);
+    handleScrollToTargetMessage(searchResults[prevIdx].id);
+  };
+
+  const handleScrollToMessage = useCallback(
+    (targetId: string) => {
+      handleScrollToTargetMessage(targetId);
+    },
+    [handleScrollToTargetMessage]
   );
 
   const handleJoin = async () => {
@@ -140,11 +256,11 @@ export default function GroupChatScreen() {
       setGroup((prev) =>
         prev
           ? {
-              ...prev,
-              isMember: true,
-              myRole: res.role,
-              membersCount: prev.membersCount + 1,
-            }
+            ...prev,
+            isMember: true,
+            myRole: res.role,
+            membersCount: prev.membersCount + 1,
+          }
           : null
       );
       Alert.alert(
@@ -428,18 +544,18 @@ export default function GroupChatScreen() {
                       item.isError || item.deliveryStatus === 'failed'
                         ? theme.colors.error
                         : item.deliveryStatus === 'pending' || item.deliveryStatus === 'sending' || item.isOptimistic
-                        ? '#94A3B8'
-                        : '#059669'
+                          ? '#94A3B8'
+                          : '#059669'
                     }
                     style={styles.statusIndicator}
                   >
                     {item.isError || item.deliveryStatus === 'failed'
                       ? '⚠️'
                       : item.deliveryStatus === 'sending'
-                      ? '⏳'
-                      : item.deliveryStatus === 'pending' || item.isOptimistic
-                      ? '🕒'
-                      : '✓'}
+                        ? '⏳'
+                        : item.deliveryStatus === 'pending' || item.isOptimistic
+                          ? '🕒'
+                          : '✓'}
                   </Typography>
                 )}
               </View>
@@ -479,59 +595,104 @@ export default function GroupChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      {/* WhatsApp-Style Top Header */}
-      <View
-        style={[
-          styles.headerBar,
-          {
-            paddingTop: Math.max(insets.top + 6, 14),
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.border,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel={language === 'hi' ? 'पीछे जाएं' : 'Back'}
+      {/* WhatsApp-Style Top Header / Search Header */}
+      {isSearchVisible ? (
+        <View style={{ paddingTop: Math.max(insets.top + 6, 14), backgroundColor: theme.colors.surface }}>
+          <ChatSearchBar
+            visible={isSearchVisible}
+            query={searchQuery}
+            onChangeQuery={setSearchQuery}
+            onClose={() => {
+              setIsSearchVisible(false);
+              setSearchQuery('');
+              setSearchResults([]);
+            }}
+            resultCount={searchResults.length}
+            currentIndex={currentMatchIndex}
+            onNextResult={handleNextSearchMatch}
+            onPrevResult={handlePrevSearchMatch}
+            onOpenResultsList={() => setIsSearchResultsModalVisible(true)}
+            isLoading={isSearching}
+            placeholder={language === 'hi' ? 'संदेश खोजें...' : 'Search messages...'}
+          />
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.headerBar,
+            {
+              paddingTop: Math.max(insets.top + 6, 14),
+              backgroundColor: theme.colors.surface,
+              borderBottomColor: theme.colors.border,
+            },
+          ]}
         >
-          <Typography variant="lg" weight="bold" color={theme.colors.textPrimary}>
-            ←
-          </Typography>
-        </Pressable>
+          <Pressable
+            onPress={() => router.back()}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel={language === 'hi' ? 'पीछे जाएं' : 'Back'}
+          >
+            <Typography variant="lg" weight="bold" color={theme.colors.textPrimary}>
+              ←
+            </Typography>
+          </Pressable>
 
-        <Pressable
-          onPress={() => router.push(`/(app)/group/${slug}` as any)}
-          style={styles.headerGroupInfo}
-        >
-          {group?.coverUrl ? (
-            <Image source={{ uri: group.coverUrl }} style={styles.groupHeaderAvatar} />
-          ) : (
-            <View style={[styles.groupHeaderAvatarFallback, { backgroundColor: theme.colors.primaryLight }]}>
-              <Typography variant="sm" weight="bold" color={theme.colors.primaryDark}>
-                {initial}
+          <Pressable
+            onPress={() => router.push(`/(app)/group/${slug}` as any)}
+            style={styles.headerGroupInfo}
+          >
+            {group?.coverUrl ? (
+              <Image source={{ uri: group.coverUrl }} style={styles.groupHeaderAvatar} />
+            ) : (
+              <View style={[styles.groupHeaderAvatarFallback, { backgroundColor: theme.colors.primaryLight }]}>
+                <Typography variant="sm" weight="bold" color={theme.colors.primaryDark}>
+                  {initial}
+                </Typography>
+              </View>
+            )}
+
+            <View style={styles.headerTextContainer}>
+              <Typography variant="md" weight="bold" color={theme.colors.textPrimary} numberOfLines={1}>
+                {group?.name || (language === 'hi' ? 'समूह चैट' : 'Group Chat')}
+              </Typography>
+
+              <Typography variant="xs" color={typingUsers.length > 0 ? '#16A34A' : theme.colors.textMuted} numberOfLines={1}>
+                {typingUsers.length > 0
+                  ? `${typingUsers.join(', ')} ${language === 'hi' ? 'टाइप कर रहे हैं...' : 'typing...'}`
+                  : group?.membersCount
+                    ? `👥 ${group.membersCount} ${language === 'hi' ? 'सदस्य' : 'members'}`
+                    : isConnected
+                      ? (language === 'hi' ? 'सक्रिय' : 'Active')
+                      : (language === 'hi' ? 'कनेक्ट हो रहा है...' : 'Connecting...')}
               </Typography>
             </View>
-          )}
+          </Pressable>
 
-          <View style={styles.headerTextContainer}>
-            <Typography variant="md" weight="bold" color={theme.colors.textPrimary} numberOfLines={1}>
-              {group?.name || (language === 'hi' ? 'समूह चैट' : 'Group Chat')}
-            </Typography>
+          {/* Header Action Buttons: Search and Media Gallery */}
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => setIsSearchVisible(true)}
+              style={styles.headerIconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={language === 'hi' ? 'खोजें' : 'Search'}
+            >
+              <Ionicons name="search" size={20} color={theme.colors.textPrimary} />
+            </Pressable>
 
-            <Typography variant="xs" color={typingUsers.length > 0 ? '#16A34A' : theme.colors.textMuted} numberOfLines={1}>
-              {typingUsers.length > 0
-                ? `${typingUsers.join(', ')} ${language === 'hi' ? 'टाइप कर रहे हैं...' : 'typing...'}`
-                : group?.membersCount
-                ? `👥 ${group.membersCount} ${language === 'hi' ? 'सदस्य' : 'members'}`
-                : isConnected
-                ? (language === 'hi' ? 'सक्रिय' : 'Active')
-                : (language === 'hi' ? 'कनेक्ट हो रहा है...' : 'Connecting...')}
-            </Typography>
+            <Pressable
+              onPress={() => setIsGalleryVisible(true)}
+              style={styles.headerIconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={language === 'hi' ? 'मीडिया गैलरी' : 'Media Gallery'}
+            >
+              <Ionicons name="images-outline" size={20} color={theme.colors.textPrimary} />
+            </Pressable>
           </View>
-        </Pressable>
-      </View>
+        </View>
+      )}
 
       {/* Offline Banner */}
       {(!isConnected || isOffline) && (
@@ -744,6 +905,33 @@ export default function GroupChatScreen() {
         }}
         onDismiss={() => setReactionTargetMessage(null)}
       />
+
+      {/* Search Results List Modal */}
+      <ChatSearchResultsModal
+        visible={isSearchResultsModalVisible}
+        onClose={() => setIsSearchResultsModalVisible(false)}
+        results={searchResults}
+        query={searchQuery}
+        isLoading={isSearching}
+        onSelectResult={(item) => {
+          setIsSearchResultsModalVisible(false);
+          handleScrollToTargetMessage(item.id);
+        }}
+      />
+
+      {/* In-Chat Media Gallery Modal */}
+      <ChatMediaGalleryModal
+        visible={isGalleryVisible}
+        onClose={() => setIsGalleryVisible(false)}
+        title={group?.name || 'Group Media'}
+        onFetchMedia={(type, cursor) =>
+          chatApi.getGroupMediaGallery(group?.id || slug || '', { type, cursor, limit: 30 })
+        }
+        onNavigateToMessage={(msgId) => {
+          setIsGalleryVisible(false);
+          handleScrollToTargetMessage(msgId);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -758,6 +946,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 6,
+  },
+  headerIconButton: {
+    padding: 6,
   },
   backButton: {
     padding: 8,

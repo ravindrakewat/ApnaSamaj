@@ -10,6 +10,11 @@ import {
   ChatAttachmentItem,
   ChatAttachmentInput,
   ToggleChatReactionResponseData,
+  ChatSearchQueryParams,
+  PaginatedChatSearchResponse,
+  ChatMediaGalleryQueryParams,
+  PaginatedChatMediaResponse,
+  ChatMessageContextResponse,
 } from '@apnasamaj/shared-types';
 
 export interface ListGroupMessagesParams {
@@ -395,6 +400,142 @@ export const chatApi = {
 
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Failed to mark conversation as read.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Searches messages in a group chat by keyword, sender, or date range.
+   */
+  async searchGroupMessages(
+    groupId: string,
+    params: ChatSearchQueryParams
+  ): Promise<PaginatedChatSearchResponse> {
+    const query: Record<string, string> = { q: params.q.trim() };
+    if (params.senderId) query.senderId = params.senderId;
+    if (params.startDate) query.startDate = params.startDate;
+    if (params.endDate) query.endDate = params.endDate;
+    if (params.cursor) query.cursor = params.cursor;
+    if (params.limit) query.limit = String(params.limit);
+
+    const response = await apiClient.get<ApiResponse<PaginatedChatSearchResponse>>(
+      `/groups/${encodeURIComponent(groupId.trim())}/chat/search`,
+      { params: query }
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to search group messages.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Retrieves paginated media gallery items for a group chat.
+   */
+  async getGroupMediaGallery(
+    groupId: string,
+    params: ChatMediaGalleryQueryParams = {}
+  ): Promise<PaginatedChatMediaResponse> {
+    const query: Record<string, string> = {};
+    if (params.type) query.type = params.type;
+    if (params.cursor) query.cursor = params.cursor;
+    if (params.limit) query.limit = String(params.limit);
+
+    const response = await apiClient.get<ApiResponse<PaginatedChatMediaResponse>>(
+      `/groups/${encodeURIComponent(groupId.trim())}/chat/media`,
+      { params: query }
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch group media gallery.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Retrieves message context around a specific group message for jump navigation.
+   */
+  async getGroupMessageContext(
+    groupId: string,
+    messageId: string
+  ): Promise<ChatMessageContextResponse> {
+    const response = await apiClient.get<ApiResponse<ChatMessageContextResponse>>(
+      `/groups/${encodeURIComponent(groupId.trim())}/chat/messages/${encodeURIComponent(messageId.trim())}/context`
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch group message context.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Searches messages in a direct conversation by keyword, sender, or date range.
+   */
+  async searchDirectMessages(
+    conversationId: string,
+    params: ChatSearchQueryParams
+  ): Promise<PaginatedChatSearchResponse> {
+    const query: Record<string, string> = { q: params.q.trim() };
+    if (params.senderId) query.senderId = params.senderId;
+    if (params.startDate) query.startDate = params.startDate;
+    if (params.endDate) query.endDate = params.endDate;
+    if (params.cursor) query.cursor = params.cursor;
+    if (params.limit) query.limit = String(params.limit);
+
+    const response = await apiClient.get<ApiResponse<PaginatedChatSearchResponse>>(
+      `/chat/conversations/${encodeURIComponent(conversationId.trim())}/search`,
+      { params: query }
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to search direct messages.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Retrieves paginated media gallery items for a direct conversation.
+   */
+  async getDirectMediaGallery(
+    conversationId: string,
+    params: ChatMediaGalleryQueryParams = {}
+  ): Promise<PaginatedChatMediaResponse> {
+    const query: Record<string, string> = {};
+    if (params.type) query.type = params.type;
+    if (params.cursor) query.cursor = params.cursor;
+    if (params.limit) query.limit = String(params.limit);
+
+    const response = await apiClient.get<ApiResponse<PaginatedChatMediaResponse>>(
+      `/chat/conversations/${encodeURIComponent(conversationId.trim())}/media`,
+      { params: query }
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch direct media gallery.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Retrieves message context around a specific direct message for jump navigation.
+   */
+  async getDirectMessageContext(
+    conversationId: string,
+    messageId: string
+  ): Promise<ChatMessageContextResponse> {
+    const response = await apiClient.get<ApiResponse<ChatMessageContextResponse>>(
+      `/chat/conversations/${encodeURIComponent(conversationId.trim())}/messages/${encodeURIComponent(messageId.trim())}/context`
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch direct message context.');
     }
 
     return response.data;

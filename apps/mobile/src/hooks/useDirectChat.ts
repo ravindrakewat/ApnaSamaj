@@ -698,6 +698,61 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
     []
   );
 
+  /**
+   * Jumps to a specific message in the conversation.
+   * If message is not present in local state, loads context from server.
+   * Returns the 0-based index of the target message in the messages array.
+   */
+  const jumpToMessage = useCallback(
+    async (targetId: string): Promise<number> => {
+      if (!targetId || !conversationId) return -1;
+
+      // 1. Check if already in memory
+      const index = messages.findIndex((m) => m.id === targetId || m.tempId === targetId);
+      if (index >= 0) {
+        return index;
+      }
+
+      // 2. Fetch context around target message from backend
+      try {
+        const context = await chatApi.getDirectMessageContext(conversationId, targetId);
+        if (context?.messages && context.messages.length > 0) {
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newMsgs: ExtendedDirectMessage[] = context.messages
+              .filter((m) => !existingIds.has(m.id))
+              .map((m) => ({
+                id: m.id,
+                conversationId: (m as any).conversationId || conversationId,
+                senderId: m.senderId,
+                content: m.content,
+                createdAt: m.createdAt,
+                updatedAt: m.updatedAt,
+                sender: m.sender || null,
+                attachments: m.attachments || [],
+                reactions: m.reactions || [],
+                replyToMessageId: m.replyToMessageId || null,
+                replyTo: m.replyTo || null,
+                deliveryStatus: 'sent' as MessageDeliveryStatus,
+                isOptimistic: false,
+                isError: false,
+              }));
+            return [...prev, ...newMsgs].sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          });
+
+          return context.targetIndex;
+        }
+      } catch (err) {
+        console.warn('[useDirectChat] Failed to load message context:', err);
+      }
+
+      return -1;
+    },
+    [conversationId, messages]
+  );
+
   return {
     messages,
     isLoadingHistory,
@@ -718,5 +773,6 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
     replyingToMessage,
     setReplyingToMessage,
     toggleReaction,
+    jumpToMessage,
   };
 }

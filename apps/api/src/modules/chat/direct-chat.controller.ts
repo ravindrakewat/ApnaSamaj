@@ -6,6 +6,9 @@ import {
   DirectMessagesResponseData,
   DirectMessageItem,
   ToggleChatReactionResponseData,
+  PaginatedChatSearchResponse,
+  PaginatedChatMediaResponse,
+  ChatMessageContextResponse,
 } from '@apnasamaj/shared-types';
 import {
   idParamSchema,
@@ -14,6 +17,9 @@ import {
   listDirectMessagesQuerySchema,
   listDirectInboxQuerySchema,
   toggleChatReactionSchema,
+  chatSearchQuerySchema,
+  chatMediaQuerySchema,
+  chatMessageContextParamSchema,
 } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
@@ -26,6 +32,9 @@ import {
   getChatAttachmentDetails,
   toggleDirectMessageReaction,
   removeDirectMessageReaction,
+  searchDirectMessages,
+  getDirectMediaGallery,
+  getDirectMessageContext,
 } from './direct-chat.service';
 import {
   ChatServiceError,
@@ -633,5 +642,127 @@ export async function removeDirectMessageReactionHandler(
     res.status(200).json(response);
   } catch (err: unknown) {
     handleChatError(res, err, 'Failed to remove direct message reaction.');
+  }
+}
+
+/**
+ * GET /api/v1/chat/conversations/:id/search
+ * Searches messages within a direct conversation.
+ */
+export async function searchDirectMessagesHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Authentication required.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      res.status(400).json({ success: false, error: 'Invalid conversation ID format.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedQuery = chatSearchQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      res.status(400).json({
+        success: false,
+        error: parsedQuery.error.errors[0]?.message || 'Invalid search query parameters.',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const data = await searchDirectMessages(parsedParams.data.id, userId, parsedQuery.data, req.db);
+
+    const response: ApiResponse<PaginatedChatSearchResponse> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleChatError(res, err, 'Failed to search direct messages.');
+  }
+}
+
+/**
+ * GET /api/v1/chat/conversations/:id/media
+ * Retrieves paginated media gallery items for a direct conversation.
+ */
+export async function getDirectMediaGalleryHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Authentication required.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      res.status(400).json({ success: false, error: 'Invalid conversation ID format.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedQuery = chatMediaQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      res.status(400).json({
+        success: false,
+        error: parsedQuery.error.errors[0]?.message || 'Invalid media query parameters.',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const data = await getDirectMediaGallery(parsedParams.data.id, userId, parsedQuery.data, req.db);
+
+    const response: ApiResponse<PaginatedChatMediaResponse> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleChatError(res, err, 'Failed to retrieve direct media gallery.');
+  }
+}
+
+/**
+ * GET /api/v1/chat/conversations/:id/messages/:messageId/context
+ * Retrieves context around a specific direct message for jump navigation.
+ */
+export async function getDirectMessageContextHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Authentication required.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedParams = chatMessageContextParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      res.status(400).json({ success: false, error: 'Invalid conversation ID or message ID.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const data = await getDirectMessageContext(parsedParams.data.id, parsedParams.data.messageId, userId, 30, req.db);
+
+    const response: ApiResponse<ChatMessageContextResponse> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleChatError(res, err, 'Failed to retrieve direct message context.');
   }
 }

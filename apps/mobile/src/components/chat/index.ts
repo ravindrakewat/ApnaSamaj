@@ -11,4 +11,6 @@ export * from './EmojiReactionSelector';
 export * from './ReactionBadgeList';
 export * from './QuotedReplyPreview';
 export * from './ReplyComposerBar';
-
+export * from './ChatSearchBar';
+export * from './ChatSearchResultsModal';
+export * from './ChatMediaGalleryModal';

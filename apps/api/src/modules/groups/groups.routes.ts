@@ -24,6 +24,9 @@ import {
   uploadGroupAttachmentHandler,
   toggleGroupMessageReactionHandler,
   removeGroupMessageReactionHandler,
+  searchGroupMessagesHandler,
+  getGroupMediaGalleryHandler,
+  getGroupMessageContextHandler,
 } from '../chat/chat.controller';
 
 export const groupsRouter = Router();
@@ -84,5 +87,17 @@ groupsRouter.delete('/:id/messages/:messageId/reactions', removeGroupMessageReac
 
 // POST /api/v1/groups/:id/attachments - Upload media attachment for group chat
 groupsRouter.post('/:id/attachments', singleChatAttachmentUpload, uploadGroupAttachmentHandler);
+
+// GET /api/v1/groups/:id/chat/search & /api/v1/groups/:id/messages/search - Search group messages
+groupsRouter.get('/:id/chat/search', searchGroupMessagesHandler);
+groupsRouter.get('/:id/messages/search', searchGroupMessagesHandler);
+
+// GET /api/v1/groups/:id/chat/media & /api/v1/groups/:id/messages/media - Retrieve group media gallery
+groupsRouter.get('/:id/chat/media', getGroupMediaGalleryHandler);
+groupsRouter.get('/:id/messages/media', getGroupMediaGalleryHandler);
+
+// GET /api/v1/groups/:id/chat/messages/:messageId/context & /api/v1/groups/:id/messages/:messageId/context - Message context for jump
+groupsRouter.get('/:id/chat/messages/:messageId/context', getGroupMessageContextHandler);
+groupsRouter.get('/:id/messages/:messageId/context', getGroupMessageContextHandler);
 
 export default groupsRouter;

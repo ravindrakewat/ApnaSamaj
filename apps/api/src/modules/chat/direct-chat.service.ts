@@ -11,10 +11,17 @@ import {
   ChatMessageReplyPreview,
   ToggleChatReactionResponseData,
   ALLOWED_CHAT_REACTIONS,
+  PaginatedChatSearchResponse,
+  ChatSearchResultItem,
+  PaginatedChatMediaResponse,
+  ChatMediaGalleryItem,
+  ChatMessageContextResponse,
 } from '@apnasamaj/shared-types';
 import {
   ListDirectMessagesQueryInput,
   ListDirectInboxQueryInput,
+  ChatSearchQueryInput,
+  ChatMediaQueryInput,
 } from '@apnasamaj/validation';
 import {
   ChatServiceError,
@@ -1100,5 +1107,223 @@ export async function getChatAttachmentDetails(
     fileSizeBytes: attachment.fileSizeBytes,
     storagePath: attachment.storagePath,
     url: signedUrl,
+  };
+}
+
+/**
+ * Searches messages within a specific direct conversation.
+ * Strictly verifies participant authorization (non-participants receive 403 Forbidden).
+ * Supports text search in content & attachment filenames, sender filter, date range, and pagination.
+ */
+export async function searchDirectMessages(
+  conversationId: string,
+  userId: string,
+  query: ChatSearchQueryInput,
+  db?: PrismaClient
+): Promise<PaginatedChatSearchResponse> {
+  const client = assertDb(db);
+  await verifyDirectConversationAccess(conversationId, userId, db);
+
+  const limit = Math.min(Math.max(query.limit || 20, 1), 50);
+  const cursorDate = query.cursor ? new Date(query.cursor) : undefined;
+  const startDate = query.startDate ? new Date(query.startDate) : undefined;
+  const endDate = query.endDate ? new Date(query.endDate) : undefined;
+
+  const searchKeyword = query.q.trim();
+
+  const where: Prisma.DirectMessageWhereInput = {
+    conversationId,
+    OR: [
+      { content: { contains: searchKeyword, mode: 'insensitive' } },
+      { attachments: { some: { fileName: { contains: searchKeyword, mode: 'insensitive' } } } },
+    ],
+    ...(query.senderId ? { senderId: query.senderId } : {}),
+    ...((startDate && !isNaN(startDate.getTime())) || (endDate && !isNaN(endDate.getTime()))
+      ? {
+          createdAt: {
+            ...(startDate && !isNaN(startDate.getTime()) ? { gte: startDate } : {}),
+            ...(endDate && !isNaN(endDate.getTime()) ? { lte: endDate } : {}),
+          },
+        }
+      : {}),
+    ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
+  };
+
+  const [rawMessages, totalMatches] = await Promise.all([
+    client.directMessage.findMany({
+      where,
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: directMessageInclude,
+    }),
+    client.directMessage.count({
+      where: {
+        conversationId,
+        OR: where.OR,
+        ...(query.senderId ? { senderId: query.senderId } : {}),
+      },
+    }),
+  ]);
+
+  const hasMore = rawMessages.length > limit;
+  const sliced = hasMore ? rawMessages.slice(0, limit) : rawMessages;
+  const nextCursor = sliced.length > 0 ? sliced[sliced.length - 1].createdAt.toISOString() : null;
+
+  const results: ChatSearchResultItem[] = sliced.map((msg) => {
+    const item = mapToDirectMessageItem(msg, userId);
+    return {
+      id: item.id,
+      conversationId,
+      conversationType: 'DIRECT',
+      senderId: item.senderId,
+      senderName: item.sender?.fullName || 'Community Member',
+      senderAvatarUrl: item.sender?.avatarUrl || null,
+      content: item.content,
+      createdAt: item.createdAt,
+      attachmentType: item.attachments?.[0]?.type || null,
+      attachmentName: item.attachments?.[0]?.fileName || null,
+      matchSource: 'remote',
+      matchedSubstring: searchKeyword,
+    };
+  });
+
+  return {
+    results,
+    nextCursor,
+    hasMore,
+    totalMatches,
+  };
+}
+
+/**
+ * Retrieves paginated media attachments (Photos, Videos, Audio/Voice Notes, Documents)
+ * for a direct conversation with signed temporary URLs.
+ */
+export async function getDirectMediaGallery(
+  conversationId: string,
+  userId: string,
+  query: ChatMediaQueryInput,
+  db?: PrismaClient
+): Promise<PaginatedChatMediaResponse> {
+  const client = assertDb(db);
+  await verifyDirectConversationAccess(conversationId, userId, db);
+
+  const limit = Math.min(Math.max(query.limit || 30, 1), 50);
+  const cursorDate = query.cursor ? new Date(query.cursor) : undefined;
+
+  const where: Prisma.ChatAttachmentWhereInput = {
+    directMessage: {
+      conversationId,
+    },
+    ...(query.type ? { type: query.type } : {}),
+    ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
+  };
+
+  const rawAttachments = await client.chatAttachment.findMany({
+    where,
+    take: limit + 1,
+    orderBy: { createdAt: 'desc' },
+    include: {
+      directMessage: {
+        include: {
+          sender: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  fullName: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const hasMore = rawAttachments.length > limit;
+  const sliced = hasMore ? rawAttachments.slice(0, limit) : rawAttachments;
+  const nextCursor = sliced.length > 0 ? sliced[sliced.length - 1].createdAt.toISOString() : null;
+
+  const media: ChatMediaGalleryItem[] = await Promise.all(
+    sliced.map(async (att) => {
+      const signedUrl = await createTemporarySignedChatAttachmentUrl(att.storagePath, 3600);
+      return {
+        id: att.id,
+        messageId: att.directMessageId || '',
+        conversationId,
+        type: att.type,
+        fileName: att.fileName,
+        mimeType: att.mimeType,
+        fileSizeBytes: att.fileSizeBytes,
+        storagePath: att.storagePath,
+        url: signedUrl,
+        duration: att.duration ?? undefined,
+        createdAt: att.createdAt instanceof Date ? att.createdAt.toISOString() : String(att.createdAt),
+        senderId: att.directMessage?.senderId || '',
+        senderName: att.directMessage?.sender?.profile?.fullName || 'Community Member',
+        senderAvatarUrl: att.directMessage?.sender?.profile?.avatarUrl || null,
+      };
+    })
+  );
+
+  return {
+    media,
+    nextCursor,
+    hasMore,
+  };
+}
+
+/**
+ * Retrieves context around a specific message (for jump navigation from search or gallery).
+ * Returns messages in descending order (newest first) along with the 0-based target index.
+ */
+export async function getDirectMessageContext(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+  limit: number = 30,
+  db?: PrismaClient
+): Promise<ChatMessageContextResponse> {
+  const client = assertDb(db);
+  await verifyDirectConversationAccess(conversationId, userId, db);
+
+  const targetMsg = await client.directMessage.findFirst({
+    where: { id: messageId, conversationId },
+    include: directMessageInclude,
+  });
+
+  if (!targetMsg) {
+    throw new ChatNotFoundError('Target message not found.');
+  }
+
+  const half = Math.floor(limit / 2);
+
+  // Older messages
+  const olderMessages = await client.directMessage.findMany({
+    where: { conversationId, createdAt: { lt: targetMsg.createdAt } },
+    take: half,
+    orderBy: { createdAt: 'desc' },
+    include: directMessageInclude,
+  });
+
+  // Newer messages
+  const newerMessages = await client.directMessage.findMany({
+    where: { conversationId, createdAt: { gt: targetMsg.createdAt } },
+    take: half,
+    orderBy: { createdAt: 'asc' },
+    include: directMessageInclude,
+  });
+
+  const allRaw = [...newerMessages.reverse(), targetMsg, ...olderMessages];
+  const targetIndex = newerMessages.length;
+
+  const mapped = allRaw.map((m) => mapToDirectMessageItem(m, userId));
+
+  return {
+    targetMessageId: messageId,
+    messages: mapped,
+    targetIndex,
   };
 }

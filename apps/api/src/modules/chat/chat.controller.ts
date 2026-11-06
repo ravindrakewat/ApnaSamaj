@@ -1,6 +1,23 @@
 import { Response } from 'express';
-import { ApiResponse, ChatMessagesResponseData, ChatMessageItem, ToggleChatReactionResponseData } from '@apnasamaj/shared-types';
-import { idParamSchema, listGroupMessagesQuerySchema, sendChatMessageSchema, groupIdSchema, toggleChatReactionSchema } from '@apnasamaj/validation';
+import {
+  ApiResponse,
+  ChatMessagesResponseData,
+  ChatMessageItem,
+  ToggleChatReactionResponseData,
+  PaginatedChatSearchResponse,
+  PaginatedChatMediaResponse,
+  ChatMessageContextResponse,
+} from '@apnasamaj/shared-types';
+import {
+  idParamSchema,
+  listGroupMessagesQuerySchema,
+  sendChatMessageSchema,
+  groupIdSchema,
+  toggleChatReactionSchema,
+  chatSearchQuerySchema,
+  chatMediaQuerySchema,
+  chatMessageContextParamSchema,
+} from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
   getGroupChatHistory,
@@ -8,6 +25,9 @@ import {
   verifyGroupChatAccess,
   toggleChatMessageReaction,
   removeChatMessageReaction,
+  searchGroupMessages,
+  getGroupMediaGallery,
+  getGroupMessageContext,
   ChatServiceError,
   ChatNotFoundError,
   ForbiddenChatError,
@@ -490,5 +510,166 @@ export async function removeGroupMessageReactionHandler(
     }
     console.error('[Chat Controller] removeGroupMessageReaction error:', err);
     res.status(500).json({ success: false, error: 'Failed to remove reaction.', timestamp: new Date().toISOString() });
+  }
+}
+
+/**
+ * GET /api/v1/groups/:id/chat/search
+ * Searches messages within a group chat.
+ */
+export async function searchGroupMessagesHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Authentication required.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      res.status(400).json({ success: false, error: 'Invalid group ID.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedQuery = chatSearchQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      res.status(400).json({
+        success: false,
+        error: parsedQuery.error.errors[0]?.message || 'Invalid search query parameters.',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const data = await searchGroupMessages(parsedGroupId.data, userId, parsedQuery.data, req.db);
+
+    const response: ApiResponse<PaginatedChatSearchResponse> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof ChatNotFoundError) {
+      res.status(404).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    if (err instanceof ForbiddenChatError) {
+      res.status(403).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    if (err instanceof ChatServiceError) {
+      res.status(err.statusCode).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    console.error('[Chat Controller] searchGroupMessages error:', err);
+    res.status(500).json({ success: false, error: 'Failed to search messages.', timestamp: new Date().toISOString() });
+  }
+}
+
+/**
+ * GET /api/v1/groups/:id/chat/media
+ * Retrieves paginated media gallery items for a group chat.
+ */
+export async function getGroupMediaGalleryHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Authentication required.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      res.status(400).json({ success: false, error: 'Invalid group ID.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedQuery = chatMediaQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      res.status(400).json({
+        success: false,
+        error: parsedQuery.error.errors[0]?.message || 'Invalid media query parameters.',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const data = await getGroupMediaGallery(parsedGroupId.data, userId, parsedQuery.data, req.db);
+
+    const response: ApiResponse<PaginatedChatMediaResponse> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof ChatNotFoundError) {
+      res.status(404).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    if (err instanceof ForbiddenChatError) {
+      res.status(403).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    if (err instanceof ChatServiceError) {
+      res.status(err.statusCode).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    console.error('[Chat Controller] getGroupMediaGallery error:', err);
+    res.status(500).json({ success: false, error: 'Failed to retrieve media gallery.', timestamp: new Date().toISOString() });
+  }
+}
+
+/**
+ * GET /api/v1/groups/:id/chat/messages/:messageId/context
+ * Retrieves context around a specific message for jump navigation.
+ */
+export async function getGroupMessageContextHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Authentication required.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedParams = chatMessageContextParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      res.status(400).json({ success: false, error: 'Invalid group ID or message ID.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const data = await getGroupMessageContext(parsedParams.data.id, parsedParams.data.messageId, userId, 30, req.db);
+
+    const response: ApiResponse<ChatMessageContextResponse> = {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof ChatNotFoundError) {
+      res.status(404).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    if (err instanceof ForbiddenChatError) {
+      res.status(403).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    if (err instanceof ChatServiceError) {
+      res.status(err.statusCode).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    console.error('[Chat Controller] getGroupMessageContext error:', err);
+    res.status(500).json({ success: false, error: 'Failed to retrieve message context.', timestamp: new Date().toISOString() });
   }
 }

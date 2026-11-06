@@ -8,9 +8,19 @@ import {
   ChatMessageReplyPreview,
   ToggleChatReactionResponseData,
   ALLOWED_CHAT_REACTIONS,
+  PaginatedChatSearchResponse,
+  ChatSearchResultItem,
+  PaginatedChatMediaResponse,
+  ChatMediaGalleryItem,
+  ChatMessageContextResponse,
 } from '@apnasamaj/shared-types';
-import { ListGroupMessagesQueryInput } from '@apnasamaj/validation';
+import {
+  ListGroupMessagesQueryInput,
+  ChatSearchQueryInput,
+  ChatMediaQueryInput,
+} from '@apnasamaj/validation';
 import { dispatchPushNotificationToMultipleUsers } from '../notifications/push-notification.service';
+import { createTemporarySignedChatAttachmentUrl } from '../../services/storage.service';
 import { chatIdempotencyService } from './chat-idempotency.service';
 
 export class ChatServiceError extends Error {
@@ -765,5 +775,224 @@ export async function removeChatMessageReaction(
     groupId: group.id,
     reactions,
     action: 'removed',
+  };
+}
+
+/**
+ * Searches messages within a specific community group.
+ * Strictly verifies group access (non-members cannot search private groups).
+ * Supports full text matching in content & attachment filenames, sender filter, date range, and pagination.
+ */
+export async function searchGroupMessages(
+  groupIdOrSlug: string,
+  userId: string,
+  query: ChatSearchQueryInput,
+  db?: PrismaClient
+): Promise<PaginatedChatSearchResponse> {
+  const client = assertDb(db);
+  const { group } = await verifyGroupChatAccess(groupIdOrSlug, userId, false, client);
+
+  const limit = Math.min(Math.max(query.limit || 20, 1), 50);
+  const cursorDate = query.cursor ? new Date(query.cursor) : undefined;
+  const startDate = query.startDate ? new Date(query.startDate) : undefined;
+  const endDate = query.endDate ? new Date(query.endDate) : undefined;
+
+  const searchKeyword = query.q.trim();
+
+  const where: Prisma.ChatMessageWhereInput = {
+    groupId: group.id,
+    OR: [
+      { content: { contains: searchKeyword, mode: 'insensitive' } },
+      { attachments: { some: { fileName: { contains: searchKeyword, mode: 'insensitive' } } } },
+    ],
+    ...(query.senderId ? { senderId: query.senderId } : {}),
+    ...((startDate && !isNaN(startDate.getTime())) || (endDate && !isNaN(endDate.getTime()))
+      ? {
+          createdAt: {
+            ...(startDate && !isNaN(startDate.getTime()) ? { gte: startDate } : {}),
+            ...(endDate && !isNaN(endDate.getTime()) ? { lte: endDate } : {}),
+          },
+        }
+      : {}),
+    ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
+  };
+
+  const [rawMessages, totalMatches] = await Promise.all([
+    client.chatMessage.findMany({
+      where,
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: chatMessageInclude,
+    }),
+    client.chatMessage.count({
+      where: {
+        groupId: group.id,
+        OR: where.OR,
+        ...(query.senderId ? { senderId: query.senderId } : {}),
+      },
+    }),
+  ]);
+
+  const hasMore = rawMessages.length > limit;
+  const sliced = hasMore ? rawMessages.slice(0, limit) : rawMessages;
+  const nextCursor = sliced.length > 0 ? sliced[sliced.length - 1].createdAt.toISOString() : null;
+
+  const results: ChatSearchResultItem[] = (sliced as unknown as RawChatMessage[]).map((msg) => {
+    const item = mapToChatMessageItem(msg, userId);
+    return {
+      id: item.id,
+      groupId: group.id,
+      conversationType: 'GROUP',
+      senderId: item.senderId,
+      senderName: item.sender?.fullName || 'Community Member',
+      senderAvatarUrl: item.sender?.avatarUrl || null,
+      content: item.content,
+      createdAt: item.createdAt,
+      attachmentType: item.attachments?.[0]?.type || null,
+      attachmentName: item.attachments?.[0]?.fileName || null,
+      matchSource: 'remote',
+      matchedSubstring: searchKeyword,
+    };
+  });
+
+  return {
+    results,
+    nextCursor,
+    hasMore,
+    totalMatches,
+  };
+}
+
+/**
+ * Retrieves paginated media attachments (Photos, Videos, Audio/Voice Notes, Documents)
+ * for a community group with signed temporary URLs.
+ */
+export async function getGroupMediaGallery(
+  groupIdOrSlug: string,
+  userId: string,
+  query: ChatMediaQueryInput,
+  db?: PrismaClient
+): Promise<PaginatedChatMediaResponse> {
+  const client = assertDb(db);
+  const { group } = await verifyGroupChatAccess(groupIdOrSlug, userId, false, client);
+
+  const limit = Math.min(Math.max(query.limit || 30, 1), 50);
+  const cursorDate = query.cursor ? new Date(query.cursor) : undefined;
+
+  const where: Prisma.ChatAttachmentWhereInput = {
+    chatMessage: {
+      groupId: group.id,
+    },
+    ...(query.type ? { type: query.type } : {}),
+    ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
+  };
+
+  const rawAttachments = await client.chatAttachment.findMany({
+    where,
+    take: limit + 1,
+    orderBy: { createdAt: 'desc' },
+    include: {
+      chatMessage: {
+        include: {
+          sender: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  fullName: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const hasMore = rawAttachments.length > limit;
+  const sliced = hasMore ? rawAttachments.slice(0, limit) : rawAttachments;
+  const nextCursor = sliced.length > 0 ? sliced[sliced.length - 1].createdAt.toISOString() : null;
+
+  const media: ChatMediaGalleryItem[] = await Promise.all(
+    sliced.map(async (att) => {
+      const signedUrl = await createTemporarySignedChatAttachmentUrl(att.storagePath, 3600);
+      return {
+        id: att.id,
+        messageId: att.chatMessageId || '',
+        groupId: group.id,
+        type: att.type,
+        fileName: att.fileName,
+        mimeType: att.mimeType,
+        fileSizeBytes: att.fileSizeBytes,
+        storagePath: att.storagePath,
+        url: signedUrl,
+        duration: att.duration ?? undefined,
+        createdAt: att.createdAt instanceof Date ? att.createdAt.toISOString() : String(att.createdAt),
+        senderId: att.chatMessage?.senderId || '',
+        senderName: att.chatMessage?.sender?.profile?.fullName || 'Community Member',
+        senderAvatarUrl: att.chatMessage?.sender?.profile?.avatarUrl || null,
+      };
+    })
+  );
+
+  return {
+    media,
+    nextCursor,
+    hasMore,
+  };
+}
+
+/**
+ * Retrieves context around a specific message (for jump navigation from search or gallery).
+ * Returns messages in descending order (newest first) along with the 0-based target index.
+ */
+export async function getGroupMessageContext(
+  groupIdOrSlug: string,
+  messageId: string,
+  userId: string,
+  limit: number = 30,
+  db?: PrismaClient
+): Promise<ChatMessageContextResponse> {
+  const client = assertDb(db);
+  const { group } = await verifyGroupChatAccess(groupIdOrSlug, userId, false, client);
+
+  const targetMsg = await client.chatMessage.findFirst({
+    where: { id: messageId, groupId: group.id },
+    include: chatMessageInclude,
+  });
+
+  if (!targetMsg) {
+    throw new ChatNotFoundError('Target message not found.');
+  }
+
+  const half = Math.floor(limit / 2);
+
+  // Fetch older messages
+  const olderMessages = await client.chatMessage.findMany({
+    where: { groupId: group.id, createdAt: { lt: targetMsg.createdAt } },
+    take: half,
+    orderBy: { createdAt: 'desc' },
+    include: chatMessageInclude,
+  });
+
+  // Fetch newer messages
+  const newerMessages = await client.chatMessage.findMany({
+    where: { groupId: group.id, createdAt: { gt: targetMsg.createdAt } },
+    take: half,
+    orderBy: { createdAt: 'asc' },
+    include: chatMessageInclude,
+  });
+
+  // Recombine in descending order: newer (desc) -> target -> older (desc)
+  const allRaw = [...newerMessages.reverse(), targetMsg, ...olderMessages];
+  const targetIndex = newerMessages.length;
+
+  const mapped = (allRaw as unknown as RawChatMessage[]).map((m) => mapToChatMessageItem(m, userId));
+
+  return {
+    targetMessageId: messageId,
+    messages: mapped,
+    targetIndex,
   };
 }

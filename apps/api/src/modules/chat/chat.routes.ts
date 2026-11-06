@@ -13,6 +13,9 @@ import {
   getChatAttachmentUrlHandler,
   toggleDirectMessageReactionHandler,
   removeDirectMessageReactionHandler,
+  searchDirectMessagesHandler,
+  getDirectMediaGalleryHandler,
+  getDirectMessageContextHandler,
 } from './direct-chat.controller';
 
 export const chatRouter = Router();
@@ -51,3 +54,13 @@ chatRouter.get('/attachments/:id/url', getChatAttachmentUrlHandler);
 // POST /api/v1/chat/conversations/:id/read - Mark conversation as read
 chatRouter.post('/conversations/:id/read', markDirectConversationReadHandler);
 
+// GET /api/v1/chat/conversations/:id/search & /messages/search - Search direct messages
+chatRouter.get('/conversations/:id/search', searchDirectMessagesHandler);
+chatRouter.get('/conversations/:id/messages/search', searchDirectMessagesHandler);
+
+// GET /api/v1/chat/conversations/:id/media & /messages/media - Retrieve direct media gallery
+chatRouter.get('/conversations/:id/media', getDirectMediaGalleryHandler);
+chatRouter.get('/conversations/:id/messages/media', getDirectMediaGalleryHandler);
+
+// GET /api/v1/chat/conversations/:id/messages/:messageId/context - Retrieve direct message context
+chatRouter.get('/conversations/:id/messages/:messageId/context', getDirectMessageContextHandler);

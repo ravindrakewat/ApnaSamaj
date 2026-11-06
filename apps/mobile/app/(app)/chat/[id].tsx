@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChatAttachmentInput } from '@apnasamaj/shared-types';
+import { Ionicons } from '@expo/vector-icons';
+import { ChatAttachmentInput, ChatSearchResultItem } from '@apnasamaj/shared-types';
 import {
   Typography,
   Card,
@@ -31,13 +32,16 @@ import {
   ReactionBadgeList,
   EmojiReactionSelector,
   ReplyComposerBar,
+  ChatSearchBar,
+  ChatSearchResultsModal,
+  ChatMediaGalleryModal,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { useDirectChat, ExtendedDirectMessage } from '../../../src/hooks/useDirectChat';
 import { chatApi } from '../../../src/api/chat.api';
-import { voicePlaybackService, voiceRecordingService } from '../../../src/services';
+import { voicePlaybackService, voiceRecordingService, chatPersistenceService } from '../../../src/services';
 
 export default function PersonalChatScreen() {
   const { id: conversationId, name: queryName, avatar: queryAvatar } =
@@ -77,6 +81,7 @@ export default function PersonalChatScreen() {
     replyingToMessage,
     setReplyingToMessage,
     toggleReaction,
+    jumpToMessage,
   } = useDirectChat({
     conversationId: conversationId || '',
   });
@@ -84,16 +89,129 @@ export default function PersonalChatScreen() {
   const [reactionTargetMessage, setReactionTargetMessage] = useState<ExtendedDirectMessage | null>(null);
   const flatListRef = useRef<FlatList<ExtendedDirectMessage>>(null);
 
-  const handleScrollToMessage = useCallback(
-    (targetId: string) => {
-      const index = messages.findIndex((m) => m.id === targetId || m.tempId === targetId);
-      if (index >= 0) {
+  // Search & Media Gallery state
+  const [isSearchVisible, setIsSearchVisible] = useState<boolean>(false);
+  const [isSearchResultsModalVisible, setIsSearchResultsModalVisible] = useState<boolean>(false);
+  const [isGalleryVisible, setIsGalleryVisible] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<ChatSearchResultItem[]>([]);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(0);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { communitySlug } = useAuth();
+
+  // Debounced search over local cache and remote server
+  useEffect(() => {
+    if (!isSearchVisible || !searchQuery.trim() || !conversationId) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    setIsSearching(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      const q = searchQuery.trim();
+      try {
+        // 1. Search locally persisted messages
+        const localMatches = await chatPersistenceService.searchLocalMessages(
+          conversationId,
+          communitySlug || '',
+          user?.id || '',
+          q
+        );
+
+        // 2. Search remote server messages
+        let remoteMatches: ChatSearchResultItem[] = [];
         try {
-          flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-        } catch {}
+          const remoteRes = await chatApi.searchDirectMessages(conversationId, { q, limit: 30 });
+          remoteMatches = remoteRes.results || [];
+        } catch (remoteErr) {
+          console.warn('[DirectChat] Remote search error:', remoteErr);
+        }
+
+        // 3. Deduplicate
+        const seenIds = new Set<string>();
+        const merged: ChatSearchResultItem[] = [];
+
+        for (const item of localMatches) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            merged.push(item);
+          }
+        }
+        for (const item of remoteMatches) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            merged.push(item);
+          }
+        }
+
+        setSearchResults(merged);
+        setCurrentMatchIndex(0);
+      } catch (err) {
+        console.warn('[DirectChat] Search execution error:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [searchQuery, isSearchVisible, conversationId, communitySlug, user?.id]);
+
+  const handleScrollToTargetMessage = useCallback(
+    async (targetId: string) => {
+      const targetIndex = await jumpToMessage(targetId);
+      if (targetIndex >= 0) {
+        try {
+          flatListRef.current?.scrollToIndex({
+            index: targetIndex,
+            animated: true,
+            viewPosition: 0.5,
+          });
+        } catch {
+          setTimeout(() => {
+            try {
+              flatListRef.current?.scrollToIndex({
+                index: targetIndex,
+                animated: true,
+                viewPosition: 0.5,
+              });
+            } catch {}
+          }, 250);
+        }
       }
     },
-    [messages]
+    [jumpToMessage]
+  );
+
+  const handleNextSearchMatch = () => {
+    if (searchResults.length === 0) return;
+    const nextIdx = (currentMatchIndex + 1) % searchResults.length;
+    setCurrentMatchIndex(nextIdx);
+    handleScrollToTargetMessage(searchResults[nextIdx].id);
+  };
+
+  const handlePrevSearchMatch = () => {
+    if (searchResults.length === 0) return;
+    const prevIdx = (currentMatchIndex - 1 + searchResults.length) % searchResults.length;
+    setCurrentMatchIndex(prevIdx);
+    handleScrollToTargetMessage(searchResults[prevIdx].id);
+  };
+
+  const handleScrollToMessage = useCallback(
+    (targetId: string) => {
+      handleScrollToTargetMessage(targetId);
+    },
+    [handleScrollToTargetMessage]
   );
 
   // Screen unmount hardware audio resource release
@@ -434,67 +552,112 @@ export default function PersonalChatScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: '#ECE5DD' }]}>
-      {/* Top Header */}
-      <View
-        style={[
-          styles.headerBar,
-          {
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.border,
-            paddingTop: Math.max(insets.top, 10),
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel={language === 'hi' ? 'वापस जाएं' : 'Back'}
-        >
-          <Typography variant="lg" weight="bold" color={theme.colors.primary}>
-            ←
-          </Typography>
-        </Pressable>
-
-        {/* Participant Avatar */}
-        <View style={styles.headerAvatarContainer}>
-          {displayParticipant.avatarUrl ? (
-            <Image source={{ uri: displayParticipant.avatarUrl }} style={styles.headerAvatar} />
-          ) : (
-            <View style={[styles.headerAvatarFallback, { backgroundColor: theme.colors.primaryLight }]}>
-              <Typography variant="xs" weight="bold" color={theme.colors.primaryDark}>
-                {initial}
-              </Typography>
-            </View>
-          )}
+      {/* Top Header / Search Header */}
+      {isSearchVisible ? (
+        <View style={{ paddingTop: Math.max(insets.top, 10), backgroundColor: theme.colors.surface }}>
+          <ChatSearchBar
+            visible={isSearchVisible}
+            query={searchQuery}
+            onChangeQuery={setSearchQuery}
+            onClose={() => {
+              setIsSearchVisible(false);
+              setSearchQuery('');
+              setSearchResults([]);
+            }}
+            resultCount={searchResults.length}
+            currentIndex={currentMatchIndex}
+            onNextResult={handleNextSearchMatch}
+            onPrevResult={handlePrevSearchMatch}
+            onOpenResultsList={() => setIsSearchResultsModalVisible(true)}
+            isLoading={isSearching}
+            placeholder={language === 'hi' ? 'संदेश खोजें...' : 'Search messages...'}
+          />
         </View>
-
-        {/* Title & Typing Subtitle */}
-        <View style={styles.headerTitleContainer}>
-          <Typography variant="sm" weight="bold" color={theme.colors.textPrimary} numberOfLines={1}>
-            {displayParticipant.fullName}
-          </Typography>
-
-          {isOtherUserTyping ? (
-            <Typography variant="xs" color="#16A34A" weight="semibold">
-              {language === 'hi' ? 'टाइप कर रहे हैं...' : 'typing...'}
-            </Typography>
-          ) : (
-            <Typography variant="xs" color={theme.colors.textMuted}>
-              {language === 'hi' ? 'निजी चैट' : 'Direct Chat'}
-            </Typography>
-          )}
-        </View>
-
-        {/* Connection status indicator */}
+      ) : (
         <View
           style={[
-            styles.connectionDot,
-            { backgroundColor: isConnected && !isOffline ? '#10B981' : '#F59E0B' },
+            styles.headerBar,
+            {
+              backgroundColor: theme.colors.surface,
+              borderBottomColor: theme.colors.border,
+              paddingTop: Math.max(insets.top, 10),
+            },
           ]}
-        />
-      </View>
+        >
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel={language === 'hi' ? 'वापस जाएं' : 'Back'}
+          >
+            <Typography variant="lg" weight="bold" color={theme.colors.primary}>
+              ←
+            </Typography>
+          </Pressable>
+
+          {/* Participant Avatar */}
+          <View style={styles.headerAvatarContainer}>
+            {displayParticipant.avatarUrl ? (
+              <Image source={{ uri: displayParticipant.avatarUrl }} style={styles.headerAvatar} />
+            ) : (
+              <View style={[styles.headerAvatarFallback, { backgroundColor: theme.colors.primaryLight }]}>
+                <Typography variant="xs" weight="bold" color={theme.colors.primaryDark}>
+                  {initial}
+                </Typography>
+              </View>
+            )}
+          </View>
+
+          {/* Title & Typing Subtitle */}
+          <View style={styles.headerTitleContainer}>
+            <Typography variant="sm" weight="bold" color={theme.colors.textPrimary} numberOfLines={1}>
+              {displayParticipant.fullName}
+            </Typography>
+
+            {isOtherUserTyping ? (
+              <Typography variant="xs" color="#16A34A" weight="semibold">
+                {language === 'hi' ? 'टाइप कर रहे हैं...' : 'typing...'}
+              </Typography>
+            ) : (
+              <Typography variant="xs" color={theme.colors.textMuted}>
+                {language === 'hi' ? 'निजी चैट' : 'Direct Chat'}
+              </Typography>
+            )}
+          </View>
+
+          {/* Connection status indicator */}
+          <View
+            style={[
+              styles.connectionDot,
+              { backgroundColor: isConnected && !isOffline ? '#10B981' : '#F59E0B' },
+            ]}
+          />
+
+          {/* Header Action Buttons: Search and Media Gallery */}
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => setIsSearchVisible(true)}
+              style={styles.headerIconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={language === 'hi' ? 'खोजें' : 'Search'}
+            >
+              <Ionicons name="search" size={20} color={theme.colors.textPrimary} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => setIsGalleryVisible(true)}
+              style={styles.headerIconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={language === 'hi' ? 'मीडिया गैलरी' : 'Media Gallery'}
+            >
+              <Ionicons name="images-outline" size={20} color={theme.colors.textPrimary} />
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* Offline Banner */}
       {(!isConnected || isOffline) && (
@@ -680,6 +843,33 @@ export default function PersonalChatScreen() {
         }}
         onDismiss={() => setReactionTargetMessage(null)}
       />
+
+      {/* Search Results List Modal */}
+      <ChatSearchResultsModal
+        visible={isSearchResultsModalVisible}
+        onClose={() => setIsSearchResultsModalVisible(false)}
+        results={searchResults}
+        query={searchQuery}
+        isLoading={isSearching}
+        onSelectResult={(item) => {
+          setIsSearchResultsModalVisible(false);
+          handleScrollToTargetMessage(item.id);
+        }}
+      />
+
+      {/* In-Chat Media Gallery Modal */}
+      <ChatMediaGalleryModal
+        visible={isGalleryVisible}
+        onClose={() => setIsGalleryVisible(false)}
+        title={displayParticipant.fullName}
+        onFetchMedia={(type, cursor) =>
+          chatApi.getDirectMediaGallery(conversationId || '', { type, cursor, limit: 30 })
+        }
+        onNavigateToMessage={(msgId) => {
+          setIsGalleryVisible(false);
+          handleScrollToTargetMessage(msgId);
+        }}
+      />
     </View>
   );
 }
@@ -695,6 +885,15 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 10,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 6,
+  },
+  headerIconButton: {
+    padding: 6,
   },
   backButton: {
     padding: 6,

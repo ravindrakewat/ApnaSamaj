@@ -1,4 +1,4 @@
-import { LocalChatMessage, MessageDeliveryStatus, ChatAttachmentInput, ChatReactionSummary } from '@apnasamaj/shared-types';
+import { LocalChatMessage, MessageDeliveryStatus, ChatAttachmentInput, ChatReactionSummary, ChatSearchResultItem } from '@apnasamaj/shared-types';
 import { getSecureItem, setSecureItem, removeSecureItem } from './storage.service';
 
 /**
@@ -430,7 +430,7 @@ export class ChatPersistenceService {
           } catch { }
         }
       }
-      if (item && item.tenantSlug === tenantSlug) {
+      if (item && item.tenantSlug === tenantSlug && (!userId || item.userId === userId)) {
         result.push(item);
       }
     }
@@ -438,6 +438,52 @@ export class ChatPersistenceService {
     // Sort descending by createdAt (newest first)
     return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
+
+  /**
+   * Searches locally cached messages for the given conversation.
+   * Scoped strictly to the active tenant and user session.
+   * Performs case-insensitive matching on message content and attachment fileName.
+   * Clearly flags matchSource as 'local' without claiming full server coverage.
+   */
+  public async searchLocalMessages(
+    conversationId: string,
+    tenantSlug: string,
+    userId: string,
+    query: string
+  ): Promise<ChatSearchResultItem[]> {
+    if (!conversationId || !tenantSlug || !query || !query.trim()) return [];
+
+    const messages = await this.getConversationMessages(conversationId, tenantSlug, userId);
+    const normalized = query.trim().toLowerCase();
+
+    const matches: ChatSearchResultItem[] = [];
+
+    for (const msg of messages) {
+      const contentMatch = msg.content && msg.content.toLowerCase().includes(normalized);
+      const attachmentMatch = Boolean(msg.attachment?.fileName && msg.attachment.fileName.toLowerCase().includes(normalized));
+
+      if (contentMatch || attachmentMatch) {
+        matches.push({
+          id: msg.serverMessageId || msg.tempId || msg.localId,
+          conversationId: msg.conversationId,
+          groupId: msg.conversationType === 'GROUP' ? msg.conversationId : undefined,
+          conversationType: msg.conversationType,
+          senderId: msg.senderId,
+          senderName: msg.senderId === userId ? 'You' : 'Member',
+          senderAvatarUrl: null,
+          content: msg.content,
+          createdAt: msg.createdAt,
+          attachmentType: msg.attachment?.type || null,
+          attachmentName: msg.attachment?.fileName || null,
+          matchSource: 'local',
+          matchedSubstring: query.trim(),
+        });
+      }
+    }
+
+    return matches;
+  }
+
 
   /**
    * Retrieves all pending or failed outbox messages for a user and tenant.
