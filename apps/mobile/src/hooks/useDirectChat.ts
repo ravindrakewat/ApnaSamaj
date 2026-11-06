@@ -46,6 +46,8 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
 
   const isTypingActiveRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard to prevent concurrent in-flight jumpToMessage fetches (e.g. rapid tap on reply preview)
+  const isJumpingRef = useRef<boolean>(false);
 
   /**
    * Mark conversation as read via API and Socket

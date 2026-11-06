@@ -45,6 +45,8 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
 
   const isTypingActiveRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard to prevent concurrent in-flight jumpToMessage fetches (e.g. rapid tap on reply preview)
+  const isJumpingRef = useRef<boolean>(false);
 
   const isPrivateAndNonMember = isPrivate && !isMember;
 
@@ -86,19 +88,19 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
               },
               attachments: c.attachment
                 ? [
-                    {
-                      id: c.attachment.id || `att-${c.tempId}`,
-                      chatMessageId: c.serverMessageId || c.tempId,
-                      type: c.attachment.type,
-                      fileName: c.attachment.fileName,
-                      mimeType: c.attachment.mimeType,
-                      fileSizeBytes: c.attachment.fileSizeBytes,
-                      storagePath: c.attachment.storagePath,
-                      duration: c.attachment.duration,
-                      localUri: c.attachment.localUri,
-                      createdAt: c.createdAt,
-                    },
-                  ]
+                  {
+                    id: c.attachment.id || `att-${c.tempId}`,
+                    chatMessageId: c.serverMessageId || c.tempId,
+                    type: c.attachment.type,
+                    fileName: c.attachment.fileName,
+                    mimeType: c.attachment.mimeType,
+                    fileSizeBytes: c.attachment.fileSizeBytes,
+                    storagePath: c.attachment.storagePath,
+                    duration: c.attachment.duration,
+                    localUri: c.attachment.localUri,
+                    createdAt: c.createdAt,
+                  },
+                ]
                 : [],
             }));
           });
@@ -429,16 +431,16 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
       const replyToMessageId = replyingToMessage?.id;
       const replyToPreview = replyingToMessage
         ? {
-            id: replyingToMessage.id,
-            senderId: replyingToMessage.senderId,
-            senderName:
-              replyingToMessage.sender?.fullName ||
-              ('sender' in replyingToMessage && (replyingToMessage as any).sender?.profile?.fullName) ||
-              'Member',
-            content: replyingToMessage.content,
-            attachmentType: replyingToMessage.attachments?.[0]?.type || null,
-            attachmentName: replyingToMessage.attachments?.[0]?.fileName || null,
-          }
+          id: replyingToMessage.id,
+          senderId: replyingToMessage.senderId,
+          senderName:
+            replyingToMessage.sender?.fullName ||
+            ('sender' in replyingToMessage && (replyingToMessage as any).sender?.profile?.fullName) ||
+            'Member',
+          content: replyingToMessage.content,
+          attachmentType: replyingToMessage.attachments?.[0]?.type || null,
+          attachmentName: replyingToMessage.attachments?.[0]?.fileName || null,
+        }
         : null;
 
       // Clear replying state immediately upon send
@@ -466,19 +468,19 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         },
         attachments: attachment
           ? [
-              {
-                id: attachment.id || `temp-att-${Date.now()}`,
-                chatMessageId: tempId,
-                type: attachment.type,
-                fileName: attachment.fileName,
-                mimeType: attachment.mimeType,
-                fileSizeBytes: attachment.fileSizeBytes,
-                storagePath: attachment.storagePath,
-                duration: attachment.duration,
-                localUri: (attachment as any).localUri,
-                createdAt: nowIso,
-              },
-            ]
+            {
+              id: attachment.id || `temp-att-${Date.now()}`,
+              chatMessageId: tempId,
+              type: attachment.type,
+              fileName: attachment.fileName,
+              mimeType: attachment.mimeType,
+              fileSizeBytes: attachment.fileSizeBytes,
+              storagePath: attachment.storagePath,
+              duration: attachment.duration,
+              localUri: (attachment as any).localUri,
+              createdAt: nowIso,
+            },
+          ]
           : [],
         isOptimistic: true,
         tempId,
@@ -678,7 +680,11 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         return index;
       }
 
-      // 2. Fetch context from server
+      // 2. Guard against concurrent in-flight fetches
+      if (isJumpingRef.current) return -1;
+      isJumpingRef.current = true;
+
+      // 3. Fetch context from server
       try {
         const context = await chatApi.getGroupMessageContext(groupId, targetId);
         if (context?.messages && context.messages.length > 0) {
@@ -710,6 +716,8 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         }
       } catch (err) {
         console.warn('[useGroupChat] Failed to load message context:', err);
+      } finally {
+        isJumpingRef.current = false;
       }
 
       return -1;

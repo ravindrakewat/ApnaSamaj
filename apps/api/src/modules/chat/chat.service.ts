@@ -184,10 +184,10 @@ export function mapToChatMessageItem(item: any, currentUserId?: string): ChatMes
     updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : item.updatedAt,
     sender: item.sender
       ? {
-          id: item.sender.id,
-          fullName: item.sender.profile?.fullName || 'Community Member',
-          avatarUrl: item.sender.profile?.avatarUrl || null,
-        }
+        id: item.sender.id,
+        fullName: item.sender.profile?.fullName || 'Community Member',
+        avatarUrl: item.sender.profile?.avatarUrl || null,
+      }
       : null,
     attachments: ((item as any).attachments || []).map((att: any) => ({
       id: att.id,
@@ -461,17 +461,17 @@ export async function sendChatMessage(
             ...(sanitizedReplyToMessageId ? { replyToMessageId: sanitizedReplyToMessageId } : {}),
             ...(resolvedAttachment
               ? {
-                  attachments: {
-                    create: {
-                      type: resolvedAttachment.type,
-                      fileName: resolvedAttachment.fileName,
-                      mimeType: resolvedAttachment.mimeType,
-                      fileSizeBytes: resolvedAttachment.fileSizeBytes,
-                      storagePath: resolvedAttachment.storagePath,
-                      duration: resolvedAttachment.duration != null ? Math.round(resolvedAttachment.duration) : null,
-                    },
+                attachments: {
+                  create: {
+                    type: resolvedAttachment.type,
+                    fileName: resolvedAttachment.fileName,
+                    mimeType: resolvedAttachment.mimeType,
+                    fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                    storagePath: resolvedAttachment.storagePath,
+                    duration: resolvedAttachment.duration != null ? Math.round(resolvedAttachment.duration) : null,
                   },
-                }
+                },
+              }
               : {}),
           },
           include: chatMessageInclude,
@@ -501,16 +501,16 @@ export async function sendChatMessage(
               content: trimmed,
               ...(resolvedAttachment
                 ? {
-                    attachments: {
-                      create: {
-                        type: resolvedAttachment.type,
-                        fileName: resolvedAttachment.fileName,
-                        mimeType: resolvedAttachment.mimeType,
-                        fileSizeBytes: resolvedAttachment.fileSizeBytes,
-                        storagePath: resolvedAttachment.storagePath,
-                      },
+                  attachments: {
+                    create: {
+                      type: resolvedAttachment.type,
+                      fileName: resolvedAttachment.fileName,
+                      mimeType: resolvedAttachment.mimeType,
+                      fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                      storagePath: resolvedAttachment.storagePath,
                     },
-                  }
+                  },
+                }
                 : {}),
             },
             include: chatMessageInclude,
@@ -535,15 +535,14 @@ export async function sendChatMessage(
             const memberIds = activeMembers.map((m) => m.userId);
             const senderName = (message as any)?.sender?.profile?.fullName || 'Community Member';
             const pushBody = resolvedAttachment
-              ? `${senderName}: ${
-                  resolvedAttachment.type === 'IMAGE'
-                    ? 'Sent a photo'
-                    : resolvedAttachment.type === 'VIDEO'
-                    ? 'Sent a video'
-                    : resolvedAttachment.type === 'AUDIO'
+              ? `${senderName}: ${resolvedAttachment.type === 'IMAGE'
+                ? 'Sent a photo'
+                : resolvedAttachment.type === 'VIDEO'
+                  ? 'Sent a video'
+                  : resolvedAttachment.type === 'AUDIO'
                     ? 'Sent a voice note'
                     : 'Sent a document'
-                }`
+              }`
               : `${senderName}: Sent a message`;
 
             await dispatchPushNotificationToMultipleUsers(
@@ -674,7 +673,7 @@ export async function toggleChatMessageReaction(
           if (raceExisting.emoji === emoji) {
             try {
               await client.chatMessageReaction.delete({ where: { id: raceExisting.id } });
-            } catch {}
+            } catch { }
             action = 'removed';
           } else {
             await client.chatMessageReaction.update({
@@ -797,7 +796,11 @@ export async function searchGroupMessages(
   const startDate = query.startDate ? new Date(query.startDate) : undefined;
   const endDate = query.endDate ? new Date(query.endDate) : undefined;
 
-  const searchKeyword = query.q.trim();
+  // Escape ILIKE wildcard characters so a bare `%` or `_` does not match all rows.
+  // Prisma passes `contains` values through to PostgreSQL ILIKE without escaping them,
+  // meaning `%` matches any sequence and `_` matches any single character.
+  const rawKeyword = query.q.trim();
+  const searchKeyword = rawKeyword.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
   const where: Prisma.ChatMessageWhereInput = {
     groupId: group.id,
@@ -808,11 +811,11 @@ export async function searchGroupMessages(
     ...(query.senderId ? { senderId: query.senderId } : {}),
     ...((startDate && !isNaN(startDate.getTime())) || (endDate && !isNaN(endDate.getTime()))
       ? {
-          createdAt: {
-            ...(startDate && !isNaN(startDate.getTime()) ? { gte: startDate } : {}),
-            ...(endDate && !isNaN(endDate.getTime()) ? { lte: endDate } : {}),
-          },
-        }
+        createdAt: {
+          ...(startDate && !isNaN(startDate.getTime()) ? { gte: startDate } : {}),
+          ...(endDate && !isNaN(endDate.getTime()) ? { lte: endDate } : {}),
+        },
+      }
       : {}),
     ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
   };
@@ -851,7 +854,7 @@ export async function searchGroupMessages(
       attachmentType: item.attachments?.[0]?.type || null,
       attachmentName: item.attachments?.[0]?.fileName || null,
       matchSource: 'remote',
-      matchedSubstring: searchKeyword,
+      matchedSubstring: rawKeyword,
     };
   });
 

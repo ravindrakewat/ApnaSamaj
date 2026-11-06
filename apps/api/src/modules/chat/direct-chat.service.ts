@@ -1129,7 +1129,11 @@ export async function searchDirectMessages(
   const startDate = query.startDate ? new Date(query.startDate) : undefined;
   const endDate = query.endDate ? new Date(query.endDate) : undefined;
 
-  const searchKeyword = query.q.trim();
+  // Escape ILIKE wildcard characters so a bare `%` or `_` does not match all rows.
+  // Prisma passes `contains` values through to PostgreSQL ILIKE without escaping them,
+  // meaning `%` matches any sequence and `_` matches any single character.
+  const rawKeyword = query.q.trim();
+  const searchKeyword = rawKeyword.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
   const where: Prisma.DirectMessageWhereInput = {
     conversationId,
@@ -1140,11 +1144,11 @@ export async function searchDirectMessages(
     ...(query.senderId ? { senderId: query.senderId } : {}),
     ...((startDate && !isNaN(startDate.getTime())) || (endDate && !isNaN(endDate.getTime()))
       ? {
-          createdAt: {
-            ...(startDate && !isNaN(startDate.getTime()) ? { gte: startDate } : {}),
-            ...(endDate && !isNaN(endDate.getTime()) ? { lte: endDate } : {}),
-          },
-        }
+        createdAt: {
+          ...(startDate && !isNaN(startDate.getTime()) ? { gte: startDate } : {}),
+          ...(endDate && !isNaN(endDate.getTime()) ? { lte: endDate } : {}),
+        },
+      }
       : {}),
     ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
   };
@@ -1183,7 +1187,7 @@ export async function searchDirectMessages(
       attachmentType: item.attachments?.[0]?.type || null,
       attachmentName: item.attachments?.[0]?.fileName || null,
       matchSource: 'remote',
-      matchedSubstring: searchKeyword,
+      matchedSubstring: rawKeyword,
     };
   });
 
