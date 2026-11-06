@@ -7,6 +7,10 @@ import {
   DirectChatParticipant,
   ChatAttachmentItem,
   ChatAttachmentInput,
+  ChatReactionSummary,
+  ChatMessageReplyPreview,
+  ToggleChatReactionResponseData,
+  ALLOWED_CHAT_REACTIONS,
 } from '@apnasamaj/shared-types';
 import {
   ListDirectMessagesQueryInput,
@@ -16,6 +20,7 @@ import {
   ChatServiceError,
   ChatNotFoundError,
   ForbiddenChatError,
+  aggregateReactions,
 } from './chat.service';
 import { createTemporarySignedChatAttachmentUrl } from '../../services/storage.service';
 import { dispatchPushNotificationToUser } from '../notifications/push-notification.service';
@@ -49,28 +54,90 @@ const directMessageInclude = {
     },
   },
   attachments: true,
+  replyTo: {
+    select: {
+      id: true,
+      senderId: true,
+      content: true,
+      sender: {
+        select: {
+          profile: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      },
+      attachments: {
+        take: 1,
+        select: {
+          type: true,
+          fileName: true,
+        },
+      },
+    },
+  },
+  reactions: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          profile: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      },
+    },
+  },
 } satisfies Prisma.DirectMessageInclude;
 
 type RawDirectMessage = Prisma.DirectMessageGetPayload<{
   include: typeof directMessageInclude;
 }>;
 
-export function mapToDirectMessageItem(item: RawDirectMessage): DirectMessageItem {
+export function mapToDirectMessageItem(item: any, currentUserId?: string): DirectMessageItem {
+  const replyToRaw = item.replyTo;
+  let replyTo: ChatMessageReplyPreview | null = null;
+  if (replyToRaw) {
+    replyTo = {
+      id: replyToRaw.id,
+      senderId: replyToRaw.senderId,
+      senderName: replyToRaw.sender?.profile?.fullName || 'Community Member',
+      content: replyToRaw.content || '',
+      attachmentType: replyToRaw.attachments?.[0]?.type || null,
+      attachmentName: replyToRaw.attachments?.[0]?.fileName || null,
+    };
+  } else if (item.replyToMessageId) {
+    replyTo = {
+      id: item.replyToMessageId,
+      senderId: '',
+      senderName: 'Original Message',
+      content: 'This message was deleted',
+      attachmentType: null,
+      attachmentName: null,
+    };
+  }
+
   return {
     id: item.id,
     conversationId: item.conversationId,
     senderId: item.senderId,
     content: item.content,
-    clientMessageId: (item as any).clientMessageId || null,
-    tempId: (item as any).clientMessageId || undefined,
-    createdAt: item.createdAt.toISOString(),
-    updatedAt: item.updatedAt.toISOString(),
+    clientMessageId: item.clientMessageId || null,
+    replyToMessageId: item.replyToMessageId || null,
+    replyTo,
+    reactions: aggregateReactions(item.reactions, currentUserId || item.senderId),
+    tempId: item.clientMessageId || undefined,
+    createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
+    updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : item.updatedAt,
     sender: item.sender
       ? {
-          id: item.sender.id,
-          fullName: item.sender.profile?.fullName || 'Community Member',
-          avatarUrl: item.sender.profile?.avatarUrl || null,
-        }
+        id: item.sender.id,
+        fullName: item.sender.profile?.fullName || 'Community Member',
+        avatarUrl: item.sender.profile?.avatarUrl || null,
+      }
       : null,
     attachments: ((item as any).attachments || []).map((att: any) => ({
       id: att.id,
@@ -442,7 +509,7 @@ export async function getDirectMessageHistory(
   const nextCursor = hasMore && list.length > 0 ? list[list.length - 1].id : null;
 
   return {
-    messages: list.map(mapToDirectMessageItem),
+    messages: list.map((m) => mapToDirectMessageItem(m, userId)),
     nextCursor,
     hasMore,
   };
@@ -455,15 +522,28 @@ export async function getDirectMessageHistory(
 export async function sendDirectMessage(
   conversationId: string,
   senderId: string,
-  content?: string,
+  contentOrOptions?: string | { content?: string; attachment?: ChatAttachmentInput; tempId?: string; replyToMessageId?: string; db?: PrismaClient },
   attachmentOrTempId?: string | ChatAttachmentInput,
   tempIdOrDb?: string | PrismaClient,
   db?: PrismaClient,
-  attachment?: ChatAttachmentInput
+  attachment?: ChatAttachmentInput,
+  replyToMessageId?: string
 ): Promise<DirectMessageItem> {
+  let content: string | undefined;
   let resolvedTempId: string | undefined;
   let resolvedDb: PrismaClient | undefined;
   let resolvedAttachment: ChatAttachmentInput | undefined;
+  let resolvedReplyToMessageId: string | undefined = replyToMessageId;
+
+  if (typeof contentOrOptions === 'object' && contentOrOptions !== null) {
+    content = contentOrOptions.content;
+    resolvedAttachment = contentOrOptions.attachment;
+    resolvedTempId = contentOrOptions.tempId;
+    resolvedReplyToMessageId = contentOrOptions.replyToMessageId || resolvedReplyToMessageId;
+    resolvedDb = contentOrOptions.db;
+  } else {
+    content = contentOrOptions;
+  }
 
   for (const arg of [attachmentOrTempId, tempIdOrDb, db, attachment]) {
     if (!arg) continue;
@@ -487,6 +567,27 @@ export async function sendDirectMessage(
     throw new ChatServiceError('Message content cannot exceed 2000 characters.', 400);
   }
 
+  // Sanitize and validate replyToMessageId
+  const sanitizedReplyToMessageId =
+    typeof resolvedReplyToMessageId === 'string' && resolvedReplyToMessageId.trim().length > 0
+      ? resolvedReplyToMessageId.trim()
+      : undefined;
+
+  if (typeof resolvedReplyToMessageId === 'string' && resolvedReplyToMessageId.trim().length > 100) {
+    throw new ChatServiceError('Invalid replyToMessageId parameter length.', 400);
+  }
+
+  // Cross-conversation validation: replyToMessageId must belong to this direct conversation
+  if (sanitizedReplyToMessageId) {
+    const parent = await client.directMessage.findUnique({
+      where: { id: sanitizedReplyToMessageId },
+      select: { id: true, conversationId: true },
+    });
+    if (!parent || parent.conversationId !== conversationId) {
+      throw new ChatServiceError('Cannot reply to a message from a different conversation.', 400);
+    }
+  }
+
   // 1. Idempotency fast-path: Check if message already exists with this clientMessageId
   if (resolvedTempId) {
     try {
@@ -499,7 +600,7 @@ export async function sendDirectMessage(
         include: directMessageInclude,
       });
       if (existing) {
-        return mapToDirectMessageItem(existing);
+        return mapToDirectMessageItem(existing, senderId);
       }
     } catch {
       // Suppress if column query fails on unmigrated database
@@ -525,7 +626,7 @@ export async function sendDirectMessage(
         existingAttachment.directMessage.senderId === senderId &&
         (!resolvedTempId || (existingAttachment.directMessage as any).clientMessageId === resolvedTempId)
       ) {
-        return mapToDirectMessageItem(existingAttachment.directMessage);
+        return mapToDirectMessageItem(existingAttachment.directMessage, senderId);
       }
       throw new ChatServiceError('Attachment has already been associated with an existing message.', 400);
     }
@@ -548,7 +649,7 @@ export async function sendDirectMessage(
           include: directMessageInclude,
         });
         if (existing) {
-          return mapToDirectMessageItem(existing);
+          return mapToDirectMessageItem(existing, senderId);
         }
       } catch {
         // Suppress if column query fails on unmigrated database
@@ -565,19 +666,20 @@ export async function sendDirectMessage(
           senderId,
           content: trimmed,
           ...(resolvedTempId ? { clientMessageId: resolvedTempId } : {}),
+          ...(sanitizedReplyToMessageId ? { replyToMessageId: sanitizedReplyToMessageId } : {}),
           ...(resolvedAttachment
             ? {
-                attachments: {
-                  create: {
-                    type: resolvedAttachment.type,
-                    fileName: resolvedAttachment.fileName,
-                    mimeType: resolvedAttachment.mimeType,
-                    fileSizeBytes: resolvedAttachment.fileSizeBytes,
-                    storagePath: resolvedAttachment.storagePath,
-                    duration: resolvedAttachment.duration != null ? Math.round(resolvedAttachment.duration) : null,
-                  },
+              attachments: {
+                create: {
+                  type: resolvedAttachment.type,
+                  fileName: resolvedAttachment.fileName,
+                  mimeType: resolvedAttachment.mimeType,
+                  fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                  storagePath: resolvedAttachment.storagePath,
+                  duration: resolvedAttachment.duration != null ? Math.round(resolvedAttachment.duration) : null,
                 },
-              }
+              },
+            }
             : {}),
         },
         include: directMessageInclude,
@@ -594,12 +696,12 @@ export async function sendDirectMessage(
           include: directMessageInclude,
         });
         if (existing) {
-          return mapToDirectMessageItem(existing);
+          return mapToDirectMessageItem(existing, senderId);
         }
       }
 
-      // Graceful fallback if clientMessageId column does not exist yet in live database
-      if (createErr?.message && (createErr.message.includes('clientMessageId') || createErr.message.includes('column')) && resolvedTempId) {
+      // Graceful fallback if clientMessageId or replyToMessageId column does not exist yet in live database
+      if (createErr?.message && (createErr.message.includes('clientMessageId') || createErr.message.includes('replyToMessageId') || createErr.message.includes('column'))) {
         message = await client.directMessage.create({
           data: {
             conversationId,
@@ -607,17 +709,17 @@ export async function sendDirectMessage(
             content: trimmed,
             ...(resolvedAttachment
               ? {
-                  attachments: {
-                    create: {
-                      type: resolvedAttachment.type,
-                      fileName: resolvedAttachment.fileName,
-                      mimeType: resolvedAttachment.mimeType,
-                      fileSizeBytes: resolvedAttachment.fileSizeBytes,
-                      storagePath: resolvedAttachment.storagePath,
-                      duration: resolvedAttachment.duration != null ? Math.round(resolvedAttachment.duration) : null,
-                    },
+                attachments: {
+                  create: {
+                    type: resolvedAttachment.type,
+                    fileName: resolvedAttachment.fileName,
+                    mimeType: resolvedAttachment.mimeType,
+                    fileSizeBytes: resolvedAttachment.fileSizeBytes,
+                    storagePath: resolvedAttachment.storagePath,
+                    duration: resolvedAttachment.duration != null ? Math.round(resolvedAttachment.duration) : null,
                   },
-                }
+                },
+              }
               : {}),
           },
           include: directMessageInclude,
@@ -661,8 +763,10 @@ export async function sendDirectMessage(
           ? resolvedAttachment.type === 'IMAGE'
             ? 'Sent a photo'
             : resolvedAttachment.type === 'VIDEO'
-            ? 'Sent a video'
-            : 'Sent a document'
+              ? 'Sent a video'
+              : resolvedAttachment.type === 'AUDIO'
+                ? 'Sent a voice note'
+                : 'Sent a document'
           : 'Sent you a message';
 
         await dispatchPushNotificationToUser(
@@ -685,8 +789,205 @@ export async function sendDirectMessage(
       console.warn('[Direct Chat] FCM push notification dispatch warning (suppressed):', pushErr);
     }
 
-    return mapToDirectMessageItem(message);
+    return mapToDirectMessageItem(message, senderId);
   });
+}
+
+/**
+ * Toggles an emoji reaction on a direct message.
+ * If user already reacted with this emoji, removes it (toggle off).
+ * If user reacted with a different emoji, updates it (one reaction per user).
+ * If user has not reacted, creates it.
+ */
+export async function toggleDirectMessageReaction(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+  emoji: string,
+  db?: PrismaClient
+): Promise<ToggleChatReactionResponseData> {
+  const client = assertDb(db);
+  if (!ALLOWED_CHAT_REACTIONS.includes(emoji as any)) {
+    throw new ChatServiceError(
+      `Invalid reaction emoji. Supported reactions: ${ALLOWED_CHAT_REACTIONS.join(', ')}`,
+      400
+    );
+  }
+
+  await verifyDirectConversationAccess(conversationId, userId, client);
+
+  const message = await client.directMessage.findUnique({
+    where: { id: messageId },
+    select: { id: true, conversationId: true },
+  });
+
+  if (!message || message.conversationId !== conversationId) {
+    throw new ChatNotFoundError('Message not found in this conversation.');
+  }
+
+  const existing = await client.directMessageReaction.findUnique({
+    where: {
+      messageId_userId: {
+        messageId,
+        userId,
+      },
+    },
+  });
+
+  let action: 'added' | 'removed' | 'updated';
+  if (existing) {
+    if (existing.emoji === emoji) {
+      try {
+        await client.directMessageReaction.delete({
+          where: { id: existing.id },
+        });
+      } catch (delErr: any) {
+        if (delErr?.code !== 'P2025') throw delErr;
+      }
+      action = 'removed';
+    } else {
+      try {
+        await client.directMessageReaction.update({
+          where: { id: existing.id },
+          data: { emoji },
+        });
+        action = 'updated';
+      } catch (updateErr: any) {
+        if (updateErr?.code === 'P2025') {
+          await client.directMessageReaction.create({
+            data: { messageId, userId, emoji },
+          });
+          action = 'added';
+        } else {
+          throw updateErr;
+        }
+      }
+    }
+  } else {
+    try {
+      await client.directMessageReaction.create({
+        data: {
+          messageId,
+          userId,
+          emoji,
+        },
+      });
+      action = 'added';
+    } catch (createErr: any) {
+      if (createErr?.code === 'P2002') {
+        // Concurrency resolution: record created concurrently by duplicate request
+        const raceExisting = await client.directMessageReaction.findUnique({
+          where: {
+            messageId_userId: {
+              messageId,
+              userId,
+            },
+          },
+        });
+        if (raceExisting) {
+          if (raceExisting.emoji === emoji) {
+            try {
+              await client.directMessageReaction.delete({ where: { id: raceExisting.id } });
+            } catch { }
+            action = 'removed';
+          } else {
+            await client.directMessageReaction.update({
+              where: { id: raceExisting.id },
+              data: { emoji },
+            });
+            action = 'updated';
+          }
+        } else {
+          action = 'added';
+        }
+      } else {
+        throw createErr;
+      }
+    }
+  }
+
+  const allReactions = await client.directMessageReaction.findMany({
+    where: { messageId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          profile: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const reactions = aggregateReactions(allReactions, userId);
+
+  return {
+    messageId,
+    reactions,
+    action,
+  };
+}
+
+/**
+ * Removes any active reaction from the user on a direct message.
+ */
+export async function removeDirectMessageReaction(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+  db?: PrismaClient
+): Promise<ToggleChatReactionResponseData> {
+  const client = assertDb(db);
+  await verifyDirectConversationAccess(conversationId, userId, client);
+
+  const message = await client.directMessage.findUnique({
+    where: { id: messageId },
+    select: { id: true, conversationId: true },
+  });
+
+  if (!message || message.conversationId !== conversationId) {
+    throw new ChatNotFoundError('Message not found in this conversation.');
+  }
+
+  try {
+    await client.directMessageReaction.delete({
+      where: {
+        messageId_userId: {
+          messageId,
+          userId,
+        },
+      },
+    });
+  } catch {
+    // Suppress if reaction does not exist
+  }
+
+  const allReactions = await client.directMessageReaction.findMany({
+    where: { messageId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          profile: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const reactions = aggregateReactions(allReactions, userId);
+
+  return {
+    messageId,
+    reactions,
+    action: 'removed',
+  };
 }
 
 /**

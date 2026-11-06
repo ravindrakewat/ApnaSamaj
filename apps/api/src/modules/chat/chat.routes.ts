@@ -11,6 +11,8 @@ import {
   markDirectConversationReadHandler,
   uploadDirectAttachmentHandler,
   getChatAttachmentUrlHandler,
+  toggleDirectMessageReactionHandler,
+  removeDirectMessageReactionHandler,
 } from './direct-chat.controller';
 
 export const chatRouter = Router();
@@ -29,6 +31,12 @@ chatRouter.get('/conversations/:id/messages', getDirectMessagesHandler);
 
 // POST /api/v1/chat/conversations/:id/messages - Send a direct message
 chatRouter.post('/conversations/:id/messages', sendDirectMessageHandler);
+
+// POST /api/v1/chat/conversations/:id/messages/:messageId/reactions - Toggle emoji reaction on direct message
+chatRouter.post('/conversations/:id/messages/:messageId/reactions', toggleDirectMessageReactionHandler);
+
+// DELETE /api/v1/chat/conversations/:id/messages/:messageId/reactions - Remove emoji reaction on direct message
+chatRouter.delete('/conversations/:id/messages/:messageId/reactions', removeDirectMessageReactionHandler);
 
 // POST /api/v1/chat/conversations/:id/attachments - Upload media attachment
 chatRouter.post(

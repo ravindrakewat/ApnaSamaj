@@ -7,6 +7,8 @@ import {
   DirectMessageReadEvent,
   ChatAttachmentInput,
   MessageDeliveryStatus,
+  ChatReactionEventPayload,
+  ChatReactionSummary,
 } from '@apnasamaj/shared-types';
 import { chatApi } from '../api/chat.api';
 import { connectChatSocket, getChatSocket } from '../services/socket.service';
@@ -40,6 +42,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
   const [isOtherUserTyping, setIsOtherUserTyping] = useState<boolean>(false);
   const [otherUserTypingName, setOtherUserTypingName] = useState<string>('');
   const [otherUserLastReadAt, setOtherUserLastReadAt] = useState<string | null>(null);
+  const [replyingToMessage, setReplyingToMessage] = useState<ExtendedDirectMessage | null>(null);
 
   const isTypingActiveRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +93,9 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
               isError: c.deliveryStatus === 'failed',
               errorMessage: c.lastError || undefined,
               tempId: c.tempId,
+              replyToMessageId: c.replyToMessageId || null,
+              replyTo: c.replyTo || null,
+              reactions: c.reactions || [],
               attachments: c.attachment
                 ? [
                     {
@@ -335,11 +341,24 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
       setOtherUserLastReadAt(payload.readAt);
     };
 
+    const handleReaction = (payload: ChatReactionEventPayload) => {
+      if (!payload || payload.conversationId !== conversationId) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === payload.messageId || m.tempId === payload.messageId
+            ? { ...m, reactions: payload.reactions }
+            : m
+        )
+      );
+      chatPersistenceService.updateMessageReactions(payload.messageId, payload.reactions);
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('direct:new_message', handleNewMessage);
     socket.on('direct:user_typing', handleUserTyping);
     socket.on('direct:message_read', handleMessageRead);
+    socket.on('direct:reaction', handleReaction);
 
     if (socket.connected) {
       handleConnect();
@@ -366,6 +385,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         socket.off('direct:new_message', handleNewMessage);
         socket.off('direct:user_typing', handleUserTyping);
         socket.off('direct:message_read', handleMessageRead);
+        socket.off('direct:reaction', handleReaction);
       }
       appStateSub.remove();
 
@@ -427,6 +447,26 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
       // Stop typing status immediately
       sendTypingStatus(false);
 
+      const replyToMessageId = replyingToMessage?.id;
+      const replyToPreview = replyingToMessage
+        ? {
+            id: replyingToMessage.id,
+            senderId: replyingToMessage.senderId,
+            senderName:
+              replyingToMessage.sender?.fullName ||
+              ('sender' in replyingToMessage && (replyingToMessage as any).sender?.profile?.fullName) ||
+              'Member',
+            content: replyingToMessage.content,
+            attachmentType: replyingToMessage.attachments?.[0]?.type || null,
+            attachmentName: replyingToMessage.attachments?.[0]?.fileName || null,
+          }
+        : null;
+
+      // Clear replying state immediately upon send
+      if (replyingToMessage) {
+        setReplyingToMessage(null);
+      }
+
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const nowIso = new Date().toISOString();
 
@@ -438,6 +478,9 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         createdAt: nowIso,
         updatedAt: nowIso,
         deliveryStatus: isConnected ? 'sending' : 'pending',
+        replyToMessageId: replyToMessageId || null,
+        replyTo: replyToPreview,
+        reactions: [],
         sender: user
           ? {
               id: user.id,
@@ -476,6 +519,8 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
           conversationType: 'DIRECT',
           content: trimmed,
           attachment: attachment || null,
+          replyToMessageId: replyToMessageId || undefined,
+          replyTo: replyToPreview,
           tenantSlug: communitySlug,
           userId: user.id,
         });
@@ -491,7 +536,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
 
             socket.emit(
               'direct:send_message',
-              { conversationId, content: trimmed, attachment, tempId },
+              { conversationId, content: trimmed, attachment, tempId, replyToMessageId },
               async (res: { success: boolean; message?: DirectMessageItem; error?: string }) => {
                 clearTimeout(timeout);
                 if (res?.success && res.message) {
@@ -524,7 +569,115 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         }
       }
     },
-    [conversationId, user, communitySlug, isConnected, sendTypingStatus]
+    [conversationId, user, communitySlug, isConnected, sendTypingStatus, replyingToMessage]
+  );
+
+  /**
+   * Toggles an emoji reaction on a direct message with optimistic state update
+   */
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!messageId || !emoji || !user) return;
+
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId && m.tempId !== messageId) return m;
+
+          const currentReactions = [...(m.reactions || [])];
+          const existingIdx = currentReactions.findIndex((r) => r.hasReacted);
+          let updatedReactions: ChatReactionSummary[];
+
+          if (existingIdx >= 0) {
+            const current = currentReactions[existingIdx];
+            if (current.emoji === emoji) {
+              // Tapped same emoji -> toggle off
+              if (current.count <= 1) {
+                updatedReactions = currentReactions.filter((_, i) => i !== existingIdx);
+              } else {
+                updatedReactions = currentReactions.map((r, i) =>
+                  i === existingIdx ? { ...r, count: r.count - 1, hasReacted: false } : r
+                );
+              }
+            } else {
+              // Different emoji -> update
+              updatedReactions = currentReactions
+                .map((r, i) => (i === existingIdx ? { ...r, count: r.count - 1, hasReacted: false } : r))
+                .filter((r) => r.count > 0);
+              const targetIdx = updatedReactions.findIndex((r) => r.emoji === emoji);
+              if (targetIdx >= 0) {
+                updatedReactions[targetIdx] = {
+                  ...updatedReactions[targetIdx],
+                  count: updatedReactions[targetIdx].count + 1,
+                  hasReacted: true,
+                };
+              } else {
+                updatedReactions.push({
+                  emoji,
+                  count: 1,
+                  hasReacted: true,
+                  users: [{ id: user.id, fullName: user.fullName || 'You' }],
+                });
+              }
+            }
+          } else {
+            // Add new reaction
+            const targetIdx = currentReactions.findIndex((r) => r.emoji === emoji);
+            if (targetIdx >= 0) {
+              updatedReactions = currentReactions.map((r, i) =>
+                i === targetIdx ? { ...r, count: r.count + 1, hasReacted: true } : r
+              );
+            } else {
+              updatedReactions = [
+                ...currentReactions,
+                {
+                  emoji,
+                  count: 1,
+                  hasReacted: true,
+                  users: [{ id: user.id, fullName: user.fullName || 'You' }],
+                },
+              ];
+            }
+          }
+
+          return { ...m, reactions: updatedReactions };
+        })
+      );
+
+      const socket = getChatSocket();
+      if (socket && socket.connected) {
+        socket.emit(
+          'direct:react',
+          { conversationId, messageId, emoji },
+          (res: { success: boolean; data?: { reactions: ChatReactionSummary[] } }) => {
+            if (res?.success && res.data) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === messageId || m.tempId === messageId
+                    ? { ...m, reactions: res.data!.reactions }
+                    : m
+                )
+              );
+              chatPersistenceService.updateMessageReactions(messageId, res.data.reactions);
+            }
+          }
+        );
+      } else {
+        try {
+          const res = await chatApi.toggleDirectReaction(conversationId, messageId, emoji);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === messageId || m.tempId === messageId
+                ? { ...m, reactions: res.reactions }
+                : m
+            )
+          );
+          chatPersistenceService.updateMessageReactions(messageId, res.reactions);
+        } catch (err) {
+          console.warn('[useDirectChat] Failed to toggle direct reaction:', err);
+        }
+      }
+    },
+    [conversationId, user]
   );
 
   /**
@@ -562,5 +715,8 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
     retryMessage,
     sendTypingStatus,
     markAsRead,
+    replyingToMessage,
+    setReplyingToMessage,
+    toggleReaction,
   };
 }

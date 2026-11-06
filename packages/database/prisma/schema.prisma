@@ -227,6 +227,8 @@ model User {
   devicePushTokens             DevicePushToken[]
   notificationPreference       NotificationPreference?
   notificationLogs             NotificationLog[]
+  chatMessageReactions         ChatMessageReaction[]
+  directMessageReactions       DirectMessageReaction[]
 
   @@index([role])
   @@index([status])
@@ -495,21 +497,26 @@ model NotificationLog {
 // --------------------------------------------------------
 
 model ChatMessage {
-  id              String   @id @default(uuid())
-  groupId         String
-  group           Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  senderId        String
-  sender          User     @relation("SentChatMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  content         String
-  clientMessageId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String                @id @default(uuid())
+  groupId          String
+  group            Group                 @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderId         String
+  sender           User                  @relation("SentChatMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content          String
+  clientMessageId  String?
+  replyToMessageId String?
+  replyTo          ChatMessage?          @relation("ChatMessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies          ChatMessage[]         @relation("ChatMessageReplies")
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   attachments ChatAttachment[]
+  reactions   ChatMessageReaction[]
 
   @@unique([groupId, senderId, clientMessageId])
   @@index([groupId, createdAt(sort: Desc)])
   @@index([senderId])
+  @@index([replyToMessageId])
 }
 
 // --------------------------------------------------------
@@ -551,21 +558,26 @@ model DirectConversationParticipant {
 }
 
 model DirectMessage {
-  id              String             @id @default(uuid())
-  conversationId  String
-  conversation    DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  senderId        String
-  sender          User               @relation("SentDirectMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  content         String
-  clientMessageId String?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id               String                 @id @default(uuid())
+  conversationId   String
+  conversation     DirectConversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId         String
+  sender           User                   @relation("SentDirectMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content          String
+  clientMessageId  String?
+  replyToMessageId String?
+  replyTo          DirectMessage?         @relation("DirectMessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies          DirectMessage[]        @relation("DirectMessageReplies")
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
 
-  attachments    ChatAttachment[]
+  attachments ChatAttachment[]
+  reactions   DirectMessageReaction[]
 
   @@unique([conversationId, senderId, clientMessageId])
   @@index([conversationId, createdAt(sort: Desc)])
   @@index([senderId])
+  @@index([replyToMessageId])
 }
 
 // --------------------------------------------------------
@@ -588,6 +600,38 @@ model ChatAttachment {
 
   @@index([chatMessageId])
   @@index([directMessageId])
+}
+
+// --------------------------------------------------------
+// CHAT MESSAGE REACTIONS (PERSONAL & GROUP CHAT)
+// --------------------------------------------------------
+
+model ChatMessageReaction {
+  id        String      @id @default(uuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime    @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@index([userId])
+}
+
+model DirectMessageReaction {
+  id        String        @id @default(uuid())
+  messageId String
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime      @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@index([userId])
 }
 
 // MATRIMONIAL MODULE

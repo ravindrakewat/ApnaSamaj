@@ -1,4 +1,4 @@
-import { LocalChatMessage, MessageDeliveryStatus, ChatAttachmentInput } from '@apnasamaj/shared-types';
+import { LocalChatMessage, MessageDeliveryStatus, ChatAttachmentInput, ChatReactionSummary } from '@apnasamaj/shared-types';
 import { getSecureItem, setSecureItem, removeSecureItem } from './storage.service';
 
 /**
@@ -300,6 +300,29 @@ export class ChatPersistenceService {
   }
 
   /**
+   * Updates reactions on an in-memory and persistently cached message.
+   */
+  public async updateMessageReactions(
+    messageIdOrTempId: string,
+    reactions: ChatReactionSummary[]
+  ): Promise<void> {
+    const msg = this.inMemoryCache.get(messageIdOrTempId);
+    if (msg) {
+      msg.reactions = reactions;
+      msg.updatedAt = new Date().toISOString();
+      this.inMemoryCache.set(messageIdOrTempId, msg);
+      if (msg.serverMessageId && msg.serverMessageId !== messageIdOrTempId) {
+        this.inMemoryCache.set(msg.serverMessageId, msg);
+      }
+      if (msg.tempId && msg.tempId !== messageIdOrTempId) {
+        this.inMemoryCache.set(msg.tempId, msg);
+      }
+      const msgKey = this.getMsgKey(msg.tenantSlug, msg.userId, msg.tempId);
+      await this.writeChunkedItem(msgKey, JSON.stringify(msg));
+    }
+  }
+
+  /**
    * Saves recently received server messages into local conversation cache.
    */
   public async saveReceivedMessages(
@@ -337,6 +360,9 @@ export class ChatPersistenceService {
               duration: msg.attachments[0].duration,
             }
           : null,
+        replyToMessageId: msg.replyToMessageId || null,
+        replyTo: msg.replyTo || null,
+        reactions: msg.reactions || [],
         deliveryStatus: 'sent',
         retryCount: 0,
         createdAt: msg.createdAt || new Date().toISOString(),

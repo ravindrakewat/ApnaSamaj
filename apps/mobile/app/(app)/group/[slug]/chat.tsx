@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -27,6 +27,10 @@ import {
   ChatAudioMessage,
   VoiceRecorder,
   RecordedVoiceNote,
+  QuotedReplyPreview,
+  ReactionBadgeList,
+  EmojiReactionSelector,
+  ReplyComposerBar,
 } from '../../../../src/components';
 import { useTheme } from '../../../../src/hooks/useTheme';
 import { useLocalization } from '../../../../src/hooks/useLocalization';
@@ -102,11 +106,31 @@ export default function GroupChatScreen() {
     sendMessage,
     retryMessage,
     reportTyping,
+    replyingToMessage,
+    setReplyingToMessage,
+    toggleReaction,
   } = useGroupChat({
     groupId: group?.id || '',
     isMember,
     isPrivate,
   });
+
+  const [reactionTargetMessage, setReactionTargetMessage] = useState<ExtendedChatMessage | null>(null);
+  const flatListRef = useRef<FlatList<ExtendedChatMessage>>(null);
+
+  const handleScrollToMessage = useCallback(
+    (targetId: string) => {
+      const index = messages.findIndex((m) => m.id === targetId || m.tempId === targetId);
+      if (index >= 0) {
+        try {
+          flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+        } catch {
+          // Fallback if index not in current virtualized window
+        }
+      }
+    },
+    [messages]
+  );
 
   const handleJoin = async () => {
     if (!group || isJoining) return;
@@ -310,99 +334,137 @@ export default function GroupChatScreen() {
             </View>
           )}
 
-          {/* Bubble Card */}
-          <View
-            style={[
-              styles.bubble,
-              isOwn ? styles.bubbleOwn : styles.bubbleOther,
-              item.isError && styles.bubbleError,
-            ]}
-          >
-            {/* Sender Name in Group Chat */}
-            {!isOwn && item.sender && (
-              <Typography
-                variant="xs"
-                weight="bold"
-                style={[styles.senderName, { color: getSenderColor(item.senderId) }]}
-              >
-                {item.sender.fullName}
-              </Typography>
-            )}
+          {/* Bubble Card with Long Press Reaction/Reply */}
+          <View style={isOwn ? styles.bubbleColumnOwn : styles.bubbleColumnOther}>
+            <Pressable
+              onLongPress={() => {
+                Alert.alert(
+                  item.sender?.fullName || (isOwn ? 'You' : 'Member'),
+                  undefined,
+                  [
+                    {
+                      text: language === 'hi' ? 'प्रतिक्रिया दें' : 'React',
+                      onPress: () => setReactionTargetMessage(item),
+                    },
+                    {
+                      text: language === 'hi' ? 'उत्तर दें (Reply)' : 'Reply',
+                      onPress: () => setReplyingToMessage(item),
+                    },
+                    {
+                      text: language === 'hi' ? 'रद्द करें' : 'Cancel',
+                      style: 'cancel',
+                    },
+                  ]
+                );
+              }}
+              style={[
+                styles.bubble,
+                isOwn ? styles.bubbleOwn : styles.bubbleOther,
+                item.isError && styles.bubbleError,
+              ]}
+            >
+              {/* Quoted Message Preview inside bubble if present */}
+              {item.replyTo && (
+                <QuotedReplyPreview
+                  replyTo={item.replyTo}
+                  isMyMessage={isOwn}
+                  onPress={() => item.replyTo?.id && handleScrollToMessage(item.replyTo.id)}
+                />
+              )}
 
-            {/* Attachment Rendering */}
-            {item.attachments && item.attachments.length > 0 && (
-              <View style={styles.attachmentsWrapper}>
-                {item.attachments.map((att) => {
-                  if (att.type === 'IMAGE') {
-                    return <ChatImageMessage key={att.id} attachment={att} />;
-                  }
-                  if (att.type === 'VIDEO') {
-                    return <ChatVideoMessage key={att.id} attachment={att} />;
-                  }
-                  if (att.type === 'AUDIO') {
-                    return (
-                      <ChatAudioMessage
-                        key={att.id || att.storagePath || att.localUri}
-                        attachment={att}
-                        isCurrentUser={isOwn}
-                        deliveryStatus={item.deliveryStatus}
-                        onRetry={() => item.tempId && retryMessage(item.tempId)}
-                      />
-                    );
-                  }
-                  return <ChatDocumentMessage key={att.id} attachment={att} />;
-                })}
-              </View>
-            )}
-
-            {/* Message Body (only rendered if non-empty content exists) */}
-            {item.content && item.content.trim().length > 0 ? (
-              <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
-                {item.content}
-              </Typography>
-            ) : null}
-
-            {/* Timestamp & Status Metadata */}
-            <View style={styles.messageMeta}>
-              <Typography variant="xs" color="#64748B" style={styles.messageTime}>
-                {formatMessageTime(item.createdAt)}
-              </Typography>
-              {isOwn && (
+              {/* Sender Name in Group Chat */}
+              {!isOwn && item.sender && (
                 <Typography
                   variant="xs"
-                  color={
-                    item.isError || item.deliveryStatus === 'failed'
-                      ? theme.colors.error
-                      : item.deliveryStatus === 'pending' || item.deliveryStatus === 'sending' || item.isOptimistic
-                      ? '#94A3B8'
-                      : '#059669'
-                  }
-                  style={styles.statusIndicator}
+                  weight="bold"
+                  style={[styles.senderName, { color: getSenderColor(item.senderId) }]}
                 >
-                  {item.isError || item.deliveryStatus === 'failed'
-                    ? '⚠️'
-                    : item.deliveryStatus === 'sending'
-                    ? '⏳'
-                    : item.deliveryStatus === 'pending' || item.isOptimistic
-                    ? '🕒'
-                    : '✓'}
+                  {item.sender.fullName}
                 </Typography>
               )}
-            </View>
 
-            {/* Failed message retry CTA */}
-            {isOwn && (item.isError || item.deliveryStatus === 'failed') && (
-              <Pressable
-                onPress={() => item.tempId && retryMessage(item.tempId)}
-                style={styles.retryButton}
-                accessibilityRole="button"
-                accessibilityLabel="Retry sending message"
-              >
-                <Typography variant="xs" color={theme.colors.error} weight="bold">
-                  {language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
+              {/* Attachment Rendering */}
+              {item.attachments && item.attachments.length > 0 && (
+                <View style={styles.attachmentsWrapper}>
+                  {item.attachments.map((att) => {
+                    if (att.type === 'IMAGE') {
+                      return <ChatImageMessage key={att.id} attachment={att} />;
+                    }
+                    if (att.type === 'VIDEO') {
+                      return <ChatVideoMessage key={att.id} attachment={att} />;
+                    }
+                    if (att.type === 'AUDIO') {
+                      return (
+                        <ChatAudioMessage
+                          key={att.id || att.storagePath || att.localUri}
+                          attachment={att}
+                          isCurrentUser={isOwn}
+                          deliveryStatus={item.deliveryStatus}
+                          onRetry={() => item.tempId && retryMessage(item.tempId)}
+                        />
+                      );
+                    }
+                    return <ChatDocumentMessage key={att.id} attachment={att} />;
+                  })}
+                </View>
+              )}
+
+              {/* Message Body (only rendered if non-empty content exists) */}
+              {item.content && item.content.trim().length > 0 ? (
+                <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
+                  {item.content}
                 </Typography>
-              </Pressable>
-            )}
+              ) : null}
+
+              {/* Timestamp & Status Metadata */}
+              <View style={styles.messageMeta}>
+                <Typography variant="xs" color="#64748B" style={styles.messageTime}>
+                  {formatMessageTime(item.createdAt)}
+                </Typography>
+                {isOwn && (
+                  <Typography
+                    variant="xs"
+                    color={
+                      item.isError || item.deliveryStatus === 'failed'
+                        ? theme.colors.error
+                        : item.deliveryStatus === 'pending' || item.deliveryStatus === 'sending' || item.isOptimistic
+                        ? '#94A3B8'
+                        : '#059669'
+                    }
+                    style={styles.statusIndicator}
+                  >
+                    {item.isError || item.deliveryStatus === 'failed'
+                      ? '⚠️'
+                      : item.deliveryStatus === 'sending'
+                      ? '⏳'
+                      : item.deliveryStatus === 'pending' || item.isOptimistic
+                      ? '🕒'
+                      : '✓'}
+                  </Typography>
+                )}
+              </View>
+
+              {/* Failed message retry CTA */}
+              {isOwn && (item.isError || item.deliveryStatus === 'failed') && (
+                <Pressable
+                  onPress={() => item.tempId && retryMessage(item.tempId)}
+                  style={styles.retryButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry sending message"
+                >
+                  <Typography variant="xs" color={theme.colors.error} weight="bold">
+                    {language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
+                  </Typography>
+                </Pressable>
+              )}
+            </Pressable>
+
+            {/* Reaction Badges */}
+            <ReactionBadgeList
+              reactions={item.reactions}
+              isMyMessage={isOwn}
+              onToggleReaction={(emoji) => toggleReaction(item.id, emoji)}
+            />
           </View>
         </View>
       </View>
@@ -544,6 +606,7 @@ export default function GroupChatScreen() {
             </View>
           ) : (
             <FlatList
+              ref={flatListRef}
               data={messages}
               keyExtractor={(item) => item.tempId || item.id}
               renderItem={renderMessageItem}
@@ -551,6 +614,11 @@ export default function GroupChatScreen() {
               contentContainerStyle={styles.listContent}
               onEndReached={loadOlderMessages}
               onEndReachedThreshold={0.2}
+              onScrollToIndexFailed={(info) => {
+                setTimeout(() => {
+                  flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+                }, 100);
+              }}
               ListFooterComponent={
                 isLoadingOlder ? (
                   <View style={styles.loadingOlderIndicator}>
@@ -583,6 +651,12 @@ export default function GroupChatScreen() {
           >
             {isMember ? (
               <View style={styles.composerWrapper}>
+                {replyingToMessage && (
+                  <ReplyComposerBar
+                    replyingTo={replyingToMessage}
+                    onCancel={() => setReplyingToMessage(null)}
+                  />
+                )}
                 {selectedAttachment && (
                   <ChatAttachmentPreview
                     attachment={selectedAttachment}
@@ -658,6 +732,18 @@ export default function GroupChatScreen() {
           </View>
         </View>
       )}
+
+      {/* Emoji Reaction Selector Modal */}
+      <EmojiReactionSelector
+        visible={Boolean(reactionTargetMessage)}
+        activeEmoji={reactionTargetMessage?.reactions?.find((r) => r.hasReacted)?.emoji}
+        onSelectEmoji={(emoji) => {
+          if (reactionTargetMessage) {
+            toggleReaction(reactionTargetMessage.id, emoji);
+          }
+        }}
+        onDismiss={() => setReactionTargetMessage(null)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -745,6 +831,14 @@ const styles = StyleSheet.create({
   bubbleRowOther: {
     alignSelf: 'flex-start',
     justifyContent: 'flex-start',
+  },
+  bubbleColumnOwn: {
+    alignItems: 'flex-end',
+    maxWidth: '100%',
+  },
+  bubbleColumnOther: {
+    alignItems: 'flex-start',
+    maxWidth: '100%',
   },
   senderAvatarContainer: {
     marginRight: 6,

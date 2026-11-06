@@ -5,6 +5,7 @@ import {
   DirectConversationItem,
   DirectMessagesResponseData,
   DirectMessageItem,
+  ToggleChatReactionResponseData,
 } from '@apnasamaj/shared-types';
 import {
   idParamSchema,
@@ -12,6 +13,7 @@ import {
   sendDirectMessageSchema,
   listDirectMessagesQuerySchema,
   listDirectInboxQuerySchema,
+  toggleChatReactionSchema,
 } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
@@ -22,6 +24,8 @@ import {
   markDirectConversationAsRead,
   verifyDirectConversationAccess,
   getChatAttachmentDetails,
+  toggleDirectMessageReaction,
+  removeDirectMessageReaction,
 } from './direct-chat.service';
 import {
   ChatServiceError,
@@ -231,7 +235,9 @@ export async function sendDirectMessageHandler(
       parsedBody.data.content,
       parsedBody.data.attachment,
       parsedBody.data.tempId,
-      req.db
+      req.db,
+      undefined,
+      parsedBody.data.replyToMessageId
     );
 
     // Broadcast over WebSocket if socket server is initialized
@@ -469,4 +475,163 @@ function handleChatError(res: Response, err: unknown, fallbackMessage: string): 
     timestamp: new Date().toISOString(),
   };
   res.status(500).json(response);
+}
+
+/**
+ * POST /api/v1/chat/conversations/:id/messages/:messageId/reactions
+ * Toggles an emoji reaction on a direct message.
+ */
+export async function toggleDirectMessageReactionHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({
+      success: false,
+      error: 'Authentication required.',
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const parsedParams = idParamSchema.safeParse(req.params);
+  if (!parsedParams.success) {
+    res.status(400).json({
+      success: false,
+      error: 'Invalid conversation identifier.',
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const messageId = req.params.messageId;
+  if (!messageId) {
+    res.status(400).json({
+      success: false,
+      error: 'Message identifier is required.',
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const parsedBody = toggleChatReactionSchema.safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({
+      success: false,
+      error: parsedBody.error.errors[0]?.message || 'Invalid reaction emoji.',
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  try {
+    const result = await toggleDirectMessageReaction(
+      parsedParams.data.id,
+      messageId,
+      userId,
+      parsedBody.data.emoji,
+      req.db
+    );
+
+    try {
+      const io = getIO();
+      const tenantSlug = req.tenant?.slug || 'default';
+      const conversationRoom = `${tenantSlug}:conversation:${parsedParams.data.id}`;
+      io.to(conversationRoom).emit('direct:reaction', {
+        conversationId: parsedParams.data.id,
+        conversationType: 'DIRECT',
+        messageId,
+        reactions: result.reactions,
+        userId,
+        emoji: parsedBody.data.emoji,
+        action: result.action,
+      });
+    } catch {
+      // Non-blocking socket emission
+    }
+
+    const response: ApiResponse<ToggleChatReactionResponseData> = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleChatError(res, err, 'Failed to update direct message reaction.');
+  }
+}
+
+/**
+ * DELETE /api/v1/chat/conversations/:id/messages/:messageId/reactions
+ * Removes any active reaction from the user on a direct message.
+ */
+export async function removeDirectMessageReactionHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({
+      success: false,
+      error: 'Authentication required.',
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const parsedParams = idParamSchema.safeParse(req.params);
+  if (!parsedParams.success) {
+    res.status(400).json({
+      success: false,
+      error: 'Invalid conversation identifier.',
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const messageId = req.params.messageId;
+  if (!messageId) {
+    res.status(400).json({
+      success: false,
+      error: 'Message identifier is required.',
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  try {
+    const result = await removeDirectMessageReaction(
+      parsedParams.data.id,
+      messageId,
+      userId,
+      req.db
+    );
+
+    try {
+      const io = getIO();
+      const tenantSlug = req.tenant?.slug || 'default';
+      const conversationRoom = `${tenantSlug}:conversation:${parsedParams.data.id}`;
+      io.to(conversationRoom).emit('direct:reaction', {
+        conversationId: parsedParams.data.id,
+        conversationType: 'DIRECT',
+        messageId,
+        reactions: result.reactions,
+        userId,
+        emoji: '',
+        action: 'removed',
+      });
+    } catch {
+      // Non-blocking socket emission
+    }
+
+    const response: ApiResponse<ToggleChatReactionResponseData> = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleChatError(res, err, 'Failed to remove direct message reaction.');
+  }
 }

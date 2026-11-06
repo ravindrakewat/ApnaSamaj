@@ -66,12 +66,15 @@ The following milestone checkpoint commits have been independently inspected in 
 | `72c79ec` | `72c79ec2090ef9e697e5a880f83355908a011571` | `feat: add secure chat media attachments` | Batch 8.4 Chat Media Attachments | **Confirmed** | **Confirmed (Pushed)** |
 | `e4d8593` | `e4d8593eff2d4c47322504609a67344769f1515c` | `feat: implement FCM push notification system` | Batch 8.5 FCM Push Notifications | **Confirmed** | **Confirmed (Pushed)** |
 | `94ed1b7` | `94ed1b7b7fbd625dd0f4145105ed25b54dca4030` | `feat(chat): implement offline chat sync, outbox queue, and reliability hardening` | Batch 8.6 Offline Chat Sync & Outbox Queue | **Confirmed** | **Confirmed (Pushed)** |
+| `7fb6b29` | `7fb6b29cb481dec7ddd20978c28a1e3190c14b12` | `chore: record batch 8.6 git checkpoint in project history` | Batch 8.6 Checkpoint | **Confirmed** | **Confirmed (Pushed)** |
+| `c3ef535` | `c3ef535af28d6586c15735d1f93b6084a1264041` | `feat(chat): add voice notes and offline audio messaging` | Batch 8.7 Voice Notes & Audio Messaging | **Confirmed** | **Confirmed (Pushed)** |
+| `b534e5a` | `b534e5aecbece9bab8a2f805da5e845151fff1ca` | `chore: record batch 8.7 git checkpoint in project history` | Batch 8.7 Checkpoint | **Confirmed** | **Confirmed (Pushed)** |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current HEAD:** `94ed1b7b7fbd625dd0f4145105ed25b54dca4030` (`94ed1b7`)
+- **Current HEAD:** `b534e5aecbece9bab8a2f805da5e845151fff1ca` (`b534e5a`)
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
-- **Upstream Sync Status:** Synchronized with `origin/main` (at `94ed1b7`).
+- **Upstream Sync Status:** Synchronized with `origin/main` (at `b534e5a`).
 
 ---
 
@@ -229,18 +232,51 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **Mobile 8.6** | Offline Chat Sync & Outbox Message Queue | Implemented production-grade offline-first messaging for Personal One-to-One and Community Group Chat: updated Prisma schema with `clientMessageId` and compound unique constraints (`[groupId, senderId, clientMessageId]`, `[conversationId, senderId, clientMessageId]`); created migration SQL artifact (`20261105183000_add_chat_idempotency_client_message_id`); created `ChatIdempotencyService` with in-flight Promise collapsing and 5-min completed response cache; built `ChatPersistenceService` with two-tier storage (L1 fast Map + L2 SecureStore/localStorage), 1024-byte chunking for Android Keystore limits, bounded 50-item LRU conversation cache, tenant/user namespaces, mid-flight crash recovery (`recoverStuckSendingMessages`), and unsent queue preservation on logout/community switch; built `OutboxQueueService` with conversational FIFO dispatch, exponential backoff with jitter (2s..60s, max 5 retries), permanent 4xx non-retry guard, AppState foreground auto-drain, and teardown; updated `useDirectChat` & `useGroupChat` hooks with local cache hydration; added offline banners, status icons (🕒, ⏳, ✓, ✓✓, ⚠️), retry buttons, and offline media alert in `chat/[id].tsx` and `group/[slug]/chat.tsx`. 31 mobile tests + 20 backend idempotency tests + 121 backend regression tests passing; 0 typecheck errors across all 9 workspaces; production builds for web, admin, and backend passed. | docs/BATCH_8_6_OFFLINE_CHAT_SYNC_REPORT.md | Verified Pass (31/31 mobile offline tests, 20/20 chat idempotency, 41 direct messaging, 29 media attachments, 51 push notifications = 172/172 tests, clean 9-workspace typecheck, Vite & API production builds passed) | 94ed1b7 | Confirmed (Pushed) | Committed & pushed in 94ed1b7. Checkpoint at 7fb6b29. |
 | **Mobile 8.7** | Mobile Voice Notes & Audio Messaging | Implemented WhatsApp-like voice notes across Personal One-to-One Chat and Community Group Chat: added `expo-av@~15.0.2` with on-demand microphone permissions, `VoiceRecordingService`, `VoicePlaybackService` with single-player lock and speed cycling (1x, 1.5x, 2x), `AudioWaveform` 26-bar scrubber, `VoiceRecorder` interactive bottom bar, `ChatAudioMessage` bubble renderer, two-phase offline outbox queue upload, backend storage audio magic bytes validation (25MB limit), `duration` metadata in Prisma schema and migration artifact. 13 mobile tests + 10 backend tests + 141 backend regression tests passing; 0 typecheck errors across all 9 workspaces; production builds for web, admin, and backend passed. | docs/BATCH_8_7_VOICE_NOTES_REPORT.md | Verified Pass (13/13 mobile voice tests, 10/10 backend voice tests, 20 idempotency, 29 media, 41 direct, 51 push = 164 backend tests, clean 9-workspace typecheck, clean Expo Web export) | c3ef535 | Confirmed (Pushed) | Committed & pushed in c3ef535. |
 | **Mobile 8.7.1** | Voice Message Reliability Audit & Hardening | Audited and hardened voice notes: immediate persistence of Phase 1 uploaded `storagePath` via `updateMessageAttachment` preventing duplicate re-uploads; backend safe re-association handling permitting same-author retry while rejecting foreign access with 400; graceful degradation for purged local files with clear failure status; AppState background recording and playback pausing; chat screen unmount hardware audio resource release; cache hydration `duration` and `localUri` mapping. Expanded tests to 16/16 mobile and 12/12 backend (total 168 backend + 216 mobile tests passing); 0 typecheck errors across all 9 workspaces; clean production builds and Expo Web export. | docs/BATCH_8_7_1_VOICE_NOTES_RELIABILITY_AUDIT_REPORT.md | Verified Pass (16/16 mobile voice tests, 12/12 backend voice tests, 20 idempotency, 29 media, 41 direct, 51 push = 168 backend tests, 216 cumulative mobile tests, 0 monorepo typecheck errors, clean Expo Web export) | c3ef535 | Confirmed (Pushed) | Committed & pushed in c3ef535. |
+| **Mobile 8.8** | Chat Message Reactions, Replies & Quoted Messages | Implemented WhatsApp-like emoji reactions (`👍`, `❤️`, `😂`, `😮`, `😢`, `🙏`) with strict single active reaction per user per message invariant (`ChatMessageReaction` and `DirectMessageReaction` models with `@@unique([messageId, userId])`), toggle-off removal, swipe-to-reply and long-press reply actions, self-referencing `replyToMessageId` relation (`onDelete: SetNull`), safe deleted original message fallback preview, cross-group/cross-conversation boundary guards (HTTP 400), pinned `ReplyComposerBar` above message input with dismiss button (`✕`), embedded `QuotedReplyPreview` inside bubbles with tap-to-scroll to referenced message, `ReactionBadgeList` chips, real-time Socket.IO sync (`chat:react`, `direct:react`, `chat:reaction`, `direct:reaction`), offline outbox queue and persistent storage integration, and migration SQL artifact (`20261106170000_add_chat_reactions_and_replies`). | docs/BATCH_8_8_CHAT_REACTIONS_REPLIES_REPORT.md | Verified Pass (21/21 backend tests, 10/10 mobile flow tests, 41 direct messaging tests, 12 voice notes tests, 20 idempotency tests, 29 media tests, 51 push tests, full mobile runner passed, 0 typecheck errors across all 10 workspaces, clean monorepo build) | Uncommitted | Working tree | Ready for user audit and git staging. |
+| **Mobile 8.8.1** | Chat Reactions & Replies Reliability & Security Audit | Audited code-level reliability and security: resolved concurrent P2002 unique constraint collisions on rapid reaction toggles; resolved P2025 update/delete races; unified group slug resolution to canonical UUID room targeting in REST controllers and Socket.IO listener; added input sanitization and length bounding for `replyToMessageId`; added `onScrollToIndexFailed` handler on mobile FlatList preventing unrendered index warnings; suppressed interactive tap on deleted parent messages in `QuotedReplyPreview`. Verified 21/21 backend tests (+4 audit regression tests) and full regression suite. | docs/BATCH_8_8_CHAT_REACTIONS_REPLIES_REPORT.md | Verified Pass (184 backend tests across 7 suites + full mobile runner passed, 0 monorepo typecheck errors, clean monorepo build) | Uncommitted | Working tree | Ready for user audit and git staging. |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `c3ef535af28d6586c15735d1f93b6084a1264041` (`c3ef535`)
-- **Upstream Tracking:** Synchronized with `origin/main` (at `c3ef535`).
-- **Actual `git status --short`:** Working tree clean.
-- **Latest Completed Batch:** **Batch 8.7 & 8.7.1 (Mobile Track) — Mobile Voice Notes, Audio Messaging & Reliability Hardening**.
-- **Current In-Progress Batch:** Completed and synchronized with remote GitHub repository.
-- **Exact Next Recommended Batch:** **Batch 8.8 (Mobile Track) — Chat Message Reactions, Replies & Quoted Messages**.
+- **Current HEAD:** `b534e5aecbece9bab8a2f805da5e845151fff1ca` (`b534e5a`)
+- **Upstream Tracking:** Synchronized with `origin/main` (at `b534e5a`).
+- **Actual `git status --short`:**
+  ```text
+   M apps/api/src/modules/chat/chat.controller.ts
+   M apps/api/src/modules/chat/chat.routes.ts
+   M apps/api/src/modules/chat/chat.service.ts
+   M apps/api/src/modules/chat/chat.socket.ts
+   M apps/api/src/modules/chat/direct-chat.controller.ts
+   M apps/api/src/modules/chat/direct-chat.service.ts
+   M apps/api/src/modules/groups/groups.routes.ts
+   M apps/mobile/app/(app)/chat/[id].tsx
+   M apps/mobile/app/(app)/group/[slug]/chat.tsx
+   M apps/mobile/src/api/chat.api.ts
+   M apps/mobile/src/components/chat/index.ts
+   M apps/mobile/src/hooks/useDirectChat.ts
+   M apps/mobile/src/hooks/useGroupChat.ts
+   M apps/mobile/src/services/chat-persistence.service.ts
+   M apps/mobile/src/services/outbox-queue.service.ts
+   M apps/mobile/src/tests/test-runner.ts
+   M docs/MOBILE_APP_DEVELOPMENT_DASHBOARD.md
+   M docs/PROJECT_HISTORY.md
+   M packages/database/prisma/schema.prisma
+   M packages/shared-types/src/chat.ts
+   M packages/validation/src/chat.ts
+  ?? apps/api/src/tests/chat-reactions-replies-backend.test.ts
+  ?? apps/mobile/src/components/chat/EmojiReactionSelector.tsx
+  ?? apps/mobile/src/components/chat/QuotedReplyPreview.tsx
+  ?? apps/mobile/src/components/chat/ReactionBadgeList.tsx
+  ?? apps/mobile/src/components/chat/ReplyComposerBar.tsx
+  ?? apps/mobile/src/tests/chat-reactions-replies-flow.test.ts
+  ?? docs/BATCH_8_8_CHAT_REACTIONS_REPLIES_REPORT.md
+  ?? packages/database/prisma/migrations/20261106170000_add_chat_reactions_and_replies/
+  ```
+- **Latest Completed Batch:** **Batch 8.8 & 8.8.1 (Mobile Track) — Chat Message Reactions, Replies, Quoted Messages & Reliability Hardening**.
+- **Current In-Progress Batch:** Batch 8.8 & 8.8.1 completed, hardened, tested, typechecked, and documented; awaiting user review and git staging authorization.
+- **Exact Next Recommended Batch:** **Batch 8.8 Git Synchronization** followed by **Batch 8.9 (Mobile Track) — Chat Message Search & In-Chat Media Gallery**.
 
 ---
 

@@ -9,6 +9,7 @@ import {
   DirectMessageItem,
   ChatAttachmentItem,
   ChatAttachmentInput,
+  ToggleChatReactionResponseData,
 } from '@apnasamaj/shared-types';
 
 export interface ListGroupMessagesParams {
@@ -73,7 +74,8 @@ export const chatApi = {
     groupId: string,
     content?: string,
     tempId?: string,
-    attachment?: ChatAttachmentInput
+    attachment?: ChatAttachmentInput,
+    replyToMessageId?: string
   ): Promise<ChatMessageItem> {
     if (!groupId || !groupId.trim()) {
       throw new Error('Group ID is required to send message.');
@@ -89,11 +91,58 @@ export const chatApi = {
         content: trimmed,
         attachment,
         tempId,
+        replyToMessageId,
       }
     );
 
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Failed to send group chat message.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Toggles an emoji reaction on a group chat message.
+   */
+  async toggleGroupReaction(
+    groupId: string,
+    messageId: string,
+    emoji: string
+  ): Promise<ToggleChatReactionResponseData> {
+    if (!groupId || !messageId || !emoji) {
+      throw new Error('Group ID, message ID, and emoji are required.');
+    }
+
+    const response = await apiClient.post<ApiResponse<ToggleChatReactionResponseData>>(
+      `/groups/${encodeURIComponent(groupId.trim())}/messages/${encodeURIComponent(messageId.trim())}/reactions`,
+      { emoji }
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to update group message reaction.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Removes any active reaction from the user on a group chat message.
+   */
+  async removeGroupReaction(
+    groupId: string,
+    messageId: string
+  ): Promise<ToggleChatReactionResponseData> {
+    if (!groupId || !messageId) {
+      throw new Error('Group ID and message ID are required.');
+    }
+
+    const response = await apiClient.delete<ApiResponse<ToggleChatReactionResponseData>>(
+      `/groups/${encodeURIComponent(groupId.trim())}/messages/${encodeURIComponent(messageId.trim())}/reactions`
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to remove group message reaction.');
     }
 
     return response.data;
@@ -207,7 +256,8 @@ export const chatApi = {
     conversationId: string,
     content?: string,
     tempId?: string,
-    attachment?: ChatAttachmentInput
+    attachment?: ChatAttachmentInput,
+    replyToMessageId?: string
   ): Promise<DirectMessageItem> {
     if (!conversationId || !conversationId.trim()) {
       throw new Error('Conversation ID is required to send message.');
@@ -223,11 +273,58 @@ export const chatApi = {
         content: trimmed,
         attachment,
         tempId,
+        replyToMessageId,
       }
     );
 
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Failed to send direct message.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Toggles an emoji reaction on a direct message.
+   */
+  async toggleDirectReaction(
+    conversationId: string,
+    messageId: string,
+    emoji: string
+  ): Promise<ToggleChatReactionResponseData> {
+    if (!conversationId || !messageId || !emoji) {
+      throw new Error('Conversation ID, message ID, and emoji are required.');
+    }
+
+    const response = await apiClient.post<ApiResponse<ToggleChatReactionResponseData>>(
+      `/chat/conversations/${encodeURIComponent(conversationId.trim())}/messages/${encodeURIComponent(messageId.trim())}/reactions`,
+      { emoji }
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to update direct message reaction.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Removes any active reaction from the user on a direct message.
+   */
+  async removeDirectReaction(
+    conversationId: string,
+    messageId: string
+  ): Promise<ToggleChatReactionResponseData> {
+    if (!conversationId || !messageId) {
+      throw new Error('Conversation ID and message ID are required.');
+    }
+
+    const response = await apiClient.delete<ApiResponse<ToggleChatReactionResponseData>>(
+      `/chat/conversations/${encodeURIComponent(conversationId.trim())}/messages/${encodeURIComponent(messageId.trim())}/reactions`
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to remove direct message reaction.');
     }
 
     return response.data;

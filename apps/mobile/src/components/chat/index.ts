@@ -7,4 +7,8 @@ export * from './ChatUploadProgress';
 export * from './AudioWaveform';
 export * from './VoiceRecorder';
 export * from './ChatAudioMessage';
+export * from './EmojiReactionSelector';
+export * from './ReactionBadgeList';
+export * from './QuotedReplyPreview';
+export * from './ReplyComposerBar';
 

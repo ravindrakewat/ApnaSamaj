@@ -5,11 +5,18 @@ import { isCorsOriginAllowed } from '../../config/cors';
 import { verifyAccessToken } from '../auth/auth.tokens';
 import { tenantDbManager, PrismaClient } from '@apnasamaj/database';
 import { resolveCommunityFromRequest } from '@apnasamaj/validation';
-import { sendChatMessage, verifyGroupChatAccess } from './chat.service';
+import {
+  sendChatMessage,
+  verifyGroupChatAccess,
+  toggleChatMessageReaction,
+  removeChatMessageReaction,
+} from './chat.service';
 import {
   sendDirectMessage,
   verifyDirectConversationAccess,
   markDirectConversationAsRead,
+  toggleDirectMessageReaction,
+  removeDirectMessageReaction,
 } from './direct-chat.service';
 import {
   ChatMessageItem,
@@ -21,6 +28,8 @@ import {
   DirectUserTypingEvent,
   DirectMessageReadEvent,
   ChatAttachmentInput,
+  ChatReactionEventPayload,
+  ToggleChatReactionResponseData,
 } from '@apnasamaj/shared-types';
 
 export interface AuthenticatedSocketUser {
@@ -427,11 +436,17 @@ export function initChatSocketServer(httpServer: http.Server): Server {
     socket.on(
       'send_message',
       async (
-        payload: { groupId: string; content?: string; attachment?: ChatAttachmentInput; tempId?: string },
+        payload: {
+          groupId: string;
+          content?: string;
+          attachment?: ChatAttachmentInput;
+          replyToMessageId?: string;
+          tempId?: string;
+        },
         callback?: (res: { success: boolean; message?: ChatMessageItem; error?: string }) => void
       ) => {
         try {
-          const { groupId, content, attachment, tempId } = payload || {};
+          const { groupId, content, attachment, replyToMessageId, tempId } = payload || {};
           if (!groupId || (!content && !attachment)) {
             callback?.({ success: false, error: 'Group ID and message content or attachment are required.' });
             return;
@@ -447,7 +462,16 @@ export function initChatSocketServer(httpServer: http.Server): Server {
           }
 
           // Server-side authorization & database persistence on tenant db
-          const savedMessage = await sendChatMessage(groupId, user.id, content, attachment, tempId, db);
+          const savedMessage = await sendChatMessage(
+            groupId,
+            user.id,
+            content,
+            attachment,
+            tempId,
+            db,
+            undefined,
+            replyToMessageId
+          );
 
           // Broadcast strictly to sockets in the tenant's group room
           const eventPayload: NewChatMessageEvent = {
@@ -461,6 +485,42 @@ export function initChatSocketServer(httpServer: http.Server): Server {
           callback?.({ success: true, message: savedMessage });
         } catch (err: unknown) {
           const errorMsg = err instanceof Error ? err.message : 'Failed to send message.';
+          callback?.({ success: false, error: errorMsg });
+        }
+      }
+    );
+
+    // 3.1 Emoji Reaction on Group Chat Message
+    socket.on(
+      'chat:react',
+      async (
+        payload: { groupId: string; messageId: string; emoji: string },
+        callback?: (res: { success: boolean; data?: ToggleChatReactionResponseData; error?: string }) => void
+      ) => {
+        try {
+          const { groupId, messageId, emoji } = payload || {};
+          if (!groupId || !messageId || !emoji) {
+            callback?.({ success: false, error: 'Group ID, message ID, and emoji are required.' });
+            return;
+          }
+
+          const result = await toggleChatMessageReaction(groupId, messageId, user.id, emoji, db);
+          const targetGroupId = result.groupId || groupId;
+
+          const reactionPayload: ChatReactionEventPayload = {
+            conversationId: targetGroupId,
+            conversationType: 'GROUP',
+            messageId,
+            reactions: result.reactions,
+            userId: user.id,
+            emoji,
+            action: result.action,
+          };
+          io.to(getTenantRoomName(targetGroupId)).emit('chat:reaction', reactionPayload);
+
+          callback?.({ success: true, data: result });
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : 'Failed to update reaction.';
           callback?.({ success: false, error: errorMsg });
         }
       }
@@ -531,11 +591,17 @@ export function initChatSocketServer(httpServer: http.Server): Server {
     socket.on(
       'direct:send_message',
       async (
-        payload: { conversationId: string; content?: string; attachment?: ChatAttachmentInput; tempId?: string },
+        payload: {
+          conversationId: string;
+          content?: string;
+          attachment?: ChatAttachmentInput;
+          replyToMessageId?: string;
+          tempId?: string;
+        },
         callback?: (res: { success: boolean; message?: DirectMessageItem; error?: string }) => void
       ) => {
         try {
-          const { conversationId, content, attachment, tempId } = payload || {};
+          const { conversationId, content, attachment, replyToMessageId, tempId } = payload || {};
           if (!conversationId || (!content && !attachment)) {
             callback?.({ success: false, error: 'Conversation ID and message content or attachment are required.' });
             return;
@@ -557,7 +623,9 @@ export function initChatSocketServer(httpServer: http.Server): Server {
             content,
             attachment,
             tempId,
-            db
+            db,
+            undefined,
+            replyToMessageId
           );
 
           // Broadcast strictly to participants in the direct conversation room
@@ -572,6 +640,41 @@ export function initChatSocketServer(httpServer: http.Server): Server {
           callback?.({ success: true, message: savedMessage });
         } catch (err: unknown) {
           const errorMsg = err instanceof Error ? err.message : 'Failed to send message.';
+          callback?.({ success: false, error: errorMsg });
+        }
+      }
+    );
+
+    // C.1 Emoji Reaction on Direct Message
+    socket.on(
+      'direct:react',
+      async (
+        payload: { conversationId: string; messageId: string; emoji: string },
+        callback?: (res: { success: boolean; data?: ToggleChatReactionResponseData; error?: string }) => void
+      ) => {
+        try {
+          const { conversationId, messageId, emoji } = payload || {};
+          if (!conversationId || !messageId || !emoji) {
+            callback?.({ success: false, error: 'Conversation ID, message ID, and emoji are required.' });
+            return;
+          }
+
+          const result = await toggleDirectMessageReaction(conversationId, messageId, user.id, emoji, db);
+
+          const reactionPayload: ChatReactionEventPayload = {
+            conversationId,
+            conversationType: 'DIRECT',
+            messageId,
+            reactions: result.reactions,
+            userId: user.id,
+            emoji,
+            action: result.action,
+          };
+          io.to(getDirectRoomName(conversationId)).emit('direct:reaction', reactionPayload);
+
+          callback?.({ success: true, data: result });
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : 'Failed to update reaction.';
           callback?.({ success: false, error: errorMsg });
         }
       }

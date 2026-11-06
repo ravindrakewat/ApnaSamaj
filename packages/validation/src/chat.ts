@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+export const ALLOWED_CHAT_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
+export type AllowedChatReaction = (typeof ALLOWED_CHAT_REACTIONS)[number];
+
+export const toggleChatReactionSchema = z.object({
+  emoji: z.enum(ALLOWED_CHAT_REACTIONS, {
+    errorMap: () => ({ message: 'Invalid reaction emoji. Supported reactions: 👍, ❤️, 😂, 😮, 😢, 🙏' }),
+  }),
+});
+
+export type ToggleChatReactionSchemaInput = z.infer<typeof toggleChatReactionSchema>;
+
 export const chatAttachmentInputSchema = z.object({
   id: z.string().optional(),
   type: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT', 'AUDIO']),
@@ -23,6 +34,7 @@ export const sendChatMessageSchema = z
       .optional()
       .default(''),
     attachment: chatAttachmentInputSchema.optional(),
+    replyToMessageId: z.string().trim().min(1).max(100).optional(),
     tempId: z.string().optional(),
   })
   .refine(
@@ -57,6 +69,7 @@ export const sendDirectMessageSchema = z
       .optional()
       .default(''),
     attachment: chatAttachmentInputSchema.optional(),
+    replyToMessageId: z.string().trim().min(1).max(100).optional(),
     tempId: z.string().optional(),
   })
   .refine(

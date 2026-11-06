@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -27,6 +27,10 @@ import {
   ChatAudioMessage,
   VoiceRecorder,
   RecordedVoiceNote,
+  QuotedReplyPreview,
+  ReactionBadgeList,
+  EmojiReactionSelector,
+  ReplyComposerBar,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -70,9 +74,27 @@ export default function PersonalChatScreen() {
     sendMessage,
     retryMessage,
     sendTypingStatus,
+    replyingToMessage,
+    setReplyingToMessage,
+    toggleReaction,
   } = useDirectChat({
     conversationId: conversationId || '',
   });
+
+  const [reactionTargetMessage, setReactionTargetMessage] = useState<ExtendedDirectMessage | null>(null);
+  const flatListRef = useRef<FlatList<ExtendedDirectMessage>>(null);
+
+  const handleScrollToMessage = useCallback(
+    (targetId: string) => {
+      const index = messages.findIndex((m) => m.id === targetId || m.tempId === targetId);
+      if (index >= 0) {
+        try {
+          flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+        } catch {}
+      }
+    },
+    [messages]
+  );
 
   // Screen unmount hardware audio resource release
   useEffect(() => {
@@ -276,80 +298,118 @@ export default function PersonalChatScreen() {
           </View>
         )}
 
-        {/* Message Bubble Container */}
+        {/* Message Bubble Container with Long Press Reaction/Reply */}
         <View style={[styles.bubbleRow, isOwn ? styles.bubbleRowOwn : styles.bubbleRowOther]}>
-          <View
-            style={[
-              styles.bubble,
-              isOwn ? styles.bubbleOwn : styles.bubbleOther,
-              item.isError && styles.bubbleError,
-            ]}
-          >
-            {/* Attachment Rendering */}
-            {item.attachments && item.attachments.length > 0 && (
-              <View style={styles.attachmentsWrapper}>
-                {item.attachments.map((att) => {
-                  if (att.type === 'IMAGE') {
-                    return <ChatImageMessage key={att.id} attachment={att} />;
-                  }
-                  if (att.type === 'VIDEO') {
-                    return <ChatVideoMessage key={att.id} attachment={att} />;
-                  }
-                  if (att.type === 'AUDIO') {
-                    return (
-                      <ChatAudioMessage
-                        key={att.id || att.storagePath || att.localUri}
-                        attachment={att}
-                        isCurrentUser={isOwn}
-                        deliveryStatus={item.deliveryStatus}
-                        onRetry={() => item.tempId && retryMessage(item.tempId)}
-                      />
-                    );
-                  }
-                  return <ChatDocumentMessage key={att.id} attachment={att} />;
-                })}
-              </View>
-            )}
-
-            {/* Message Body (only rendered if non-empty content exists) */}
-            {item.content && item.content.trim().length > 0 ? (
-              <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
-                {item.content}
-              </Typography>
-            ) : null}
-
-            {/* Timestamp & Status Metadata */}
-            <View style={styles.messageMeta}>
-              <Typography variant="xs" color="#64748B" style={styles.messageTime}>
-                {formatMessageTime(item.createdAt)}
-              </Typography>
-              {isOwn && (
-                <Typography
-                  variant="xs"
-                  weight={isReadByRecipient ? 'bold' : 'regular'}
-                  color={
-                    item.isError || item.deliveryStatus === 'failed'
-                      ? theme.colors.error
-                      : isReadByRecipient
-                        ? '#0284C7' // WhatsApp blue ticks
-                        : item.isOptimistic || item.deliveryStatus === 'pending' || item.deliveryStatus === 'sending'
-                          ? '#94A3B8'
-                          : '#64748B'
-                  }
-                  style={styles.statusIndicator}
-                >
-                  {item.isError || item.deliveryStatus === 'failed'
-                    ? '⚠️'
-                    : item.deliveryStatus === 'sending'
-                    ? '⏳'
-                    : item.deliveryStatus === 'pending' || item.isOptimistic
-                    ? '🕒'
-                    : isReadByRecipient
-                    ? '✓✓'
-                    : '✓'}
-                </Typography>
+          <View style={isOwn ? styles.bubbleColumnOwn : styles.bubbleColumnOther}>
+            <Pressable
+              onLongPress={() => {
+                Alert.alert(
+                  isOwn ? 'You' : displayParticipant.fullName,
+                  undefined,
+                  [
+                    {
+                      text: language === 'hi' ? 'प्रतिक्रिया दें' : 'React',
+                      onPress: () => setReactionTargetMessage(item),
+                    },
+                    {
+                      text: language === 'hi' ? 'उत्तर दें (Reply)' : 'Reply',
+                      onPress: () => setReplyingToMessage(item),
+                    },
+                    {
+                      text: language === 'hi' ? 'रद्द करें' : 'Cancel',
+                      style: 'cancel',
+                    },
+                  ]
+                );
+              }}
+              style={[
+                styles.bubble,
+                isOwn ? styles.bubbleOwn : styles.bubbleOther,
+                item.isError && styles.bubbleError,
+              ]}
+            >
+              {/* Quoted Message Preview inside bubble if present */}
+              {item.replyTo && (
+                <QuotedReplyPreview
+                  replyTo={item.replyTo}
+                  isMyMessage={isOwn}
+                  onPress={() => item.replyTo?.id && handleScrollToMessage(item.replyTo.id)}
+                />
               )}
-            </View>
+
+              {/* Attachment Rendering */}
+              {item.attachments && item.attachments.length > 0 && (
+                <View style={styles.attachmentsWrapper}>
+                  {item.attachments.map((att) => {
+                    if (att.type === 'IMAGE') {
+                      return <ChatImageMessage key={att.id} attachment={att} />;
+                    }
+                    if (att.type === 'VIDEO') {
+                      return <ChatVideoMessage key={att.id} attachment={att} />;
+                    }
+                    if (att.type === 'AUDIO') {
+                      return (
+                        <ChatAudioMessage
+                          key={att.id || att.storagePath || att.localUri}
+                          attachment={att}
+                          isCurrentUser={isOwn}
+                          deliveryStatus={item.deliveryStatus}
+                          onRetry={() => item.tempId && retryMessage(item.tempId)}
+                        />
+                      );
+                    }
+                    return <ChatDocumentMessage key={att.id} attachment={att} />;
+                  })}
+                </View>
+              )}
+
+              {/* Message Body (only rendered if non-empty content exists) */}
+              {item.content && item.content.trim().length > 0 ? (
+                <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
+                  {item.content}
+                </Typography>
+              ) : null}
+
+              {/* Timestamp & Status Metadata */}
+              <View style={styles.messageMeta}>
+                <Typography variant="xs" color="#64748B" style={styles.messageTime}>
+                  {formatMessageTime(item.createdAt)}
+                </Typography>
+                {isOwn && (
+                  <Typography
+                    variant="xs"
+                    weight={isReadByRecipient ? 'bold' : 'regular'}
+                    color={
+                      item.isError || item.deliveryStatus === 'failed'
+                        ? theme.colors.error
+                        : isReadByRecipient
+                          ? '#0284C7' // WhatsApp blue ticks
+                          : item.isOptimistic || item.deliveryStatus === 'pending' || item.deliveryStatus === 'sending'
+                            ? '#94A3B8'
+                            : '#64748B'
+                    }
+                    style={styles.statusIndicator}
+                  >
+                    {item.isError || item.deliveryStatus === 'failed'
+                      ? '⚠️'
+                      : item.deliveryStatus === 'sending'
+                      ? '⏳'
+                      : item.deliveryStatus === 'pending' || item.isOptimistic
+                      ? '🕒'
+                      : isReadByRecipient
+                      ? '✓✓'
+                      : '✓'}
+                  </Typography>
+                )}
+              </View>
+            </Pressable>
+
+            {/* Reaction Badges */}
+            <ReactionBadgeList
+              reactions={item.reactions}
+              isMyMessage={isOwn}
+              onToggleReaction={(emoji) => toggleReaction(item.id, emoji)}
+            />
           </View>
 
           {/* Failed message retry CTA */}
@@ -492,12 +552,18 @@ export default function PersonalChatScreen() {
           </View>
         ) : (
           <FlatList
+            ref={flatListRef}
             data={messages}
             keyExtractor={(item) => item.tempId || item.id}
             renderItem={renderMessageItem}
             inverted
             onEndReached={loadOlderMessages}
             onEndReachedThreshold={0.3}
+            onScrollToIndexFailed={(info) => {
+              setTimeout(() => {
+                flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+              }, 100);
+            }}
             ListFooterComponent={
               isLoadingOlder ? (
                 <View style={styles.footerLoader}>
@@ -518,6 +584,14 @@ export default function PersonalChatScreen() {
               {language === 'hi' ? 'लिख रहे हैं...' : 'is typing...'}
             </Typography>
           </View>
+        )}
+
+        {/* Reply Composer Preview if replying */}
+        {replyingToMessage && (
+          <ReplyComposerBar
+            replyingTo={replyingToMessage}
+            onCancel={() => setReplyingToMessage(null)}
+          />
         )}
 
         {/* Attachment preview if selected */}
@@ -594,6 +668,18 @@ export default function PersonalChatScreen() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* Emoji Reaction Selector Modal */}
+      <EmojiReactionSelector
+        visible={Boolean(reactionTargetMessage)}
+        activeEmoji={reactionTargetMessage?.reactions?.find((r) => r.hasReacted)?.emoji}
+        onSelectEmoji={(emoji) => {
+          if (reactionTargetMessage) {
+            toggleReaction(reactionTargetMessage.id, emoji);
+          }
+        }}
+        onDismiss={() => setReactionTargetMessage(null)}
+      />
     </View>
   );
 }
@@ -702,6 +788,14 @@ const styles = StyleSheet.create({
   },
   bubbleRowOther: {
     justifyContent: 'flex-start',
+  },
+  bubbleColumnOwn: {
+    alignItems: 'flex-end',
+    maxWidth: '82%',
+  },
+  bubbleColumnOther: {
+    alignItems: 'flex-start',
+    maxWidth: '82%',
   },
   bubble: {
     maxWidth: '78%',

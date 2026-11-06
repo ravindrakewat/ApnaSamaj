@@ -53,6 +53,8 @@ async function runAll() {
   await runOfflineChatSyncFlowTests();
   const { runVoiceNotesFlowTests } = await import('./voice-notes-flow.test');
   await runVoiceNotesFlowTests();
+  const { runChatReactionsRepliesFlowTests } = await import('./chat-reactions-replies-flow.test');
+  await runChatReactionsRepliesFlowTests();
 }
 
 runAll()

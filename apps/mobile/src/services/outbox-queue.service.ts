@@ -113,6 +113,8 @@ export class OutboxQueueService {
     conversationType: 'DIRECT' | 'GROUP';
     content: string;
     attachment?: ChatAttachmentInput | null;
+    replyToMessageId?: string;
+    replyTo?: any;
     tenantSlug: string;
     userId: string;
   }): Promise<LocalChatMessage> {
@@ -123,6 +125,8 @@ export class OutboxQueueService {
       senderId: payload.userId,
       content: payload.content,
       attachment: payload.attachment || null,
+      replyToMessageId: payload.replyToMessageId || null,
+      replyTo: payload.replyTo || null,
       tenantSlug: payload.tenantSlug,
       userId: payload.userId,
     });
@@ -361,14 +365,16 @@ export class OutboxQueueService {
           msg.conversationId,
           msg.content,
           msg.tempId,
-          resolvedAttachment || undefined
+          resolvedAttachment || undefined,
+          msg.replyToMessageId || undefined
         );
       } else {
         serverMessage = await chatApi.sendGroupMessage(
           msg.conversationId,
           msg.content,
           msg.tempId,
-          resolvedAttachment || undefined
+          resolvedAttachment || undefined,
+          msg.replyToMessageId || undefined
         );
       }
 

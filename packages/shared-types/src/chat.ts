@@ -10,6 +10,30 @@ export interface ChatMessageSender {
 
 export type ChatAttachmentType = 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'AUDIO';
 
+export const ALLOWED_CHAT_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
+export type AllowedChatReaction = (typeof ALLOWED_CHAT_REACTIONS)[number];
+
+export interface ChatReactionUser {
+  id: string;
+  fullName: string;
+}
+
+export interface ChatReactionSummary {
+  emoji: string;
+  count: number;
+  hasReacted: boolean;
+  users: ChatReactionUser[];
+}
+
+export interface ChatMessageReplyPreview {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  attachmentType?: ChatAttachmentType | null;
+  attachmentName?: string | null;
+}
+
 /**
  * Metadata representation of a chat media attachment (Image, Video, Document, or Audio Voice Note).
  */
@@ -58,6 +82,9 @@ export interface ChatMessageItem {
   senderId: string;
   content: string;
   clientMessageId?: string | null;
+  replyToMessageId?: string | null;
+  replyTo?: ChatMessageReplyPreview | null;
+  reactions?: ChatReactionSummary[];
   tempId?: string;
   createdAt: string;
   updatedAt: string;
@@ -91,6 +118,7 @@ export interface SendChatMessageInput {
   groupId: string;
   content?: string;
   attachment?: ChatAttachmentInput;
+  replyToMessageId?: string;
   tempId?: string; // Client-generated UUID for optimistic UI matching
 }
 
@@ -131,6 +159,9 @@ export interface DirectMessageItem {
   senderId: string;
   content: string;
   clientMessageId?: string | null;
+  replyToMessageId?: string | null;
+  replyTo?: ChatMessageReplyPreview | null;
+  reactions?: ChatReactionSummary[];
   tempId?: string;
   createdAt: string;
   updatedAt: string;
@@ -155,6 +186,9 @@ export interface LocalChatMessage {
   senderId: string;
   content: string;
   attachment?: ChatAttachmentInput | null;
+  replyToMessageId?: string | null;
+  replyTo?: ChatMessageReplyPreview | null;
+  reactions?: ChatReactionSummary[];
   deliveryStatus: MessageDeliveryStatus;
   retryCount: number;
   lastError?: string | null;
@@ -174,6 +208,8 @@ export interface OutboxQueueItem {
   conversationType: 'DIRECT' | 'GROUP';
   content?: string;
   attachment?: ChatAttachmentInput;
+  replyToMessageId?: string;
+  replyTo?: ChatMessageReplyPreview | null;
   deliveryStatus: MessageDeliveryStatus;
   retryCount: number;
   lastAttemptAt?: string | null;
@@ -229,6 +265,7 @@ export interface CreateDirectConversationInput {
 export interface SendDirectMessageInput {
   content?: string;
   attachment?: ChatAttachmentInput;
+  replyToMessageId?: string;
   tempId?: string;
 }
 
@@ -257,4 +294,34 @@ export interface DirectMessageReadEvent {
   conversationId: string;
   userId: string;
   readAt: string;
+}
+
+/**
+ * Input payload for toggling an emoji reaction on a message.
+ */
+export interface ToggleChatReactionInput {
+  emoji: string;
+}
+
+/**
+ * Response payload returned upon successful reaction toggle.
+ */
+export interface ToggleChatReactionResponseData {
+  messageId: string;
+  groupId?: string;
+  reactions: ChatReactionSummary[];
+  action: 'added' | 'removed' | 'updated';
+}
+
+/**
+ * Real-time event payload broadcasted when a message reaction changes.
+ */
+export interface ChatReactionEventPayload {
+  conversationId: string;
+  conversationType: 'DIRECT' | 'GROUP';
+  messageId: string;
+  reactions: ChatReactionSummary[];
+  userId: string;
+  emoji: string;
+  action: 'added' | 'removed' | 'updated';
 }

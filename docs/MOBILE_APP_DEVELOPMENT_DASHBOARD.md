@@ -269,8 +269,9 @@ Every completed task has been validated across four distinct tiers of verificati
 4. **Batch 8.5 (FCM Push Notifications):** Firebase Admin SDK background notifications with topic channels, preference controls, and cold-start deep routing.
 5. **Batch 8.6 (Offline Chat Sync & Outbox Queue):** Offline-first local message persistence, Android Keystore 1024-byte chunking, conversational FIFO outbox queue, exponential backoff with jitter, mid-flight crash recovery, and backend idempotency with `clientMessageId`.
 6. **Batch 8.7 (Voice Notes & Audio Messaging):** Audio recording with on-demand microphone permission, live duration timer, waveform scrubber with seeking, speed toggles (1x, 1.5x, 2x), single-playback concurrency, signed URL expiration recovery, and offline two-phase outbox queue sync.
+7. **Batch 8.8 & 8.8.1 (Chat Reactions, Replies, Quoted Messages & Reliability Audit):** WhatsApp-standard 6 emoji reactions with single-reaction invariant, atomic concurrency/P2002 conflict handling, toggle-off behavior, swipe/long-press to reply, quoted preview bar with media icon/sender, deleted parent safe fallback, tap-to-scroll to referenced message with `onScrollToIndexFailed` safety, canonical room Socket.IO sync (`chat:react`, `direct:react`), and offline outbox persistence.
 
 ### Next Recommended Milestones:
-1. **Batch 8.8 (Chat Message Reactions, Replies & Quoted Messages):** Emoji reactions and quoted replies for direct and group chat.
+1. **Batch 8.9 (Chat Message Search & In-Chat Media Gallery):** Full-text message search and consolidated media/documents/audio browser per conversation.
 2. **Physical Device QA:** Final on-device hardware verification (OEM punch-hole cameras, push notification delivery, and low-connectivity synchronization).
 

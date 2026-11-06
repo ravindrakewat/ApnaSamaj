@@ -22,6 +22,8 @@ import {
   getGroupMessagesHandler,
   sendGroupMessageHandler,
   uploadGroupAttachmentHandler,
+  toggleGroupMessageReactionHandler,
+  removeGroupMessageReactionHandler,
 } from '../chat/chat.controller';
 
 export const groupsRouter = Router();
@@ -73,6 +75,12 @@ groupsRouter.get('/:id/messages', getGroupMessagesHandler);
 
 // POST /api/v1/groups/:id/messages - Send a chat message (HTTP fallback)
 groupsRouter.post('/:id/messages', sendGroupMessageHandler);
+
+// POST /api/v1/groups/:id/messages/:messageId/reactions - Toggle emoji reaction on group message
+groupsRouter.post('/:id/messages/:messageId/reactions', toggleGroupMessageReactionHandler);
+
+// DELETE /api/v1/groups/:id/messages/:messageId/reactions - Remove emoji reaction on group message
+groupsRouter.delete('/:id/messages/:messageId/reactions', removeGroupMessageReactionHandler);
 
 // POST /api/v1/groups/:id/attachments - Upload media attachment for group chat
 groupsRouter.post('/:id/attachments', singleChatAttachmentUpload, uploadGroupAttachmentHandler);

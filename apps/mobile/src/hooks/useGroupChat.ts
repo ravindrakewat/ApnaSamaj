@@ -6,6 +6,8 @@ import {
   UserTypingEvent,
   ChatAttachmentInput,
   MessageDeliveryStatus,
+  ChatReactionEventPayload,
+  ChatReactionSummary,
 } from '@apnasamaj/shared-types';
 import { chatApi } from '../api/chat.api';
 import { connectChatSocket, getChatSocket } from '../services/socket.service';
@@ -39,6 +41,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isOffline, setIsOffline] = useState<boolean>(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [replyingToMessage, setReplyingToMessage] = useState<ExtendedChatMessage | null>(null);
 
   const isTypingActiveRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,6 +76,9 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
               isError: c.deliveryStatus === 'failed',
               errorMessage: c.lastError || undefined,
               tempId: c.tempId,
+              replyToMessageId: c.replyToMessageId || null,
+              replyTo: c.replyTo || null,
+              reactions: c.reactions || [],
               sender: {
                 id: c.senderId,
                 fullName: c.senderId === user?.id ? user.fullName || 'You' : 'Community Member',
@@ -310,10 +316,23 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
       });
     };
 
+    const handleReaction = (payload: ChatReactionEventPayload) => {
+      if (!payload || payload.conversationId !== groupId) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === payload.messageId || m.tempId === payload.messageId
+            ? { ...m, reactions: payload.reactions }
+            : m
+        )
+      );
+      chatPersistenceService.updateMessageReactions(payload.messageId, payload.reactions);
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('new_message', handleNewMessage);
     socket.on('user_typing', handleUserTyping);
+    socket.on('chat:reaction', handleReaction);
 
     if (socket.connected) {
       handleConnect();
@@ -339,6 +358,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         socket.off('disconnect', handleDisconnect);
         socket.off('new_message', handleNewMessage);
         socket.off('user_typing', handleUserTyping);
+        socket.off('chat:reaction', handleReaction);
       }
       appStateSub.remove();
 
@@ -406,6 +426,26 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         getChatSocket()?.emit('typing_stop', { groupId });
       }
 
+      const replyToMessageId = replyingToMessage?.id;
+      const replyToPreview = replyingToMessage
+        ? {
+            id: replyingToMessage.id,
+            senderId: replyingToMessage.senderId,
+            senderName:
+              replyingToMessage.sender?.fullName ||
+              ('sender' in replyingToMessage && (replyingToMessage as any).sender?.profile?.fullName) ||
+              'Member',
+            content: replyingToMessage.content,
+            attachmentType: replyingToMessage.attachments?.[0]?.type || null,
+            attachmentName: replyingToMessage.attachments?.[0]?.fileName || null,
+          }
+        : null;
+
+      // Clear replying state immediately upon send
+      if (replyingToMessage) {
+        setReplyingToMessage(null);
+      }
+
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const nowIso = new Date().toISOString();
       const optimisticMsg: ExtendedChatMessage = {
@@ -416,6 +456,9 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         createdAt: nowIso,
         updatedAt: nowIso,
         deliveryStatus: isConnected ? 'sending' : 'pending',
+        replyToMessageId: replyToMessageId || null,
+        replyTo: replyToPreview,
+        reactions: [],
         sender: {
           id: user?.id || '',
           fullName: user?.fullName || 'You',
@@ -452,6 +495,8 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
           conversationType: 'GROUP',
           content: trimmed,
           attachment: attachment || null,
+          replyToMessageId: replyToMessageId || undefined,
+          replyTo: replyToPreview,
           tenantSlug: communitySlug,
           userId: user.id,
         });
@@ -463,7 +508,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
       if (socket && socket.connected) {
         socket.emit(
           'send_message',
-          { groupId, content: trimmed, attachment, tempId },
+          { groupId, content: trimmed, attachment, tempId, replyToMessageId },
           async (res: { success: boolean; message?: ChatMessageItem; error?: string }) => {
             if (res?.success && res.message) {
               const saved = res.message;
@@ -488,7 +533,115 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
 
       return true;
     },
-    [groupId, isMember, user, communitySlug, isConnected]
+    [groupId, isMember, user, communitySlug, isConnected, replyingToMessage]
+  );
+
+  /**
+   * Toggles an emoji reaction on a message with optimistic state update
+   */
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!messageId || !emoji || !user) return;
+
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId && m.tempId !== messageId) return m;
+
+          const currentReactions = [...(m.reactions || [])];
+          const existingIdx = currentReactions.findIndex((r) => r.hasReacted);
+          let updatedReactions: ChatReactionSummary[];
+
+          if (existingIdx >= 0) {
+            const current = currentReactions[existingIdx];
+            if (current.emoji === emoji) {
+              // Tapped same emoji -> toggle off
+              if (current.count <= 1) {
+                updatedReactions = currentReactions.filter((_, i) => i !== existingIdx);
+              } else {
+                updatedReactions = currentReactions.map((r, i) =>
+                  i === existingIdx ? { ...r, count: r.count - 1, hasReacted: false } : r
+                );
+              }
+            } else {
+              // Different emoji -> update
+              updatedReactions = currentReactions
+                .map((r, i) => (i === existingIdx ? { ...r, count: r.count - 1, hasReacted: false } : r))
+                .filter((r) => r.count > 0);
+              const targetIdx = updatedReactions.findIndex((r) => r.emoji === emoji);
+              if (targetIdx >= 0) {
+                updatedReactions[targetIdx] = {
+                  ...updatedReactions[targetIdx],
+                  count: updatedReactions[targetIdx].count + 1,
+                  hasReacted: true,
+                };
+              } else {
+                updatedReactions.push({
+                  emoji,
+                  count: 1,
+                  hasReacted: true,
+                  users: [{ id: user.id, fullName: user.fullName || 'You' }],
+                });
+              }
+            }
+          } else {
+            // Add new reaction
+            const targetIdx = currentReactions.findIndex((r) => r.emoji === emoji);
+            if (targetIdx >= 0) {
+              updatedReactions = currentReactions.map((r, i) =>
+                i === targetIdx ? { ...r, count: r.count + 1, hasReacted: true } : r
+              );
+            } else {
+              updatedReactions = [
+                ...currentReactions,
+                {
+                  emoji,
+                  count: 1,
+                  hasReacted: true,
+                  users: [{ id: user.id, fullName: user.fullName || 'You' }],
+                },
+              ];
+            }
+          }
+
+          return { ...m, reactions: updatedReactions };
+        })
+      );
+
+      const socket = getChatSocket();
+      if (socket && socket.connected) {
+        socket.emit(
+          'chat:react',
+          { groupId, messageId, emoji },
+          (res: { success: boolean; data?: { reactions: ChatReactionSummary[] } }) => {
+            if (res?.success && res.data) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === messageId || m.tempId === messageId
+                    ? { ...m, reactions: res.data!.reactions }
+                    : m
+                )
+              );
+              chatPersistenceService.updateMessageReactions(messageId, res.data.reactions);
+            }
+          }
+        );
+      } else {
+        try {
+          const res = await chatApi.toggleGroupReaction(groupId, messageId, emoji);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === messageId || m.tempId === messageId
+                ? { ...m, reactions: res.reactions }
+                : m
+            )
+          );
+          chatPersistenceService.updateMessageReactions(messageId, res.reactions);
+        } catch (err) {
+          console.warn('[useGroupChat] Failed to toggle group reaction:', err);
+        }
+      }
+    },
+    [groupId, user]
   );
 
   /**
@@ -524,6 +677,9 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
     sendMessage,
     retryMessage,
     reportTyping,
+    replyingToMessage,
+    setReplyingToMessage,
+    toggleReaction,
   };
 }
 
