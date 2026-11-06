@@ -227,54 +227,19 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **Mobile 8.4** | Chat Media Attachments (Images, Videos & Documents) | Implemented full media attachment pipeline across backend and mobile: added `ChatAttachment` model and migration SQL artifact (`20261105153000_add_chat_attachments`); private Supabase storage bucket `chat-attachments` (`public: false`) with 15-min signed URLs; magic-byte file detection and strict executable rejection; upload endpoints (`POST /api/v1/chat/conversations/:id/attachments`, `POST /api/v1/groups/:id/attachments`); Socket.IO media broadcasting; React Native `expo-document-picker@~13.0.3` integration; `ChatAttachmentButton`, `ChatAttachmentPreview`, `ChatImageMessage`, `ChatVideoMessage`, `ChatDocumentMessage`, `ChatUploadProgress` components in `chat/[id].tsx` and `group/[slug]/chat.tsx`; text-only message backward compatibility; 26 backend tests + 11 mobile flow tests (cumulative 190 mobile tests passing); 0 typecheck errors across all 9 workspaces; Expo web bundle export passed. | docs/BATCH_8_4_CHAT_MEDIA_ATTACHMENTS_REPORT.md | Verified Pass (26 backend tests, 41 direct messaging tests, 47 chat isolation tests, 190/190 mobile tests, 0 typecheck errors across 9 workspaces, clean Expo Web export) | 72c79ec | Confirmed (Pushed) | Committed & pushed in 72c79ec. |
 | **Mobile 8.5** | Firebase Cloud Messaging (FCM) Push Notifications | Implemented production-grade native push notification system with direct Firebase Admin SDK (`firebase-admin@^12.7.0`) on backend and `expo-notifications@^0.29.14` on mobile. Physical tenant isolation with `DevicePushToken`, `NotificationPreference`, and `NotificationLog` Prisma models and migration artifact (`20261105170000_add_device_push_tokens_and_preferences`); backend routes (`POST /devices/register`, `DELETE /devices/:id`, `GET /preferences`, `PATCH /preferences`); non-blocking dispatch with invalid token deactivation, self-action suppression, and mock fallback; privacy guarantees (zero raw messages or phone numbers in push data); Android high-priority notification channels (`apna_samaj_default`); cold-start tap handling and route resolution; mobile notification preferences settings UI; 43 backend tests + 10 mobile flow tests passing; 0 errors across 9-workspace typecheck; 1.64 MB Metro web bundle export. | docs/BATCH_8_5_FCM_PUSH_NOTIFICATIONS_REPORT.md | Verified Pass (43/43 push backend tests, 41 direct messaging tests, 29 chat attachment tests, 10 mobile push tests / 200 cumulative mobile tests, 0 monorepo typecheck errors, clean Metro web export) | e4d8593 | Confirmed (Pushed) | Committed & pushed in e4d8593. |
 | **Mobile 8.6** | Offline Chat Sync & Outbox Message Queue | Implemented production-grade offline-first messaging for Personal One-to-One and Community Group Chat: updated Prisma schema with `clientMessageId` and compound unique constraints (`[groupId, senderId, clientMessageId]`, `[conversationId, senderId, clientMessageId]`); created migration SQL artifact (`20261105183000_add_chat_idempotency_client_message_id`); created `ChatIdempotencyService` with in-flight Promise collapsing and 5-min completed response cache; built `ChatPersistenceService` with two-tier storage (L1 fast Map + L2 SecureStore/localStorage), 1024-byte chunking for Android Keystore limits, bounded 50-item LRU conversation cache, tenant/user namespaces, mid-flight crash recovery (`recoverStuckSendingMessages`), and unsent queue preservation on logout/community switch; built `OutboxQueueService` with conversational FIFO dispatch, exponential backoff with jitter (2s..60s, max 5 retries), permanent 4xx non-retry guard, AppState foreground auto-drain, and teardown; updated `useDirectChat` & `useGroupChat` hooks with local cache hydration; added offline banners, status icons (🕒, ⏳, ✓, ✓✓, ⚠️), retry buttons, and offline media alert in `chat/[id].tsx` and `group/[slug]/chat.tsx`. 31 mobile tests + 20 backend idempotency tests + 121 backend regression tests passing; 0 typecheck errors across all 9 workspaces; production builds for web, admin, and backend passed. | docs/BATCH_8_6_OFFLINE_CHAT_SYNC_REPORT.md | Verified Pass (31/31 mobile offline tests, 20/20 chat idempotency, 41 direct messaging, 29 media attachments, 51 push notifications = 172/172 tests, clean 9-workspace typecheck, Vite & API production builds passed) | 94ed1b7 | Confirmed (Pushed) | Committed & pushed in 94ed1b7. Checkpoint at 7fb6b29. |
-| **Mobile 8.7** | Mobile Voice Notes & Audio Messaging | Implemented WhatsApp-like voice notes across Personal One-to-One Chat and Community Group Chat: added `expo-av@~15.0.2` with on-demand microphone permissions, `VoiceRecordingService`, `VoicePlaybackService` with single-player lock and speed cycling (1x, 1.5x, 2x), `AudioWaveform` 26-bar scrubber, `VoiceRecorder` interactive bottom bar, `ChatAudioMessage` bubble renderer, two-phase offline outbox queue upload, backend storage audio magic bytes validation (25MB limit), `duration` metadata in Prisma schema and migration artifact. 13 mobile tests + 10 backend tests + 141 backend regression tests passing; 0 typecheck errors across all 9 workspaces; production builds for web, admin, and backend passed. | docs/BATCH_8_7_VOICE_NOTES_REPORT.md | Verified Pass (13/13 mobile voice tests, 10/10 backend voice tests, 20 idempotency, 29 media, 41 direct, 51 push = 164 backend tests, clean 9-workspace typecheck, clean Expo Web export) | Working Tree | Modified files ready for user audit |
-| **Mobile 8.7.1** | Voice Message Reliability Audit & Hardening | Audited and hardened voice notes: immediate persistence of Phase 1 uploaded `storagePath` via `updateMessageAttachment` preventing duplicate re-uploads; backend safe re-association handling permitting same-author retry while rejecting foreign access with 400; graceful degradation for purged local files with clear failure status; AppState background recording and playback pausing; chat screen unmount hardware audio resource release; cache hydration `duration` and `localUri` mapping. Expanded tests to 16/16 mobile and 12/12 backend (total 168 backend + 216 mobile tests passing); 0 typecheck errors across all 9 workspaces; clean production builds and Expo Web export. | docs/BATCH_8_7_1_VOICE_NOTES_RELIABILITY_AUDIT_REPORT.md | Verified Pass (16/16 mobile voice tests, 12/12 backend voice tests, 20 idempotency, 29 media, 41 direct, 51 push = 168 backend tests, 216 cumulative mobile tests, 0 monorepo typecheck errors, clean Expo Web export) | Working Tree | Modified files ready for Git synchronization |
+| **Mobile 8.7** | Mobile Voice Notes & Audio Messaging | Implemented WhatsApp-like voice notes across Personal One-to-One Chat and Community Group Chat: added `expo-av@~15.0.2` with on-demand microphone permissions, `VoiceRecordingService`, `VoicePlaybackService` with single-player lock and speed cycling (1x, 1.5x, 2x), `AudioWaveform` 26-bar scrubber, `VoiceRecorder` interactive bottom bar, `ChatAudioMessage` bubble renderer, two-phase offline outbox queue upload, backend storage audio magic bytes validation (25MB limit), `duration` metadata in Prisma schema and migration artifact. 13 mobile tests + 10 backend tests + 141 backend regression tests passing; 0 typecheck errors across all 9 workspaces; production builds for web, admin, and backend passed. | docs/BATCH_8_7_VOICE_NOTES_REPORT.md | Verified Pass (13/13 mobile voice tests, 10/10 backend voice tests, 20 idempotency, 29 media, 41 direct, 51 push = 164 backend tests, clean 9-workspace typecheck, clean Expo Web export) | c3ef535 | Confirmed (Pushed) | Committed & pushed in c3ef535. |
+| **Mobile 8.7.1** | Voice Message Reliability Audit & Hardening | Audited and hardened voice notes: immediate persistence of Phase 1 uploaded `storagePath` via `updateMessageAttachment` preventing duplicate re-uploads; backend safe re-association handling permitting same-author retry while rejecting foreign access with 400; graceful degradation for purged local files with clear failure status; AppState background recording and playback pausing; chat screen unmount hardware audio resource release; cache hydration `duration` and `localUri` mapping. Expanded tests to 16/16 mobile and 12/12 backend (total 168 backend + 216 mobile tests passing); 0 typecheck errors across all 9 workspaces; clean production builds and Expo Web export. | docs/BATCH_8_7_1_VOICE_NOTES_RELIABILITY_AUDIT_REPORT.md | Verified Pass (16/16 mobile voice tests, 12/12 backend voice tests, 20 idempotency, 29 media, 41 direct, 51 push = 168 backend tests, 216 cumulative mobile tests, 0 monorepo typecheck errors, clean Expo Web export) | c3ef535 | Confirmed (Pushed) | Committed & pushed in c3ef535. |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `7fb6b29cb481dec7ddd20978c28a1e3190c14b12` (`7fb6b29`)
-- **Upstream Tracking:** Synchronized with `origin/main` (at `7fb6b29`).
-- **Actual `git status --short`:**
-  - Modified files (23):
-    - `apps/api/src/middleware/upload.middleware.ts`
-    - `apps/api/src/modules/chat/chat.controller.ts`
-    - `apps/api/src/modules/chat/chat.service.ts`
-    - `apps/api/src/modules/chat/direct-chat.controller.ts`
-    - `apps/api/src/modules/chat/direct-chat.service.ts`
-    - `apps/api/src/services/storage.service.ts`
-    - `apps/mobile/app.json`
-    - `apps/mobile/app/(app)/chat/[id].tsx`
-    - `apps/mobile/app/(app)/group/[slug]/chat.tsx`
-    - `apps/mobile/package.json`
-    - `apps/mobile/src/components/chat/index.ts`
-    - `apps/mobile/src/hooks/useDirectChat.ts`
-    - `apps/mobile/src/hooks/useGroupChat.ts`
-    - `apps/mobile/src/services/chat-persistence.service.ts`
-    - `apps/mobile/src/services/index.ts`
-    - `apps/mobile/src/services/outbox-queue.service.ts`
-    - `apps/mobile/src/tests/test-runner.ts`
-    - `docs/MOBILE_APP_DEVELOPMENT_DASHBOARD.md`
-    - `docs/PROJECT_HISTORY.md`
-    - `package-lock.json`
-    - `packages/database/prisma/schema.prisma`
-    - `packages/shared-types/src/chat.ts`
-    - `packages/validation/src/chat.ts`
-  - Untracked files (10):
-    - `apps/api/src/tests/voice-notes-backend.test.ts`
-    - `apps/mobile/src/components/chat/AudioWaveform.tsx`
-    - `apps/mobile/src/components/chat/ChatAudioMessage.tsx`
-    - `apps/mobile/src/components/chat/VoiceRecorder.tsx`
-    - `apps/mobile/src/services/audio/`
-    - `apps/mobile/src/tests/mocks/expo-av.ts`
-    - `apps/mobile/src/tests/voice-notes-flow.test.ts`
-    - `docs/BATCH_8_7_1_VOICE_NOTES_RELIABILITY_AUDIT_REPORT.md`
-    - `docs/BATCH_8_7_VOICE_NOTES_REPORT.md`
-    - `packages/database/prisma/migrations/20261106160000_add_chat_attachment_audio_type/`
-- **Latest Completed Batch:** **Batch 8.7.1 (Mobile Track) — Voice Message Reliability Audit & Hardening**.
-- **Current In-Progress Batch:** Completed, fully hardened, verified across mobile & backend suites; working tree preserved uncommitted for user audit and sync authorization.
+- **Current HEAD:** `c3ef535af28d6586c15735d1f93b6084a1264041` (`c3ef535`)
+- **Upstream Tracking:** Synchronized with `origin/main` (at `c3ef535`).
+- **Actual `git status --short`:** Working tree clean.
+- **Latest Completed Batch:** **Batch 8.7 & 8.7.1 (Mobile Track) — Mobile Voice Notes, Audio Messaging & Reliability Hardening**.
+- **Current In-Progress Batch:** Completed and synchronized with remote GitHub repository.
 - **Exact Next Recommended Batch:** **Batch 8.8 (Mobile Track) — Chat Message Reactions, Replies & Quoted Messages**.
 
 ---
