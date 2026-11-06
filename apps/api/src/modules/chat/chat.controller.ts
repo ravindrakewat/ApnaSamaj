@@ -269,11 +269,13 @@ export async function uploadGroupAttachmentHandler(
     }
 
     const tenantSlug = req.tenant?.slug || 'default';
+    const duration = req.body?.duration ? parseFloat(req.body.duration) : undefined;
     const attachmentResult = await uploadChatAttachment({
       tenantSlug,
       groupId,
       fileBuffer: req.file.buffer,
       originalName: req.file.originalname,
+      duration: !isNaN(duration as number) ? duration : undefined,
     });
 
     const response: ApiResponse<{ attachment: typeof attachmentResult }> = {

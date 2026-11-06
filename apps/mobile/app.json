@@ -15,14 +15,20 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.apnasamaj.app"
+      "bundleIdentifier": "com.apnasamaj.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Apna Samaj requires microphone access to record and send voice notes in chat."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.apnasamaj.app"
+      "package": "com.apnasamaj.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",

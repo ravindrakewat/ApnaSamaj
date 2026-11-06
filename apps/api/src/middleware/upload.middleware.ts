@@ -298,6 +298,16 @@ const chatAllowedMimes = [
   'image/webp',
   'video/mp4',
   'video/quicktime',
+  'audio/m4a',
+  'audio/mp4',
+  'audio/aac',
+  'audio/ogg',
+  'audio/webm',
+  'audio/wav',
+  'audio/mpeg',
+  'audio/x-m4a',
+  'audio/3gpp',
+  'audio/opus',
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -316,6 +326,7 @@ function chatAttachmentFileFilter(
   const validExtensions = new Set([
     '.jpg', '.jpeg', '.png', '.webp',
     '.mp4', '.mov',
+    '.m4a', '.aac', '.mp3', '.ogg', '.opus', '.wav', '.webm', '.3gp',
     '.pdf', '.doc', '.docx', '.xls', '.xlsx',
   ]);
 

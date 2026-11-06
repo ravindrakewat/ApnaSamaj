@@ -795,6 +795,7 @@ export const CHAT_ATTACHMENTS_BUCKET =
 export const CHAT_MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
 export const CHAT_MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50MB
 export const CHAT_MAX_DOCUMENT_BYTES = 20 * 1024 * 1024; // 20MB
+export const CHAT_MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25MB
 
 const FORBIDDEN_EXTENSIONS = new Set([
   '.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.phtml',
@@ -803,7 +804,7 @@ const FORBIDDEN_EXTENSIONS = new Set([
 ]);
 
 export interface DetectedChatAttachment {
-  type: 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  type: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'AUDIO';
   mimeType: string;
   extension: string;
 }
@@ -849,7 +850,7 @@ export function detectChatAttachmentTypeAndMime(
     };
   }
 
-  // 2. Check Videos (MP4, MOV / QuickTime)
+  // 2. Check Videos and Audio (MP4, MOV, M4A, 3GP)
   if (buffer.length >= 12) {
     // ISO BMFF box at offset 4: ftyp, moov, mdat, wide
     const isIsoBmff =
@@ -859,7 +860,22 @@ export function detectChatAttachmentTypeAndMime(
       (buffer[4] === 0x77 && buffer[5] === 0x69 && buffer[6] === 0x64 && buffer[7] === 0x65);   // wide
 
     if (isIsoBmff) {
-      const isMov = ext === '.mov' || (buffer.length >= 12 && buffer.toString('latin1', 8, 12) === 'qt  ');
+      const brand = buffer.toString('latin1', 8, 12);
+      if (ext === '.m4a' || brand === 'M4A ' || brand === 'M4B ') {
+        return {
+          type: 'AUDIO',
+          mimeType: 'audio/m4a',
+          extension: 'm4a',
+        };
+      }
+      if (ext === '.3gp' || brand.startsWith('3gp')) {
+        return {
+          type: 'AUDIO',
+          mimeType: 'audio/3gpp',
+          extension: '3gp',
+        };
+      }
+      const isMov = ext === '.mov' || brand === 'qt  ';
       return {
         type: 'VIDEO',
         mimeType: isMov ? 'video/quicktime' : 'video/mp4',
@@ -868,7 +884,98 @@ export function detectChatAttachmentTypeAndMime(
     }
   }
 
-  // 3. Check Documents (PDF, DOC, DOCX, XLS, XLSX)
+  // 3. Check Dedicated Audio Formats (MP3, OGG, OPUS, WAV, AAC, WEBM Audio)
+  // MP3: ID3 header or sync word
+  if (
+    (buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) ||
+    (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0 && ext === '.mp3')
+  ) {
+    return {
+      type: 'AUDIO',
+      mimeType: 'audio/mpeg',
+      extension: 'mp3',
+    };
+  }
+
+  // OGG / OPUS: OggS header (0x4F 0x67 0x67 0x53)
+  if (
+    buffer[0] === 0x4f &&
+    buffer[1] === 0x47 &&
+    buffer[2] === 0x47 &&
+    buffer[3] === 0x53
+  ) {
+    const isOpus = ext === '.opus';
+    return {
+      type: 'AUDIO',
+      mimeType: isOpus ? 'audio/opus' : 'audio/ogg',
+      extension: isOpus ? 'opus' : 'ogg',
+    };
+  }
+
+  // WAV: RIFF...WAVE
+  if (
+    buffer.length >= 12 &&
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer.toString('latin1', 8, 12) === 'WAVE'
+  ) {
+    return {
+      type: 'AUDIO',
+      mimeType: 'audio/wav',
+      extension: 'wav',
+    };
+  }
+
+  // AAC: ADTS sync word (0xFF 0xF1 or 0xFF 0xF9)
+  if (buffer[0] === 0xff && (buffer[1] & 0xf6) === 0xf0) {
+    return {
+      type: 'AUDIO',
+      mimeType: 'audio/aac',
+      extension: 'aac',
+    };
+  }
+
+  // WebM Audio: EBML header with webm/weba extension
+  if (
+    buffer[0] === 0x1a &&
+    buffer[1] === 0x45 &&
+    buffer[2] === 0xdf &&
+    buffer[3] === 0xa3 &&
+    (ext === '.weba' || ext === '.webm')
+  ) {
+    return {
+      type: 'AUDIO',
+      mimeType: 'audio/webm',
+      extension: 'webm',
+    };
+  }
+
+  // Additional safe check for audio files by extension if non-executable
+  if (ext === '.m4a') {
+    return {
+      type: 'AUDIO',
+      mimeType: 'audio/m4a',
+      extension: 'm4a',
+    };
+  }
+  if (ext === '.mp3') {
+    return {
+      type: 'AUDIO',
+      mimeType: 'audio/mpeg',
+      extension: 'mp3',
+    };
+  }
+  if (ext === '.wav') {
+    return {
+      type: 'AUDIO',
+      mimeType: 'audio/wav',
+      extension: 'wav',
+    };
+  }
+
+  // 4. Check Documents (PDF, DOC, DOCX, XLS, XLSX)
   // PDF: %PDF- (0x25 0x50 0x44 0x46)
   if (
     buffer[0] === 0x25 &&
@@ -934,6 +1041,29 @@ export function detectChatAttachmentTypeAndMime(
   return null;
 }
 
+const CHAT_BUCKET_ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/quicktime',
+  'audio/m4a',
+  'audio/mp4',
+  'audio/aac',
+  'audio/ogg',
+  'audio/webm',
+  'audio/wav',
+  'audio/mpeg',
+  'audio/x-m4a',
+  'audio/3gpp',
+  'audio/opus',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+
 /**
  * Ensures that the dedicated private storage bucket exists for chat attachments.
  * Strictly private (public: false) with a 50MB file size limit.
@@ -960,22 +1090,22 @@ export async function ensureChatAttachmentBucketExists(): Promise<void> {
     const { error: createError } = await supabase.storage.createBucket(CHAT_ATTACHMENTS_BUCKET, {
       public: false, // STRICTLY PRIVATE
       fileSizeLimit: 52428800, // 50MB limit
-      allowedMimeTypes: [
-        'image/jpeg',
-        'image/png',
-        'image/webp',
-        'video/mp4',
-        'video/quicktime',
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      ],
+      allowedMimeTypes: CHAT_BUCKET_ALLOWED_MIME_TYPES,
     });
 
     if (createError && !createError.message.includes('already exists')) {
       console.error('[Storage Service] Failed to create chat attachment bucket:', createError.message);
+    }
+  } else {
+    // Ensure bucket allows audio formats
+    try {
+      await supabase.storage.updateBucket(CHAT_ATTACHMENTS_BUCKET, {
+        public: false,
+        fileSizeLimit: 52428800,
+        allowedMimeTypes: CHAT_BUCKET_ALLOWED_MIME_TYPES,
+      });
+    } catch (updateErr: any) {
+      console.warn('[Storage Service] Could not update bucket allowedMimeTypes:', updateErr?.message);
     }
   }
 }
@@ -986,16 +1116,18 @@ export interface UploadChatAttachmentParams {
   groupId?: string;
   fileBuffer: Buffer;
   originalName: string;
+  duration?: number;
 }
 
 export interface UploadChatAttachmentResult {
   id: string;
-  type: 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  type: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'AUDIO';
   fileName: string;
   mimeType: string;
   fileSizeBytes: number;
   storagePath: string;
   url: string;
+  duration?: number;
   createdAt: string;
 }
 
@@ -1005,7 +1137,7 @@ export interface UploadChatAttachmentResult {
 export async function uploadChatAttachment(
   params: UploadChatAttachmentParams
 ): Promise<UploadChatAttachmentResult> {
-  const { tenantSlug, conversationId, groupId, fileBuffer, originalName } = params;
+  const { tenantSlug, conversationId, groupId, fileBuffer, originalName, duration } = params;
 
   if (!fileBuffer || fileBuffer.length === 0) {
     throw new StorageError('Uploaded file is empty.', 400);
@@ -1015,7 +1147,7 @@ export async function uploadChatAttachment(
   const detected = detectChatAttachmentTypeAndMime(fileBuffer, originalName);
   if (!detected) {
     throw new InvalidMimeTypeError(
-      'Unsupported file format or corrupted content. Supported types: Images (JPEG, PNG, WebP), Videos (MP4, MOV), and Documents (PDF, DOC, DOCX, XLS, XLSX).'
+      'Unsupported file format or corrupted content. Supported types: Images (JPEG, PNG, WebP), Videos (MP4, MOV), Audio/Voice Notes (M4A, MP3, AAC, OGG, WAV, 3GP, WebM), and Documents (PDF, DOC, DOCX, XLS, XLSX).'
     );
   }
 
@@ -1028,6 +1160,9 @@ export async function uploadChatAttachment(
   }
   if (detected.type === 'DOCUMENT' && fileBuffer.length > CHAT_MAX_DOCUMENT_BYTES) {
     throw new OversizedFileError(CHAT_MAX_DOCUMENT_BYTES);
+  }
+  if (detected.type === 'AUDIO' && fileBuffer.length > CHAT_MAX_AUDIO_BYTES) {
+    throw new OversizedFileError(CHAT_MAX_AUDIO_BYTES);
   }
 
   // 3. Safe filename and storage path generation
@@ -1054,14 +1189,21 @@ export async function uploadChatAttachment(
       if (
         uploadError &&
         (uploadError.message.toLowerCase().includes('not found') ||
-          uploadError.message.toLowerCase().includes('bucket'))
+          uploadError.message.toLowerCase().includes('bucket') ||
+          uploadError.message.toLowerCase().includes('mime type'))
       ) {
         try {
           await ensureChatAttachmentBucketExists();
+          // Fallback to audio/mp4 if audio/m4a was rejected by strict bucket validator
+          const fallbackMime =
+            detected.mimeType === 'audio/m4a'
+              ? 'audio/mp4'
+              : detected.mimeType;
+
           const retry = await supabase.storage
             .from(CHAT_ATTACHMENTS_BUCKET)
             .upload(storagePath, fileBuffer, {
-              contentType: detected.mimeType,
+              contentType: fallbackMime,
               upsert: false,
             });
           uploadError = retry.error;
@@ -1104,6 +1246,7 @@ export async function uploadChatAttachment(
     fileSizeBytes: fileBuffer.length,
     storagePath,
     url: signedUrl,
+    duration: duration != null ? Math.round(duration) : undefined,
     createdAt: new Date().toISOString(),
   };
 }

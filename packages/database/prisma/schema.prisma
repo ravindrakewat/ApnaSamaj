@@ -60,6 +60,7 @@ enum MediaType {
   IMAGE
   VIDEO
   DOCUMENT
+  AUDIO
 }
 
 enum NotificationType {
@@ -582,6 +583,7 @@ model ChatAttachment {
   mimeType        String
   fileSizeBytes   Int
   storagePath     String
+  duration        Int?
   createdAt       DateTime       @default(now())
 
   @@index([chatMessageId])

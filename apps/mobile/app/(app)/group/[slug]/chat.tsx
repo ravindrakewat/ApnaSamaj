@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GroupDetails, GroupPrivacy } from '@apnasamaj/shared-types';
+import { GroupDetails, GroupPrivacy, ChatAttachmentInput } from '@apnasamaj/shared-types';
 import {
   Typography,
   Card,
@@ -24,6 +24,9 @@ import {
   ChatImageMessage,
   ChatVideoMessage,
   ChatDocumentMessage,
+  ChatAudioMessage,
+  VoiceRecorder,
+  RecordedVoiceNote,
 } from '../../../../src/components';
 import { useTheme } from '../../../../src/hooks/useTheme';
 import { useLocalization } from '../../../../src/hooks/useLocalization';
@@ -31,6 +34,7 @@ import { useAuth } from '../../../../src/hooks/useAuth';
 import { groupsApi } from '../../../../src/api/groups.api';
 import { chatApi } from '../../../../src/api/chat.api';
 import { useGroupChat, ExtendedChatMessage } from '../../../../src/hooks/useGroupChat';
+import { voicePlaybackService, voiceRecordingService } from '../../../../src/services';
 
 export default function GroupChatScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -71,6 +75,14 @@ export default function GroupChatScreen() {
   useEffect(() => {
     loadGroup();
   }, [loadGroup]);
+
+  // Screen unmount hardware audio resource release
+  useEffect(() => {
+    return () => {
+      voicePlaybackService.stop().catch(() => {});
+      voiceRecordingService.cancelRecording().catch(() => {});
+    };
+  }, []);
 
   const isMember = Boolean(group?.isMember);
   const isPrivate = group?.privacy === GroupPrivacy.PRIVATE;
@@ -168,6 +180,50 @@ export default function GroupChatScreen() {
       Alert.alert(language === 'hi' ? 'त्रुटि' : 'Error', msg);
     } finally {
       setIsSending(false);
+      setIsUploadingAttachment(false);
+    }
+  };
+
+  const handleSendVoiceNote = async (voiceNote: RecordedVoiceNote) => {
+    if (!group?.id) return;
+
+    const attachmentInput: ChatAttachmentInput = {
+      type: 'AUDIO',
+      fileName: `voice_note_${Date.now()}.m4a`,
+      mimeType: 'audio/m4a',
+      fileSizeBytes: Math.max(1024, Math.round((voiceNote.durationMillis * 128) / 8)),
+      storagePath: '',
+      localUri: voiceNote.uri,
+      duration: voiceNote.durationSeconds,
+    };
+
+    if (isOffline) {
+      await sendMessage('', attachmentInput);
+      return;
+    }
+
+    try {
+      setIsUploadingAttachment(true);
+      const uploaded = await chatApi.uploadGroupAttachment(group.id, {
+        uri: voiceNote.uri,
+        name: attachmentInput.fileName,
+        type: attachmentInput.mimeType,
+      });
+
+      await sendMessage('', {
+        id: uploaded.id,
+        type: 'AUDIO',
+        fileName: uploaded.fileName,
+        mimeType: uploaded.mimeType,
+        fileSizeBytes: uploaded.fileSizeBytes,
+        storagePath: uploaded.storagePath,
+        duration: voiceNote.durationSeconds,
+        localUri: voiceNote.uri,
+      });
+    } catch (err: any) {
+      console.warn('[GroupChat] Voice note upload error, routing to offline outbox queue:', err);
+      await sendMessage('', attachmentInput);
+    } finally {
       setIsUploadingAttachment(false);
     }
   };
@@ -282,6 +338,17 @@ export default function GroupChatScreen() {
                   }
                   if (att.type === 'VIDEO') {
                     return <ChatVideoMessage key={att.id} attachment={att} />;
+                  }
+                  if (att.type === 'AUDIO') {
+                    return (
+                      <ChatAudioMessage
+                        key={att.id || att.storagePath || att.localUri}
+                        attachment={att}
+                        isCurrentUser={isOwn}
+                        deliveryStatus={item.deliveryStatus}
+                        onRetry={() => item.tempId && retryMessage(item.tempId)}
+                      />
+                    );
                   }
                   return <ChatDocumentMessage key={att.id} attachment={att} />;
                 })}
@@ -540,29 +607,36 @@ export default function GroupChatScreen() {
                     />
                   </View>
 
-                  <Pressable
-                    onPress={handleSend}
-                    disabled={(!inputText.trim() && !selectedAttachment) || isSending || isUploadingAttachment}
-                    style={[
-                      styles.sendButton,
-                      {
-                        backgroundColor:
-                          (inputText.trim() || selectedAttachment) && !isSending && !isUploadingAttachment
-                            ? '#10B981'
-                            : '#CBD5E1',
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={language === 'hi' ? 'भेजें' : 'Send'}
-                  >
-                    {isSending || isUploadingAttachment ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Typography variant="md" color="#FFFFFF" weight="bold">
-                        ➤
-                      </Typography>
-                    )}
-                  </Pressable>
+                  {inputText.trim() || selectedAttachment ? (
+                    <Pressable
+                      onPress={handleSend}
+                      disabled={isSending || isUploadingAttachment}
+                      style={[
+                        styles.sendButton,
+                        {
+                          backgroundColor:
+                            !isSending && !isUploadingAttachment
+                              ? '#10B981'
+                              : '#CBD5E1',
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={language === 'hi' ? 'भेजें' : 'Send'}
+                    >
+                      {isSending || isUploadingAttachment ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Typography variant="md" color="#FFFFFF" weight="bold">
+                          ➤
+                        </Typography>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <VoiceRecorder
+                      onSend={handleSendVoiceNote}
+                      disabled={isSending || isUploadingAttachment}
+                    />
+                  )}
                 </View>
               </View>
             ) : (

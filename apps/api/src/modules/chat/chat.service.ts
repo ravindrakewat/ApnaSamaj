@@ -90,6 +90,7 @@ export function mapToChatMessageItem(item: RawChatMessage): ChatMessageItem {
       fileSizeBytes: att.fileSizeBytes,
       storagePath: att.storagePath,
       url: `https://mock-storage.apnasamaj.local/chat-attachments/${att.storagePath}?token=mock-signed-token&expires=3600`,
+      duration: att.duration != null ? att.duration : undefined,
       createdAt: att.createdAt instanceof Date ? att.createdAt.toISOString() : att.createdAt,
     })),
   };
@@ -261,9 +262,23 @@ export async function sendChatMessage(
     }
     const existingAttachment = await client.chatAttachment.findFirst({
       where: { storagePath: resolvedAttachment.storagePath },
-      select: { id: true },
+      include: {
+        chatMessage: {
+          include: chatMessageInclude,
+        },
+      },
     });
     if (existingAttachment) {
+      // If this attachment already belongs to a message created by the same sender in this group,
+      // and matches the clientMessageId (or was already created), return that existing message safely
+      if (
+        existingAttachment.chatMessage &&
+        existingAttachment.chatMessage.groupId === group.id &&
+        existingAttachment.chatMessage.senderId === senderId &&
+        (!resolvedTempId || (existingAttachment.chatMessage as any).clientMessageId === resolvedTempId)
+      ) {
+        return mapToChatMessageItem(existingAttachment.chatMessage as unknown as RawChatMessage);
+      }
       throw new ChatServiceError('Attachment has already been associated with an existing message.', 400);
     }
   }
@@ -310,6 +325,7 @@ export async function sendChatMessage(
                       mimeType: resolvedAttachment.mimeType,
                       fileSizeBytes: resolvedAttachment.fileSizeBytes,
                       storagePath: resolvedAttachment.storagePath,
+                      duration: resolvedAttachment.duration != null ? Math.round(resolvedAttachment.duration) : null,
                     },
                   },
                 }

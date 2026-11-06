@@ -1,4 +1,4 @@
-import { LocalChatMessage, MessageDeliveryStatus } from '@apnasamaj/shared-types';
+import { LocalChatMessage, MessageDeliveryStatus, ChatAttachmentInput } from '@apnasamaj/shared-types';
 import { getSecureItem, setSecureItem, removeSecureItem } from './storage.service';
 
 /**
@@ -155,6 +155,8 @@ export class ChatPersistenceService {
             mimeType: payload.attachment.mimeType,
             fileSizeBytes: payload.attachment.fileSizeBytes,
             storagePath: payload.attachment.storagePath,
+            duration: payload.attachment.duration,
+            localUri: payload.attachment.localUri,
           }
         : null,
     };
@@ -229,6 +231,12 @@ export class ChatPersistenceService {
     if (updates?.incrementRetry) {
       message.retryCount = (message.retryCount || 0) + 1;
     }
+    if (updates && 'attachment' in updates && updates.attachment) {
+      message.attachment = {
+        ...(message.attachment || {}),
+        ...updates.attachment,
+      } as ChatAttachmentInput;
+    }
 
     // Update L1
     this.inMemoryCache.set(tempId, message);
@@ -246,6 +254,45 @@ export class ChatPersistenceService {
     }
 
     // Persist updated message
+    const msgKey = this.getMsgKey(message.tenantSlug, message.userId, tempId);
+    await this.writeChunkedItem(msgKey, JSON.stringify(message));
+
+    return message;
+  }
+
+  /**
+   * Updates attachment metadata on a stored message (e.g. after successful Phase 1 upload).
+   * Prevents duplicate re-uploads on retry or restart.
+   */
+  public async updateMessageAttachment(
+    tempId: string,
+    attachment: Partial<ChatAttachmentInput>,
+    options?: { tenantSlug?: string; userId?: string }
+  ): Promise<LocalChatMessage | null> {
+    let message = this.inMemoryCache.get(tempId);
+
+    if (!message && options?.tenantSlug && options?.userId) {
+      const msgKey = this.getMsgKey(options.tenantSlug, options.userId, tempId);
+      const json = await this.readChunkedItem(msgKey);
+      if (json) {
+        try {
+          message = JSON.parse(json);
+        } catch {}
+      }
+    }
+
+    if (!message) return null;
+
+    message.attachment = {
+      ...(message.attachment || {}),
+      ...attachment,
+    } as ChatAttachmentInput;
+    message.updatedAt = new Date().toISOString();
+
+    // Update in-memory
+    this.inMemoryCache.set(tempId, message);
+
+    // Update persistent storage
     const msgKey = this.getMsgKey(message.tenantSlug, message.userId, tempId);
     await this.writeChunkedItem(msgKey, JSON.stringify(message));
 
@@ -287,6 +334,7 @@ export class ChatPersistenceService {
               mimeType: msg.attachments[0].mimeType,
               fileSizeBytes: msg.attachments[0].fileSizeBytes,
               storagePath: msg.attachments[0].storagePath,
+              duration: msg.attachments[0].duration,
             }
           : null,
         deliveryStatus: 'sent',

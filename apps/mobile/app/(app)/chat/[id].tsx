@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChatAttachmentInput } from '@apnasamaj/shared-types';
 import {
   Typography,
   Card,
@@ -23,12 +24,16 @@ import {
   ChatImageMessage,
   ChatVideoMessage,
   ChatDocumentMessage,
+  ChatAudioMessage,
+  VoiceRecorder,
+  RecordedVoiceNote,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { useDirectChat, ExtendedDirectMessage } from '../../../src/hooks/useDirectChat';
 import { chatApi } from '../../../src/api/chat.api';
+import { voicePlaybackService, voiceRecordingService } from '../../../src/services';
 
 export default function PersonalChatScreen() {
   const { id: conversationId, name: queryName, avatar: queryAvatar } =
@@ -68,6 +73,14 @@ export default function PersonalChatScreen() {
   } = useDirectChat({
     conversationId: conversationId || '',
   });
+
+  // Screen unmount hardware audio resource release
+  useEffect(() => {
+    return () => {
+      voicePlaybackService.stop().catch(() => {});
+      voiceRecordingService.cancelRecording().catch(() => {});
+    };
+  }, []);
 
   // Resolve other participant details from inbox if not supplied in query
   useEffect(() => {
@@ -150,6 +163,50 @@ export default function PersonalChatScreen() {
       );
     } finally {
       setIsSending(false);
+      setIsUploadingAttachment(false);
+    }
+  };
+
+  const handleSendVoiceNote = async (voiceNote: RecordedVoiceNote) => {
+    if (!conversationId) return;
+
+    const attachmentInput: ChatAttachmentInput = {
+      type: 'AUDIO',
+      fileName: `voice_note_${Date.now()}.m4a`,
+      mimeType: 'audio/m4a',
+      fileSizeBytes: Math.max(1024, Math.round((voiceNote.durationMillis * 128) / 8)),
+      storagePath: '',
+      localUri: voiceNote.uri,
+      duration: voiceNote.durationSeconds,
+    };
+
+    if (isOffline) {
+      await sendMessage('', attachmentInput);
+      return;
+    }
+
+    try {
+      setIsUploadingAttachment(true);
+      const uploaded = await chatApi.uploadDirectAttachment(conversationId, {
+        uri: voiceNote.uri,
+        name: attachmentInput.fileName,
+        type: attachmentInput.mimeType,
+      });
+
+      await sendMessage('', {
+        id: uploaded.id,
+        type: 'AUDIO',
+        fileName: uploaded.fileName,
+        mimeType: uploaded.mimeType,
+        fileSizeBytes: uploaded.fileSizeBytes,
+        storagePath: uploaded.storagePath,
+        duration: voiceNote.durationSeconds,
+        localUri: voiceNote.uri,
+      });
+    } catch (err: any) {
+      console.warn('[DirectChat] Voice note upload error, routing to offline outbox queue:', err);
+      await sendMessage('', attachmentInput);
+    } finally {
       setIsUploadingAttachment(false);
     }
   };
@@ -237,6 +294,17 @@ export default function PersonalChatScreen() {
                   }
                   if (att.type === 'VIDEO') {
                     return <ChatVideoMessage key={att.id} attachment={att} />;
+                  }
+                  if (att.type === 'AUDIO') {
+                    return (
+                      <ChatAudioMessage
+                        key={att.id || att.storagePath || att.localUri}
+                        attachment={att}
+                        isCurrentUser={isOwn}
+                        deliveryStatus={item.deliveryStatus}
+                        onRetry={() => item.tempId && retryMessage(item.tempId)}
+                      />
+                    );
                   }
                   return <ChatDocumentMessage key={att.id} attachment={att} />;
                 })}
@@ -494,29 +562,36 @@ export default function PersonalChatScreen() {
             maxLength={2000}
           />
 
-          <Pressable
-            onPress={handleSend}
-            disabled={(!inputText.trim() && !selectedAttachment) || isSending || isUploadingAttachment}
-            style={[
-              styles.sendButton,
-              {
-                backgroundColor:
-                  (inputText.trim() || selectedAttachment) && !isSending && !isUploadingAttachment
-                    ? theme.colors.primary
-                    : theme.colors.border,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={language === 'hi' ? 'भेजें' : 'Send'}
-          >
-            {isSending || isUploadingAttachment ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Typography variant="sm" weight="bold" color="#FFFFFF">
-                ➤
-              </Typography>
-            )}
-          </Pressable>
+          {inputText.trim() || selectedAttachment ? (
+            <Pressable
+              onPress={handleSend}
+              disabled={isSending || isUploadingAttachment}
+              style={[
+                styles.sendButton,
+                {
+                  backgroundColor:
+                    !isSending && !isUploadingAttachment
+                      ? theme.colors.primary
+                      : theme.colors.border,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={language === 'hi' ? 'भेजें' : 'Send'}
+            >
+              {isSending || isUploadingAttachment ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Typography variant="sm" weight="bold" color="#FFFFFF">
+                  ➤
+                </Typography>
+              )}
+            </Pressable>
+          ) : (
+            <VoiceRecorder
+              onSend={handleSendVoiceNote}
+              disabled={isSending || isUploadingAttachment}
+            />
+          )}
         </View>
       </KeyboardAvoidingView>
     </View>

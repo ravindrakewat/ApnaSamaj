@@ -88,6 +88,8 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
                       mimeType: c.attachment.mimeType,
                       fileSizeBytes: c.attachment.fileSizeBytes,
                       storagePath: c.attachment.storagePath,
+                      duration: c.attachment.duration,
+                      localUri: c.attachment.localUri,
                       createdAt: c.createdAt,
                     },
                   ]
@@ -429,6 +431,8 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
                 mimeType: attachment.mimeType,
                 fileSizeBytes: attachment.fileSizeBytes,
                 storagePath: attachment.storagePath,
+                duration: attachment.duration,
+                localUri: (attachment as any).localUri,
                 createdAt: nowIso,
               },
             ]

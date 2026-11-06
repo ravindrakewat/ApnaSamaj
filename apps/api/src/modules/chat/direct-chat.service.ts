@@ -81,6 +81,7 @@ export function mapToDirectMessageItem(item: RawDirectMessage): DirectMessageIte
       fileSizeBytes: att.fileSizeBytes,
       storagePath: att.storagePath,
       url: `https://mock-storage.apnasamaj.local/chat-attachments/${att.storagePath}?token=mock-signed-token&expires=3600`,
+      duration: att.duration != null ? att.duration : undefined,
       createdAt: att.createdAt instanceof Date ? att.createdAt.toISOString() : att.createdAt,
     })),
   };
@@ -511,9 +512,21 @@ export async function sendDirectMessage(
     }
     const existingAttachment = await client.chatAttachment.findFirst({
       where: { storagePath: resolvedAttachment.storagePath },
-      select: { id: true },
+      include: {
+        directMessage: {
+          include: directMessageInclude,
+        },
+      },
     });
     if (existingAttachment) {
+      if (
+        existingAttachment.directMessage &&
+        existingAttachment.directMessage.conversationId === conversationId &&
+        existingAttachment.directMessage.senderId === senderId &&
+        (!resolvedTempId || (existingAttachment.directMessage as any).clientMessageId === resolvedTempId)
+      ) {
+        return mapToDirectMessageItem(existingAttachment.directMessage);
+      }
       throw new ChatServiceError('Attachment has already been associated with an existing message.', 400);
     }
   }
@@ -561,6 +574,7 @@ export async function sendDirectMessage(
                     mimeType: resolvedAttachment.mimeType,
                     fileSizeBytes: resolvedAttachment.fileSizeBytes,
                     storagePath: resolvedAttachment.storagePath,
+                    duration: resolvedAttachment.duration != null ? Math.round(resolvedAttachment.duration) : null,
                   },
                 },
               }
@@ -600,6 +614,7 @@ export async function sendDirectMessage(
                       mimeType: resolvedAttachment.mimeType,
                       fileSizeBytes: resolvedAttachment.fileSizeBytes,
                       storagePath: resolvedAttachment.storagePath,
+                      duration: resolvedAttachment.duration != null ? Math.round(resolvedAttachment.duration) : null,
                     },
                   },
                 }

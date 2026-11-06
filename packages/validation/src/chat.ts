@@ -2,11 +2,13 @@ import { z } from 'zod';
 
 export const chatAttachmentInputSchema = z.object({
   id: z.string().optional(),
-  type: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT']),
+  type: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT', 'AUDIO']),
   fileName: z.string().min(1, 'Filename is required').max(255),
   mimeType: z.string().min(1, 'MIME type is required').max(100),
   fileSizeBytes: z.number().int().positive().max(52428800, 'File size exceeds maximum allowed limit (50MB)'),
-  storagePath: z.string().min(1, 'Storage path is required').max(500),
+  storagePath: z.string().max(500),
+  duration: z.number().int().nonnegative().max(7200).optional(),
+  localUri: z.string().max(1000).optional(),
 });
 
 export type ChatAttachmentInputSchema = z.infer<typeof chatAttachmentInputSchema>;

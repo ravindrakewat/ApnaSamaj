@@ -8,10 +8,10 @@ export interface ChatMessageSender {
   avatarUrl: string | null;
 }
 
-export type ChatAttachmentType = 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+export type ChatAttachmentType = 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'AUDIO';
 
 /**
- * Metadata representation of a chat media attachment (Image, Video, or Document).
+ * Metadata representation of a chat media attachment (Image, Video, Document, or Audio Voice Note).
  */
 export interface ChatAttachmentItem {
   id: string;
@@ -23,6 +23,8 @@ export interface ChatAttachmentItem {
   fileSizeBytes: number;
   storagePath: string;
   url?: string;
+  duration?: number;
+  localUri?: string;
   createdAt: string;
 }
 
@@ -36,6 +38,8 @@ export interface ChatAttachmentInput {
   mimeType: string;
   fileSizeBytes: number;
   storagePath: string;
+  duration?: number;
+  localUri?: string;
 }
 
 /**

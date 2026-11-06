@@ -16,6 +16,9 @@ const originalRequire = (moduleMod.prototype as any).require;
   if (id === 'expo-notifications') {
     return originalRequire.call(this, path.resolve(__dirname, './mocks/expo-notifications'));
   }
+  if (id === 'expo-av') {
+    return originalRequire.call(this, path.resolve(__dirname, './mocks/expo-av'));
+  }
   if (id === 'react-native-safe-area-context') {
     return originalRequire.call(this, path.resolve(__dirname, './mocks/react-native-safe-area-context'));
   }
@@ -48,6 +51,15 @@ async function runAll() {
   await runPushNotificationsFlowTests();
   const { runOfflineChatSyncFlowTests } = await import('./offline-chat-sync-flow.test');
   await runOfflineChatSyncFlowTests();
+  const { runVoiceNotesFlowTests } = await import('./voice-notes-flow.test');
+  await runVoiceNotesFlowTests();
 }
 
-runAll();
+runAll()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('Test runner failure:', err);
+    process.exit(1);
+  });

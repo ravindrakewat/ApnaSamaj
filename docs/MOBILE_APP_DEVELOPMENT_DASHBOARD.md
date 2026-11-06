@@ -268,8 +268,9 @@ Every completed task has been validated across four distinct tiers of verificati
 3. **Batch 8.4 (Chat Media Attachments):** Secure images, videos, and documents with magic-byte validation and private Supabase storage.
 4. **Batch 8.5 (FCM Push Notifications):** Firebase Admin SDK background notifications with topic channels, preference controls, and cold-start deep routing.
 5. **Batch 8.6 (Offline Chat Sync & Outbox Queue):** Offline-first local message persistence, Android Keystore 1024-byte chunking, conversational FIFO outbox queue, exponential backoff with jitter, mid-flight crash recovery, and backend idempotency with `clientMessageId`.
+6. **Batch 8.7 (Voice Notes & Audio Messaging):** Audio recording with on-demand microphone permission, live duration timer, waveform scrubber with seeking, speed toggles (1x, 1.5x, 2x), single-playback concurrency, signed URL expiration recovery, and offline two-phase outbox queue sync.
 
 ### Next Recommended Milestones:
-1. **Batch 8.7 (Voice Notes & Audio Messaging):** Audio recording, waveform preview, and voice note playback for mobile chat.
+1. **Batch 8.8 (Chat Message Reactions, Replies & Quoted Messages):** Emoji reactions and quoted replies for direct and group chat.
 2. **Physical Device QA:** Final on-device hardware verification (OEM punch-hole cameras, push notification delivery, and low-connectivity synchronization).
 

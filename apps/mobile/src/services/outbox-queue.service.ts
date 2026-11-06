@@ -296,6 +296,64 @@ export class OutboxQueueService {
     });
 
     try {
+      let resolvedAttachment = msg.attachment;
+
+      // Two-phase upload for offline attachments (e.g., recorded voice notes created offline)
+      if (resolvedAttachment && resolvedAttachment.localUri && !resolvedAttachment.storagePath) {
+        try {
+          const uploaded =
+            msg.conversationType === 'DIRECT'
+              ? await chatApi.uploadDirectAttachment(msg.conversationId, {
+                  uri: resolvedAttachment.localUri,
+                  name: resolvedAttachment.fileName,
+                  type: resolvedAttachment.mimeType,
+                })
+              : await chatApi.uploadGroupAttachment(msg.conversationId, {
+                  uri: resolvedAttachment.localUri,
+                  name: resolvedAttachment.fileName,
+                  type: resolvedAttachment.mimeType,
+                });
+
+          resolvedAttachment = {
+            ...resolvedAttachment,
+            id: uploaded.id,
+            storagePath: uploaded.storagePath,
+            type: uploaded.type,
+            fileSizeBytes: uploaded.fileSizeBytes,
+          };
+
+          // Persist uploaded storagePath immediately to avoid re-uploading on retry, timeout, or app restart
+          await this.persistence.updateMessageAttachment(msg.tempId, resolvedAttachment, {
+            tenantSlug: msg.tenantSlug,
+            userId: msg.userId,
+          });
+        } catch (uploadErr: any) {
+          const uploadMsg = uploadErr?.message || 'Upload error';
+          const isMissingFile =
+            uploadMsg.includes('ENOENT') ||
+            uploadMsg.includes('not found') ||
+            uploadMsg.includes('does not exist') ||
+            uploadMsg.includes('No such file');
+
+          if (isMissingFile) {
+            await this.persistence.updateMessageDeliveryStatus(msg.tempId, 'failed', {
+              lastError: 'Local audio recording file was deleted or cannot be found on device.',
+              tenantSlug: msg.tenantSlug,
+              userId: msg.userId,
+            });
+            this.notifyListeners({
+              tempId: msg.tempId,
+              conversationId: msg.conversationId,
+              status: 'failed',
+              error: 'Local audio recording file was deleted or cannot be found on device.',
+            });
+            return false;
+          }
+
+          throw new Error(`Media upload failed: ${uploadMsg}`);
+        }
+      }
+
       let serverMessage: any;
 
       if (msg.conversationType === 'DIRECT') {
@@ -303,14 +361,14 @@ export class OutboxQueueService {
           msg.conversationId,
           msg.content,
           msg.tempId,
-          msg.attachment || undefined
+          resolvedAttachment || undefined
         );
       } else {
         serverMessage = await chatApi.sendGroupMessage(
           msg.conversationId,
           msg.content,
           msg.tempId,
-          msg.attachment || undefined
+          resolvedAttachment || undefined
         );
       }
 
