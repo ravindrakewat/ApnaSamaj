@@ -70,12 +70,15 @@ The following milestone checkpoint commits have been independently inspected in 
 | `c3ef535` | `c3ef535af28d6586c15735d1f93b6084a1264041` | `feat(chat): add voice notes and offline audio messaging` | Batch 8.7 Voice Notes & Audio Messaging | **Confirmed** | **Confirmed (Pushed)** |
 | `b534e5a` | `b534e5aecbece9bab8a2f805da5e845151fff1ca` | `chore: record batch 8.7 git checkpoint in project history` | Batch 8.7 Checkpoint | **Confirmed** | **Confirmed (Pushed)** |
 | `21365d9` | `21365d9b31be6d8842e14593cb1083bdd57d6b8b` | `feat(mobile): add chat reactions replies and reliability hardening` | Batch 8.8 Chat Reactions, Replies & Quoted Messages | **Confirmed** | **Confirmed (Pushed)** |
+| `f824592` | `f824592910344a61d423c6d82741f55528a0627c` | `feat(mobile): add chat search and media gallery` | Batch 8.9 Chat Search & Media Gallery | **Confirmed** | **Confirmed (Pushed)** |
+| `9b3997f` | `9b3997f820649a00fe10bd4eee7bb51807868d9a` | `feat(mobile): add chat search and media gallery` | Batch 8.9 Follow-up Sync | **Confirmed** | **Confirmed (Pushed)** |
+| `886cb64` | `886cb643e086b23c05d046773e49f6bc1fc70bc7` | `fix(chat): resolve web attachment upload, local media preview streaming, and EAS config` | Web Upload, Local Media Preview, Expo Fonts & EAS Build Fix | **Confirmed** | Pending Push (Next step) |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current HEAD:** `21365d9b31be6d8842e14593cb1083bdd57d6b8b` (`21365d9`)
+- **Current Feature/Fix Commit:** `886cb643e086b23c05d046773e49f6bc1fc70bc7` (`886cb64`)
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
-- **Upstream Sync Status:** Synchronized with `origin/main` (at `21365d9`).
+- **Upstream Sync Status:** Committing & pushing all verified changes to `origin/main` for cross-machine pull.
 
 ---
 
@@ -235,45 +238,20 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **Mobile 8.7.1** | Voice Message Reliability Audit & Hardening | Audited and hardened voice notes: immediate persistence of Phase 1 uploaded `storagePath` via `updateMessageAttachment` preventing duplicate re-uploads; backend safe re-association handling permitting same-author retry while rejecting foreign access with 400; graceful degradation for purged local files with clear failure status; AppState background recording and playback pausing; chat screen unmount hardware audio resource release; cache hydration `duration` and `localUri` mapping. Expanded tests to 16/16 mobile and 12/12 backend (total 168 backend + 216 mobile tests passing); 0 typecheck errors across all 9 workspaces; clean production builds and Expo Web export. | docs/BATCH_8_7_1_VOICE_NOTES_RELIABILITY_AUDIT_REPORT.md | Verified Pass (16/16 mobile voice tests, 12/12 backend voice tests, 20 idempotency, 29 media, 41 direct, 51 push = 168 backend tests, 216 cumulative mobile tests, 0 monorepo typecheck errors, clean Expo Web export) | c3ef535 | Confirmed (Pushed) | Committed & pushed in c3ef535. |
 | **Mobile 8.8** | Chat Message Reactions, Replies & Quoted Messages | Implemented WhatsApp-like emoji reactions (`👍`, `❤️`, `😂`, `😮`, `😢`, `🙏`) with strict single active reaction per user per message invariant (`ChatMessageReaction` and `DirectMessageReaction` models with `@@unique([messageId, userId])`), toggle-off removal, swipe-to-reply and long-press reply actions, self-referencing `replyToMessageId` relation (`onDelete: SetNull`), safe deleted original message fallback preview, cross-group/cross-conversation boundary guards (HTTP 400), pinned `ReplyComposerBar` above message input with dismiss button (`✕`), embedded `QuotedReplyPreview` inside bubbles with tap-to-scroll to referenced message, `ReactionBadgeList` chips, real-time Socket.IO sync (`chat:react`, `direct:react`, `chat:reaction`, `direct:reaction`), offline outbox queue and persistent storage integration, and migration SQL artifact (`20261106170000_add_chat_reactions_and_replies`). | docs/BATCH_8_8_CHAT_REACTIONS_REPLIES_REPORT.md | Verified Pass (21/21 backend tests, 10/10 mobile flow tests, 41 direct messaging tests, 12 voice notes tests, 20 idempotency tests, 29 media tests, 51 push tests, full mobile runner passed, 0 typecheck errors across all 10 workspaces, clean monorepo build) | 21365d9 | Confirmed (Pushed) | Committed & pushed in 21365d9. |
 | **Mobile 8.8.1** | Chat Reactions & Replies Reliability & Security Audit | Audited code-level reliability and security: resolved concurrent P2002 unique constraint collisions on rapid reaction toggles; resolved P2025 update/delete races; unified group slug resolution to canonical UUID room targeting in REST controllers and Socket.IO listener; added input sanitization and length bounding for `replyToMessageId`; added `onScrollToIndexFailed` handler on mobile FlatList preventing unrendered index warnings; suppressed interactive tap on deleted parent messages in `QuotedReplyPreview`. Verified 21/21 backend tests (+4 audit regression tests) and full regression suite. | docs/BATCH_8_8_CHAT_REACTIONS_REPLIES_REPORT.md | Verified Pass (184 backend tests across 7 suites + full mobile runner passed, 0 monorepo typecheck errors, clean monorepo build) | 21365d9 | Confirmed (Pushed) | Committed & pushed in 21365d9. |
-| **Mobile 8.9** | Chat Message Search & In-Chat Media Gallery | Implemented production-quality WhatsApp-like message search and media gallery across Personal One-to-One and Community Group chats: local and remote hybrid search with 300ms debounced `ChatSearchBar`, result counter pill (`1/4`), match stepper arrows (↑ / ↓), `ChatSearchResultsModal` with keyword highlighting, relative timestamps, sender avatar, attachment badge preview, and data source indicators (`⚡ Cached` vs `☁️ Server`); `ChatMediaGalleryModal` with Photos (`IMAGE`), Videos (`VIDEO`), Audio (`AUDIO`), and Documents (`DOCUMENT`) tabs, date-based grouping headers, full-screen image viewer, audio playback preview with single-player lock, and "Go to msg" direct scroll navigation; backend endpoints for search (`/chat/search`), media gallery (`/chat/media`), and context retrieval (`/chat/messages/:messageId/context`) with strict tenant isolation (`assertDb`), private group membership guards (403), direct chat participant verification (403), and temporary signed URLs (3600s); `jumpToMessage` in `useDirectChat` and `useGroupChat` hooks with out-of-memory context fetching, chronological order preservation, and `scrollToIndex` retry resilience. 19 backend integration tests + 9 mobile flow tests + 184 backend regression tests passing; 0 typecheck errors across all 10 workspaces; clean production build. | docs/BATCH_8_9_CHAT_SEARCH_MEDIA_GALLERY_REPORT.md | Verified Pass (19/19 backend search/media tests, 9/9 mobile search/media tests, full 9-suite mobile runner passed, 0 typecheck errors across all 10 workspaces, clean monorepo build) | Uncommitted | Working tree | Ready for user audit and git staging. |
+| **Mobile 8.9** | Chat Message Search & In-Chat Media Gallery | Implemented production-quality WhatsApp-like message search and media gallery across Personal One-to-One and Community Group chats: local and remote hybrid search with 300ms debounced `ChatSearchBar`, result counter pill (`1/4`), match stepper arrows (↑ / ↓), `ChatSearchResultsModal` with keyword highlighting, relative timestamps, sender avatar, attachment badge preview, and data source indicators (`⚡ Cached` vs `☁️ Server`); `ChatMediaGalleryModal` with Photos (`IMAGE`), Videos (`VIDEO`), Audio (`AUDIO`), and Documents (`DOCUMENT`) tabs, date-based grouping headers, full-screen image viewer, audio playback preview with single-player lock, and "Go to msg" direct scroll navigation; backend endpoints for search (`/chat/search`), media gallery (`/chat/media`), and context retrieval (`/chat/messages/:messageId/context`) with strict tenant isolation (`assertDb`), private group membership guards (403), direct chat participant verification (403), and temporary signed URLs (3600s); `jumpToMessage` in `useDirectChat` and `useGroupChat` hooks with out-of-memory context fetching, chronological order preservation, and `scrollToIndex` retry resilience. 19 backend integration tests + 9 mobile flow tests + 184 backend regression tests passing; 0 typecheck errors across all 10 workspaces; clean production build. | docs/BATCH_8_9_CHAT_SEARCH_MEDIA_GALLERY_REPORT.md | Verified Pass (19/19 backend search/media tests, 9/9 mobile search/media tests, full 9-suite mobile runner passed, 0 typecheck errors across all 10 workspaces, clean monorepo build) | f824592, 9b3997f | Confirmed (Pushed) | Committed & pushed in f824592 & 9b3997f. |
+| **8.9 Fixes & EAS Setup** | Web Media Upload, Local Attachment Preview Streaming & EAS Build Configuration | Resolved Web group chat upload 400 error by appending real browser `Blob`/`File` in `appendAttachmentFileToFormData` (replacing object descriptors and deprecated `MediaTypeOptions`); resolved attachment preview rendering failure caused by unresolvable `mock-storage.apnasamaj.local` URLs by persisting dev fallback uploads to `uploads/chat-attachments/`, adding public streaming endpoint `GET /api/v1/chat/attachments/raw/*` (`serveLocalChatAttachmentHandler`), creating `resolveAttachmentDisplayUrl` in `apps/mobile/src/utils/attachment.ts` for `ChatImageMessage`, `ChatVideoMessage`, `ChatDocumentMessage`, and `ChatMediaGalleryModal`; added missing `@expo/vector-icons` & `expo-font` dependencies; linked EAS Android APK build profile (`eas.json`, `app.json`) and ignored `uploads/` in `.gitignore`. | N/A (Hotfix & Machine Transfer Sync) | Verified Pass (34/34 backend chat attachment tests, 14/14 mobile chat attachment tests, full mobile runner, 0 typecheck errors across all 9 workspaces, Vite & API tsc builds clean) | 886cb64 | Confirmed (Ready for Push) | Committed in 886cb64; synced for workstation transfer. |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Current HEAD:** `21365d9b31be6d8842e14593cb1083bdd57d6b8b` (`21365d9`)
-- **Upstream Tracking:** Synchronized with `origin/main` (at `21365d9`).
-- **Actual `git status --short`:**
-  ```text
-   M apps/api/src/modules/chat/chat.controller.ts
-   M apps/api/src/modules/chat/chat.routes.ts
-   M apps/api/src/modules/chat/chat.service.ts
-   M apps/api/src/modules/chat/direct-chat.controller.ts
-   M apps/api/src/modules/chat/direct-chat.service.ts
-   M apps/api/src/modules/groups/groups.routes.ts
-   M apps/mobile/app/(app)/chat/[id].tsx
-   M apps/mobile/app/(app)/group/[slug]/chat.tsx
-   M apps/mobile/src/api/chat.api.ts
-   M apps/mobile/src/components/chat/index.ts
-   M apps/mobile/src/hooks/useDirectChat.ts
-   M apps/mobile/src/hooks/useGroupChat.ts
-   M apps/mobile/src/services/chat-persistence.service.ts
-   M apps/mobile/src/tests/test-runner.ts
-   M docs/MOBILE_APP_DEVELOPMENT_DASHBOARD.md
-   M docs/PROJECT_HISTORY.md
-   M packages/shared-types/src/chat.ts
-   M packages/validation/src/chat.ts
-  ?? apps/api/src/tests/chat-search-media-backend.test.ts
-  ?? apps/mobile/src/components/chat/ChatMediaGalleryModal.tsx
-  ?? apps/mobile/src/components/chat/ChatSearchBar.tsx
-  ?? apps/mobile/src/components/chat/ChatSearchResultsModal.tsx
-  ?? apps/mobile/src/tests/chat-search-media-flow.test.ts
-  ?? docs/BATCH_8_9_CHAT_SEARCH_MEDIA_GALLERY_REPORT.md
-  ```
-- **Latest Completed Batch:** **Batch 8.9 (Mobile Track) — Chat Message Search & In-Chat Media Gallery**.
-- **Current In-Progress Batch:** Batch 8.9 completed, tested, typechecked, and documented; awaiting user review and git staging authorization.
-- **Exact Next Recommended Batch:** **Batch 8.9 Git Synchronization** followed by **Batch 8.10 (Mobile Track) — Chat Message Deletion & Moderation**.
+- **Latest Feature/Fix Commit:** `886cb643e086b23c05d046773e49f6bc1fc70bc7` (`886cb64`)
+- **Upstream Tracking:** Synchronized checkpoint prepared to push cleanly to `origin/main`.
+- **Actual Working Tree State:** Clean working tree once pushed (all local changes committed).
+- **Latest Completed Batch:** **Batch 8.9 (Mobile Track) + Web Attachment Upload & Local Media Preview Fixes**.
+- **Current In-Progress Batch:** Workstation transfer sync completed, tested, typechecked, built, committed, and pushed.
+- **Exact Next Recommended Batch:** **Batch 8.10 (Mobile Track) — Chat Message Deletion & Moderation** (after running `git pull` and `npm install` on the second system).
 
 ---
 
