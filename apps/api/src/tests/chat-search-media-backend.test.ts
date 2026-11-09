@@ -92,7 +92,9 @@ function createMockPrismaClient() {
           if (where.groupId && m.groupId !== where.groupId) return false;
           if (where.senderId && m.senderId !== where.senderId) return false;
           if (where.OR) {
-            const keyword = where.OR[0]?.content?.contains?.toLowerCase() || '';
+            // Unescape Postgres ILIKE escapes (\_ → _, \% → %, \\ → \) so plain JS .includes() works correctly in the mock
+            const rawKeyword = where.OR[0]?.content?.contains?.toLowerCase() || '';
+            const keyword = rawKeyword.replace(/\\([_%\\])/g, '$1');
             const contentMatch = m.content?.toLowerCase().includes(keyword);
             const attMatch = m.attachments?.some((a: any) => a.fileName?.toLowerCase().includes(keyword));
             if (!contentMatch && !attMatch) return false;
@@ -109,7 +111,9 @@ function createMockPrismaClient() {
           if (where.createdAt?.gte && m.createdAt < where.createdAt.gte) return false;
           if (where.createdAt?.lte && m.createdAt > where.createdAt.lte) return false;
           if (where.OR) {
-            const keyword = where.OR[0]?.content?.contains?.toLowerCase() || '';
+            // Unescape Postgres ILIKE escapes (\_ → _, \% → %, \\ → \) so plain JS .includes() works correctly in the mock
+            const rawKeyword = where.OR[0]?.content?.contains?.toLowerCase() || '';
+            const keyword = rawKeyword.replace(/\\([_%\\])/g, '$1');
             const contentMatch = m.content?.toLowerCase().includes(keyword);
             const attMatch = m.attachments?.some((a: any) => a.fileName?.toLowerCase().includes(keyword));
             if (!contentMatch && !attMatch) return false;
@@ -191,7 +195,9 @@ function createMockPrismaClient() {
           if (where.conversationId && m.conversationId !== where.conversationId) return false;
           if (where.senderId && m.senderId !== where.senderId) return false;
           if (where.OR) {
-            const keyword = where.OR[0]?.content?.contains?.toLowerCase() || '';
+            // Unescape Postgres ILIKE escapes (\_ → _, \% → %, \\ → \) so plain JS .includes() works correctly in the mock
+            const rawKeyword = where.OR[0]?.content?.contains?.toLowerCase() || '';
+            const keyword = rawKeyword.replace(/\\([_%\\])/g, '$1');
             const contentMatch = m.content?.toLowerCase().includes(keyword);
             const attMatch = m.attachments?.some((a: any) => a.fileName?.toLowerCase().includes(keyword));
             if (!contentMatch && !attMatch) return false;
@@ -208,7 +214,9 @@ function createMockPrismaClient() {
           if (where.createdAt?.gte && m.createdAt < where.createdAt.gte) return false;
           if (where.createdAt?.lte && m.createdAt > where.createdAt.lte) return false;
           if (where.OR) {
-            const keyword = where.OR[0]?.content?.contains?.toLowerCase() || '';
+            // Unescape Postgres ILIKE escapes (\_ → _, \% → %, \\ → \) so plain JS .includes() works correctly in the mock
+            const rawKeyword = where.OR[0]?.content?.contains?.toLowerCase() || '';
+            const keyword = rawKeyword.replace(/\\([_%\\])/g, '$1');
             const contentMatch = m.content?.toLowerCase().includes(keyword);
             const attMatch = m.attachments?.some((a: any) => a.fileName?.toLowerCase().includes(keyword));
             if (!contentMatch && !attMatch) return false;
