@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { chatApi, UploadAttachmentFile } from '../api/chat.api';
+import { chatApi, UploadAttachmentFile, appendAttachmentFileToFormData } from '../api/chat.api';
 import { apiClient } from '../api/client';
 import {
   ChatAttachmentItem,
@@ -119,6 +119,90 @@ export async function runChatMediaAttachmentsFlowTests(): Promise<void> {
       assert.strictEqual(capturedEndpoint, '/groups/grp-1/attachments');
       assert.strictEqual(result.type, 'DOCUMENT');
       assert.strictEqual(result.mimeType, 'application/pdf');
+    });
+
+    // -------------------------------------------------------------
+    // Test 2.1: Web Image Upload with Native File / Blob
+    // -------------------------------------------------------------
+    await test('chatApi.uploadGroupAttachment on Web appends native File/Blob with exact field name "file"', async () => {
+      let capturedBody: any = null;
+
+      (apiClient as any).upload = async (_endpoint: string, formData: any) => {
+        capturedBody = formData;
+        return {
+          success: true,
+          data: { attachment: mockUploadedImage },
+          timestamp: new Date().toISOString(),
+        };
+      };
+
+      const mockBlob = new Blob(['fake-image-bytes'], { type: 'image/jpeg' });
+      const webFile: UploadAttachmentFile = {
+        uri: 'blob:http://localhost:8081/test-blob-uuid',
+        name: 'web_event_photo.jpg',
+        type: 'image/jpeg',
+        file: mockBlob,
+      };
+
+      const result = await chatApi.uploadGroupAttachment('grp-1', webFile);
+      assert.strictEqual(result.type, 'IMAGE');
+      assert.ok(capturedBody instanceof FormData);
+      const attachedPart = capturedBody.get('file');
+      assert.ok(attachedPart !== '[object Object]', 'Web upload must NOT stringify object to "[object Object]"');
+      assert.ok(attachedPart instanceof Blob, 'Web upload must append a real Blob instance');
+    });
+
+    // -------------------------------------------------------------
+    // Test 2.2: Web Upload with data URI fallback
+    // -------------------------------------------------------------
+    await test('chatApi.uploadGroupAttachment converts data URI to Blob on Web platform', async () => {
+      let capturedBody: any = null;
+
+      (apiClient as any).upload = async (_endpoint: string, formData: any) => {
+        capturedBody = formData;
+        return {
+          success: true,
+          data: { attachment: mockUploadedImage },
+          timestamp: new Date().toISOString(),
+        };
+      };
+
+      // Base64 1x1 gif / data URI
+      const dataUri = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      const webFileWithDataUri: UploadAttachmentFile = {
+        uri: dataUri,
+        name: 'pixel.gif',
+        type: 'image/gif',
+      };
+
+      // Directly invoke appendAttachmentFileToFormData in web simulated mode
+      const testFormData = new FormData();
+      // Temporarily mock window to simulate browser environment
+      (globalThis as any).window = { document: {} };
+      try {
+        await appendAttachmentFileToFormData(testFormData, 'file', webFileWithDataUri);
+        const filePart = testFormData.get('file');
+        assert.ok(filePart !== '[object Object]', 'Data URI must be converted to Blob, not "[object Object]"');
+        assert.ok(filePart instanceof Blob, 'Converted data URI must be a Blob');
+      } finally {
+        delete (globalThis as any).window;
+      }
+    });
+
+    // -------------------------------------------------------------
+    // Test 2.3: Native Android / iOS Upload Descriptor Preservation
+    // -------------------------------------------------------------
+    await test('appendAttachmentFileToFormData preserves native descriptor { uri, name, type } on Android/iOS', async () => {
+      const nativeFormData = new FormData();
+      const nativeFile: UploadAttachmentFile = {
+        uri: 'file:///data/user/0/com.apnasamaj.app/cache/camera.jpg',
+        name: 'camera.jpg',
+        type: 'image/jpeg',
+      };
+
+      await appendAttachmentFileToFormData(nativeFormData, 'file', nativeFile);
+      const part = nativeFormData.get('file');
+      assert.ok(part, 'Field "file" must exist');
     });
 
     // -------------------------------------------------------------

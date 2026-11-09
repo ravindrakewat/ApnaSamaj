@@ -1232,10 +1232,19 @@ export async function uploadChatAttachment(
         500
       );
     }
+  } else {
+    // Local storage fallback for development / test environments
+    try {
+      const localFilePath = path.resolve(process.cwd(), 'uploads/chat-attachments', storagePath);
+      fs.mkdirSync(path.dirname(localFilePath), { recursive: true });
+      fs.writeFileSync(localFilePath, fileBuffer);
+    } catch (fsErr) {
+      console.warn('[Storage Service] Failed to save local chat attachment fallback:', fsErr);
+    }
   }
 
   if (!signedUrl) {
-    signedUrl = `https://mock-storage.apnasamaj.local/${CHAT_ATTACHMENTS_BUCKET}/${storagePath}?token=mock-signed-token&expires=3600`;
+    signedUrl = resolveChatAttachmentUrl(storagePath);
   }
 
   return {
@@ -1252,12 +1261,26 @@ export async function uploadChatAttachment(
 }
 
 /**
+ * Resolves a public/signed attachment URL.
+ * When Supabase credentials are configured, returns live Supabase URL.
+ * In development/test without Supabase, returns local API server endpoint.
+ */
+export function resolveChatAttachmentUrl(storagePath: string): string {
+  if (config.supabaseUrl && config.supabaseSecretKey) {
+    return `${config.supabaseUrl}/storage/v1/object/public/${CHAT_ATTACHMENTS_BUCKET}/${storagePath}`;
+  }
+  const apiPort = config.port || 4000;
+  return `http://localhost:${apiPort}/api/v1/chat/attachments/raw/${storagePath}?token=local-dev-token&expires=3600`;
+}
+
+/**
  * Generates a short-lived signed URL for an authorized user to access a private chat attachment.
  */
 export async function createTemporarySignedChatAttachmentUrl(
   storagePath: string,
   expiresInSeconds: number = 3600
 ): Promise<string> {
+  const apiPort = config.port || 4000;
   if (config.supabaseUrl && config.supabaseSecretKey) {
     try {
       const supabase = getSupabaseClient();
@@ -1267,8 +1290,7 @@ export async function createTemporarySignedChatAttachmentUrl(
 
       if (error) {
         console.warn('[Storage Service] Supabase createSignedUrl notice:', error.message);
-        // Fallback for mock/test objects that were not uploaded to live Supabase
-        return `https://mock-storage.apnasamaj.local/${CHAT_ATTACHMENTS_BUCKET}/${storagePath}?token=mock-signed-token&expires=${expiresInSeconds}`;
+        return `http://localhost:${apiPort}/api/v1/chat/attachments/raw/${storagePath}?token=mock-signed-token&expires=${expiresInSeconds}`;
       }
       if (data?.signedUrl) {
         return data.signedUrl;
@@ -1279,6 +1301,6 @@ export async function createTemporarySignedChatAttachmentUrl(
   }
 
   // Development / test fallback
-  return `https://mock-storage.apnasamaj.local/${CHAT_ATTACHMENTS_BUCKET}/${storagePath}?token=mock-signed-token&expires=${expiresInSeconds}`;
+  return `http://localhost:${apiPort}/api/v1/chat/attachments/raw/${storagePath}?token=local-dev-token&expires=${expiresInSeconds}`;
 }
 

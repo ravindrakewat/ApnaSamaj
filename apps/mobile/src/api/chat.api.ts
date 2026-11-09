@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { apiClient } from './client';
 import {
   ApiResponse,
@@ -36,6 +37,58 @@ export interface UploadAttachmentFile {
   uri: string;
   name: string;
   type: string;
+  file?: any;
+}
+
+/**
+ * Platform-compatible FormData builder for attachment uploads.
+ * On Web: Appends native File or Blob so that the browser sends a true binary file part with boundaries.
+ * On Native (Android/iOS): Appends the React Native file object descriptor ({ uri, name, type }).
+ */
+export async function appendAttachmentFileToFormData(
+  formData: FormData,
+  fieldName: string,
+  file: UploadAttachmentFile
+): Promise<void> {
+  const isWeb =
+    Platform.OS === 'web' ||
+    (typeof window !== 'undefined' && typeof window.document !== 'undefined');
+
+  // 1. If explicit File or Blob object is present (e.g. from Web ImagePicker/DocumentPicker)
+  if (
+    file.file &&
+    typeof Blob !== 'undefined' &&
+    (file.file instanceof Blob || (file.file as any).size !== undefined)
+  ) {
+    formData.append(fieldName, file.file, file.name || (file.file as any).name);
+    return;
+  }
+
+  // 2. On Web, if only URI is present (data URI, blob URI, or object URL)
+  if (isWeb && file.uri) {
+    if (
+      file.uri.startsWith('blob:') ||
+      file.uri.startsWith('data:') ||
+      file.uri.startsWith('http://') ||
+      file.uri.startsWith('https://')
+    ) {
+      try {
+        const res = await fetch(file.uri);
+        const blob = await res.blob();
+        formData.append(fieldName, blob, file.name);
+        return;
+      } catch (err) {
+        console.warn('[chatApi] Failed to convert URI to Blob on Web, falling back to native descriptor:', err);
+      }
+    }
+  }
+
+  // 3. Native Android / iOS (or fallback)
+  formData.append(fieldName, {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  } as any);
 }
 
 export const chatApi = {
@@ -165,11 +218,7 @@ export const chatApi = {
     }
 
     const formData = new FormData();
-    formData.append('file', {
-      uri: file.uri,
-      name: file.name,
-      type: file.type,
-    } as any);
+    await appendAttachmentFileToFormData(formData, 'file', file);
 
     const response = await apiClient.upload<ApiResponse<{ attachment: ChatAttachmentItem }>>(
       `/groups/${encodeURIComponent(groupId.trim())}/attachments`,
@@ -347,11 +396,7 @@ export const chatApi = {
     }
 
     const formData = new FormData();
-    formData.append('file', {
-      uri: file.uri,
-      name: file.name,
-      type: file.type,
-    } as any);
+    await appendAttachmentFileToFormData(formData, 'file', file);
 
     const response = await apiClient.upload<ApiResponse<{ attachment: ChatAttachmentItem }>>(
       `/chat/conversations/${encodeURIComponent(conversationId.trim())}/attachments`,

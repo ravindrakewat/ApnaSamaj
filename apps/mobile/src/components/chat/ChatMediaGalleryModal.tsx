@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ChatAttachmentType, ChatMediaGalleryItem } from '@apnasamaj/shared-types';
 import { voicePlaybackService } from '../../services';
+import { resolveAttachmentDisplayUrl } from '../../utils/attachment';
 
 const { width } = Dimensions.get('window');
 const GRID_ITEM_SIZE = (width - 32 - 16) / 3;
@@ -197,7 +198,7 @@ export const ChatMediaGalleryModal: React.FC<ChatMediaGalleryModalProps> = ({
       <View style={styles.gridItemContainer}>
         <TouchableOpacity
           style={styles.gridCard}
-          onPress={() => (isVideo ? handleOpenFile(item.url) : setSelectedPhoto(item))}
+          onPress={() => (isVideo ? handleOpenFile(resolveAttachmentDisplayUrl(item.url)) : setSelectedPhoto(item))}
           activeOpacity={0.8}
         >
           {isVideo ? (
@@ -209,7 +210,7 @@ export const ChatMediaGalleryModal: React.FC<ChatMediaGalleryModalProps> = ({
               </View>
             </View>
           ) : (
-            <Image source={{ uri: item.url }} style={styles.gridImage} resizeMode="cover" />
+            <Image source={{ uri: resolveAttachmentDisplayUrl(item.url) }} style={styles.gridImage} resizeMode="cover" />
           )}
         </TouchableOpacity>
 
@@ -277,7 +278,7 @@ export const ChatMediaGalleryModal: React.FC<ChatMediaGalleryModalProps> = ({
     return (
       <TouchableOpacity
         style={styles.docCard}
-        onPress={() => handleOpenFile(item.url)}
+        onPress={() => handleOpenFile(resolveAttachmentDisplayUrl(item.url))}
         activeOpacity={0.7}
       >
         <View style={styles.docIconWrap}>
@@ -469,7 +470,7 @@ export const ChatMediaGalleryModal: React.FC<ChatMediaGalleryModalProps> = ({
               </SafeAreaView>
 
               <Image
-                source={{ uri: selectedPhoto.url }}
+                source={{ uri: resolveAttachmentDisplayUrl(selectedPhoto.url) }}
                 style={styles.fullScreenImage}
                 resizeMode="contain"
               />

@@ -4,6 +4,7 @@ import { ChatAttachmentItem } from '@apnasamaj/shared-types';
 import { Typography } from '../Typography';
 import { useTheme } from '../../hooks/useTheme';
 import { useLocalization } from '../../hooks/useLocalization';
+import { resolveAttachmentDisplayUrl } from '../../utils/attachment';
 
 interface ChatVideoMessageProps {
   attachment: ChatAttachmentItem;
@@ -20,8 +21,9 @@ export const ChatVideoMessage: React.FC<ChatVideoMessageProps> = ({ attachment }
   };
 
   const handlePlay = () => {
-    if (attachment.url) {
-      Linking.openURL(attachment.url).catch((err) => {
+    const videoUrl = resolveAttachmentDisplayUrl(attachment.url);
+    if (videoUrl) {
+      Linking.openURL(videoUrl).catch((err) => {
         console.warn('[ChatVideoMessage] Could not open video URL:', err);
       });
     }

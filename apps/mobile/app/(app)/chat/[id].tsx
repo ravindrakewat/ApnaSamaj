@@ -291,6 +291,7 @@ export default function PersonalChatScreen() {
           uri: attachmentToUpload.uri,
           name: attachmentToUpload.name,
           type: attachmentToUpload.type,
+          file: attachmentToUpload.file,
         });
       }
 

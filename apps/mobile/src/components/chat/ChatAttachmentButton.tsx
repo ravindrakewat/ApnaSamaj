@@ -19,6 +19,7 @@ export interface SelectedChatAttachment {
   type: string;
   size?: number;
   category: 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  file?: any;
 }
 
 interface ChatAttachmentButtonProps {
@@ -51,7 +52,7 @@ export const ChatAttachmentButton: React.FC<ChatAttachmentButtonProps> = ({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: false,
         quality: 0.8,
       });
@@ -76,6 +77,7 @@ export const ChatAttachmentButton: React.FC<ChatAttachmentButtonProps> = ({
         type: asset.mimeType || 'image/jpeg',
         size: fileSize,
         category: 'IMAGE',
+        file: (asset as any).file,
       });
     } catch (err: unknown) {
       console.warn('[ChatAttachmentButton] Image pick error:', err);
@@ -97,7 +99,7 @@ export const ChatAttachmentButton: React.FC<ChatAttachmentButtonProps> = ({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        mediaTypes: ['videos'],
         allowsEditing: false,
         quality: 0.8,
       });
@@ -122,6 +124,7 @@ export const ChatAttachmentButton: React.FC<ChatAttachmentButtonProps> = ({
         type: asset.mimeType || 'video/mp4',
         size: fileSize,
         category: 'VIDEO',
+        file: (asset as any).file,
       });
     } catch (err: unknown) {
       console.warn('[ChatAttachmentButton] Video pick error:', err);
@@ -164,6 +167,7 @@ export const ChatAttachmentButton: React.FC<ChatAttachmentButtonProps> = ({
         type: doc.mimeType || 'application/pdf',
         size: fileSize,
         category: 'DOCUMENT',
+        file: (doc as any).file,
       });
     } catch (err: unknown) {
       console.warn('[ChatAttachmentButton] Document pick error:', err);

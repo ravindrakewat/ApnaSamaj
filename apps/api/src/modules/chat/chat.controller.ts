@@ -1,4 +1,6 @@
-import { Response } from 'express';
+import fs from 'fs';
+import path from 'path';
+import { Request, Response } from 'express';
 import {
   ApiResponse,
   ChatMessagesResponseData,
@@ -672,4 +674,56 @@ export async function getGroupMessageContextHandler(
     console.error('[Chat Controller] getGroupMessageContext error:', err);
     res.status(500).json({ success: false, error: 'Failed to retrieve message context.', timestamp: new Date().toISOString() });
   }
+}
+
+/**
+ * GET /api/v1/chat/attachments/raw/*
+ * Public attachment streaming handler for local development and media preview.
+ * Serves real disk file if present, or clean SVG fallback if file was uploaded prior to local cache.
+ */
+export function serveLocalChatAttachmentHandler(req: Request, res: Response): void {
+  const rawParam = (req.params as any)[0] || '';
+  const safePath = path.normalize(rawParam).replace(/^(\.\.[\/\\])+/, '');
+  const localUploadsDir = path.resolve(process.cwd(), 'uploads/chat-attachments');
+  const fullPath = path.join(localUploadsDir, safePath);
+
+  // Security check: ensure path is within uploads directory
+  if (!fullPath.startsWith(localUploadsDir)) {
+    res.status(403).json({ success: false, error: 'Access denied.' });
+    return;
+  }
+
+  if (fs.existsSync(fullPath)) {
+    const ext = path.extname(fullPath).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif',
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.pdf': 'application/pdf',
+      '.m4a': 'audio/mp4',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.ogg': 'audio/ogg',
+    };
+    const contentType = mimeMap[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    fs.createReadStream(fullPath).pipe(res);
+    return;
+  }
+
+  // Graceful fallback for prior test/mock files that weren't written to disk
+  const fileName = path.basename(safePath) || 'Image';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+    <rect width="100%" height="100%" fill="#e2e8f0"/>
+    <text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="48">🖼️</text>
+    <text x="50%" y="65%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#475569">${fileName}</text>
+  </svg>`;
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(svg);
 }

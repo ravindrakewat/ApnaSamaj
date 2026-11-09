@@ -4,6 +4,7 @@ import { ChatAttachmentItem } from '@apnasamaj/shared-types';
 import { Typography } from '../Typography';
 import { useTheme } from '../../hooks/useTheme';
 import { useLocalization } from '../../hooks/useLocalization';
+import { resolveAttachmentDisplayUrl } from '../../utils/attachment';
 
 interface ChatDocumentMessageProps {
   attachment: ChatAttachmentItem;
@@ -28,8 +29,9 @@ export const ChatDocumentMessage: React.FC<ChatDocumentMessageProps> = ({ attach
   };
 
   const handleOpen = () => {
-    if (attachment.url) {
-      Linking.openURL(attachment.url).catch((err) => {
+    const docUrl = resolveAttachmentDisplayUrl(attachment.url);
+    if (docUrl) {
+      Linking.openURL(docUrl).catch((err) => {
         console.warn('[ChatDocumentMessage] Could not open document URL:', err);
       });
     }

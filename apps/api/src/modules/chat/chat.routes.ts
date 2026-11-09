@@ -3,6 +3,7 @@ import { authenticateToken } from '../../middleware/authenticate';
 import { requireActiveUser } from '../../middleware/authorize';
 import { requireTenantContext } from '../../middleware/tenant.middleware';
 import { singleChatAttachmentUpload } from '../../middleware/upload.middleware';
+import { serveLocalChatAttachmentHandler } from './chat.controller';
 import {
   getDirectInboxHandler,
   createDirectConversationHandler,
@@ -19,6 +20,9 @@ import {
 } from './direct-chat.controller';
 
 export const chatRouter = Router();
+
+// Public local attachment streaming endpoint (serves media without token header so <img> tags load cleanly)
+chatRouter.get('/attachments/raw/*', serveLocalChatAttachmentHandler);
 
 // Direct messaging routes strictly require authenticated ACTIVE member context and tenant isolation
 chatRouter.use(authenticateToken, requireActiveUser, requireTenantContext);

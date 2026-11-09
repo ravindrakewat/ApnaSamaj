@@ -22,6 +22,7 @@ import {
   getGroupChatHistory,
   verifyGroupChatAccess,
 } from '../modules/chat/chat.service';
+import { uploadGroupAttachmentHandler } from '../modules/chat/chat.controller';
 import { ChatAttachmentInput } from '@apnasamaj/shared-types';
 
 console.log('================================================================');
@@ -273,10 +274,24 @@ async function runChatMediaAttachmentsSuite() {
       name: 'Executive Council',
       privacy: 'PRIVATE',
     },
+    {
+      id: 'a0000000-0000-0000-0000-000000000001',
+      slug: 'delhi-youth-uuid',
+      name: 'Delhi Youth UUID',
+      privacy: 'PUBLIC',
+    },
+    {
+      id: 'a0000000-0000-0000-0000-000000000002',
+      slug: 'executive-council-uuid',
+      name: 'Executive Council UUID',
+      privacy: 'PRIVATE',
+    },
   ];
   const groupMembers: any[] = [
     { groupId: 'grp-public-1', userId: 'usr-aarav', role: 'MEMBER' },
     { groupId: 'grp-private-2', userId: 'usr-aarav', role: 'ADMIN' },
+    { groupId: 'a0000000-0000-0000-0000-000000000001', userId: 'usr-aarav', role: 'MEMBER' },
+    { groupId: 'a0000000-0000-0000-0000-000000000002', userId: 'usr-aarav', role: 'ADMIN' },
   ];
 
   const mockDb: any = {
@@ -604,6 +619,110 @@ async function runChatMediaAttachmentsSuite() {
     'Signed URL must carry token/expiration query parameter'
   );
   pass('Signed URL enforces bounded time-limited expiry token');
+
+  // --------------------------------------------------------
+  // Suite 7: Group Attachment Upload Controller & Web Invariants
+  // --------------------------------------------------------
+  console.log('\n--- 7. Group Attachment Upload Controller & Web Invariants ---');
+
+  function createMockRes() {
+    let statusCode = 200;
+    let jsonBody: any = null;
+    return {
+      status(code: number) {
+        statusCode = code;
+        return this;
+      },
+      json(body: any) {
+        jsonBody = body;
+        return this;
+      },
+      get statusCode() {
+        return statusCode;
+      },
+      get jsonBody() {
+        return jsonBody;
+      },
+    };
+  }
+
+  // Test 7.1: Valid multipart file buffer received by controller
+  const validRes = createMockRes();
+  const validReq: any = {
+    user: { id: 'usr-aarav' },
+    tenant: { slug: 'kewat' },
+    params: { id: 'a0000000-0000-0000-0000-000000000001' },
+    file: {
+      buffer: jpegBuffer,
+      originalname: 'festival_photo.jpg',
+      mimetype: 'image/jpeg',
+      size: jpegBuffer.length,
+    },
+    db: mockDb,
+  };
+  await uploadGroupAttachmentHandler(validReq, validRes as any);
+  assert.strictEqual(validRes.statusCode, 201);
+  assert.strictEqual(validRes.jsonBody.success, true);
+  assert.strictEqual(validRes.jsonBody.data.attachment.type, 'IMAGE');
+  assert.strictEqual(validRes.jsonBody.data.attachment.fileName, 'festival_photo.jpg');
+  pass('Backend successfully receives req.file and generates group attachment metadata (201)');
+
+  // Test 7.2: Missing file payload returns 400 Bad Request
+  const missingFileRes = createMockRes();
+  const missingFileReq: any = {
+    user: { id: 'usr-aarav' },
+    tenant: { slug: 'kewat' },
+    params: { id: 'a0000000-0000-0000-0000-000000000001' },
+    file: undefined,
+    db: mockDb,
+  };
+  await uploadGroupAttachmentHandler(missingFileReq, missingFileRes as any);
+  assert.strictEqual(missingFileRes.statusCode, 400);
+  assert.strictEqual(missingFileRes.jsonBody.success, false);
+  assert.strictEqual(missingFileRes.jsonBody.error, 'No file was provided for upload.');
+  pass('Missing file returns 400 Bad Request');
+
+  // Test 7.3: Unauthorized upload request returns 401
+  const unauthRes = createMockRes();
+  const unauthReq: any = {
+    user: undefined,
+    tenant: { slug: 'kewat' },
+    params: { id: 'a0000000-0000-0000-0000-000000000001' },
+    file: { buffer: jpegBuffer, originalname: 'test.jpg' },
+    db: mockDb,
+  };
+  await uploadGroupAttachmentHandler(unauthReq, unauthRes as any);
+  assert.strictEqual(unauthRes.statusCode, 401);
+  assert.strictEqual(unauthRes.jsonBody.success, false);
+  pass('Unauthorized users cannot upload attachments (401)');
+
+  // Test 7.4: Non-member cannot upload to restricted/private group
+  const nonMemberRes = createMockRes();
+  const nonMemberReq: any = {
+    user: { id: 'usr-stranger' },
+    tenant: { slug: 'kewat' },
+    params: { id: 'a0000000-0000-0000-0000-000000000002' },
+    file: { buffer: jpegBuffer, originalname: 'test.jpg' },
+    db: mockDb,
+  };
+  await uploadGroupAttachmentHandler(nonMemberReq, nonMemberRes as any);
+  assert.strictEqual(nonMemberRes.statusCode, 403);
+  assert.strictEqual(nonMemberRes.jsonBody.success, false);
+  pass('Non-members cannot upload to restricted groups (403)');
+
+  // Test 7.5: Invalid group ID format returns 400
+  const invalidGroupRes = createMockRes();
+  const invalidGroupReq: any = {
+    user: { id: 'usr-aarav' },
+    tenant: { slug: 'kewat' },
+    params: { id: '' },
+    file: { buffer: jpegBuffer, originalname: 'test.jpg' },
+    db: mockDb,
+  };
+  await uploadGroupAttachmentHandler(invalidGroupReq, invalidGroupRes as any);
+  assert.strictEqual(invalidGroupRes.statusCode, 400);
+  assert.strictEqual(invalidGroupRes.jsonBody.success, false);
+  pass('Invalid group ID format returns 400 Bad Request');
 
   console.log('\n================================================================');
   console.log(`   Chat Media Attachments Backend: ${passedAssertions} passed, 0 failed`);

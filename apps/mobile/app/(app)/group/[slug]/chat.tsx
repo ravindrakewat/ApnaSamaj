@@ -311,6 +311,7 @@ export default function GroupChatScreen() {
           uri: attachmentToUpload.uri,
           name: attachmentToUpload.name,
           type: attachmentToUpload.type,
+          file: attachmentToUpload.file,
         });
       }
 

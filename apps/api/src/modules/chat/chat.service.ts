@@ -20,7 +20,7 @@ import {
   ChatMediaQueryInput,
 } from '@apnasamaj/validation';
 import { dispatchPushNotificationToMultipleUsers } from '../notifications/push-notification.service';
-import { createTemporarySignedChatAttachmentUrl } from '../../services/storage.service';
+import { createTemporarySignedChatAttachmentUrl, resolveChatAttachmentUrl } from '../../services/storage.service';
 import { chatIdempotencyService } from './chat-idempotency.service';
 
 export class ChatServiceError extends Error {
@@ -197,7 +197,7 @@ export function mapToChatMessageItem(item: any, currentUserId?: string): ChatMes
       mimeType: att.mimeType,
       fileSizeBytes: att.fileSizeBytes,
       storagePath: att.storagePath,
-      url: `https://mock-storage.apnasamaj.local/chat-attachments/${att.storagePath}?token=mock-signed-token&expires=3600`,
+      url: resolveChatAttachmentUrl(att.storagePath),
       duration: att.duration != null ? att.duration : undefined,
       createdAt: att.createdAt instanceof Date ? att.createdAt.toISOString() : att.createdAt,
     })),

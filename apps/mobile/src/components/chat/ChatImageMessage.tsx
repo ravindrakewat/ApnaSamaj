@@ -3,6 +3,7 @@ import { View, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Linking }
 import { ChatAttachmentItem } from '@apnasamaj/shared-types';
 import { Typography } from '../Typography';
 import { useTheme } from '../../hooks/useTheme';
+import { resolveAttachmentDisplayUrl } from '../../utils/attachment';
 
 interface ChatImageMessageProps {
   attachment: ChatAttachmentItem;
@@ -13,15 +14,15 @@ export const ChatImageMessage: React.FC<ChatImageMessageProps> = ({ attachment }
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  const imageUrl = resolveAttachmentDisplayUrl(attachment.url);
+
   const handlePress = () => {
-    if (attachment.url) {
-      Linking.openURL(attachment.url).catch((err) => {
+    if (imageUrl) {
+      Linking.openURL(imageUrl).catch((err) => {
         console.warn('[ChatImageMessage] Could not open image URL:', err);
       });
     }
   };
-
-  const imageUrl = attachment.url;
 
   if (hasError || !imageUrl) {
     return (
