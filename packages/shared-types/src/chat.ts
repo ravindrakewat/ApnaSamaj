@@ -86,6 +86,9 @@ export interface ChatMessageItem {
   replyTo?: ChatMessageReplyPreview | null;
   reactions?: ChatReactionSummary[];
   tempId?: string;
+  isDeletedForEveryone?: boolean;
+  deletedAt?: string | null;
+  deletedByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
   sender?: ChatMessageSender | null;
@@ -163,6 +166,9 @@ export interface DirectMessageItem {
   replyTo?: ChatMessageReplyPreview | null;
   reactions?: ChatReactionSummary[];
   tempId?: string;
+  isDeletedForEveryone?: boolean;
+  deletedAt?: string | null;
+  deletedByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
   sender?: ChatMessageSender | null;
@@ -402,7 +408,6 @@ export interface ChatMessageContextResponse {
   targetIndex: number;
 }
 
-
 /**
  * Real-time event payload broadcasted when a message reaction changes.
  */
@@ -417,180 +422,30 @@ export interface ChatReactionEventPayload {
 }
 
 /**
- * Query parameters for searching chat messages.
+ * Chat message deletion constants and types.
  */
-export interface ChatSearchQueryParams {
-  q: string;
-  senderId?: string;
-  startDate?: string;
-  endDate?: string;
-  cursor?: string;
-  limit?: number;
+export const DELETED_CHAT_MESSAGE_PLACEHOLDER = 'This message was deleted';
+export const DELETED_CHAT_MESSAGE_PLACEHOLDER_HI = 'यह संदेश हटा दिया गया था';
+
+export type MessageDeleteScope = 'ME' | 'EVERYONE';
+
+export interface DeleteChatMessageInput {
+  scope: MessageDeleteScope;
 }
 
-/**
- * Standardized search result item representing a matching message.
- */
-export interface ChatSearchResultItem {
-  id: string; // message ID
-  conversationId?: string;
-  groupId?: string;
-  conversationType: 'DIRECT' | 'GROUP';
-  senderId: string;
-  senderName: string;
-  senderAvatarUrl: string | null;
-  content: string;
-  createdAt: string;
-  attachmentType?: ChatAttachmentType | null;
-  attachmentName?: string | null;
-  matchSource: 'local' | 'remote';
-  matchedSubstring?: string;
-}
-
-/**
- * Response structure for paginated chat search results.
- */
-export interface PaginatedChatSearchResponse {
-  results: ChatSearchResultItem[];
-  nextCursor?: string | null;
-  hasMore: boolean;
-  totalMatches?: number;
-}
-
-/**
- * Query parameters for browsing the in-chat media gallery.
- */
-export interface ChatMediaGalleryQueryParams {
-  type?: ChatAttachmentType;
-  cursor?: string;
-  limit?: number;
-}
-
-/**
- * Media item structure for photos, videos, audio/voice notes, and documents in the gallery.
- */
-export interface ChatMediaGalleryItem {
-  id: string; // attachment ID
+export interface ChatMessageDeletedEvent {
   messageId: string;
-  conversationId?: string;
+  scope: MessageDeleteScope;
   groupId?: string;
-  type: ChatAttachmentType;
-  fileName: string;
-  mimeType: string;
-  fileSizeBytes: number;
-  storagePath: string;
-  url: string;
-  duration?: number;
-  createdAt: string;
-  senderId: string;
-  senderName: string;
-  senderAvatarUrl?: string | null;
-}
-
-/**
- * Response structure for paginated chat media gallery queries.
- */
-export interface PaginatedChatMediaResponse {
-  media: ChatMediaGalleryItem[];
-  nextCursor?: string | null;
-  hasMore: boolean;
-}
-
-/**
- * Response structure when fetching context around a specific message (for jump navigation).
- */
-export interface ChatMessageContextResponse {
-  targetMessageId: string;
-  messages: (ChatMessageItem | DirectMessageItem)[];
-  targetIndex: number;
-}
-
-/**
- * Query parameters for searching chat messages.
- */
-export interface ChatSearchQueryParams {
-  q: string;
-  senderId?: string;
-  startDate?: string;
-  endDate?: string;
-  cursor?: string;
-  limit?: number;
-}
-
-/**
- * Standardized search result item representing a matching message.
- */
-export interface ChatSearchResultItem {
-  id: string; // message ID
   conversationId?: string;
-  groupId?: string;
-  conversationType: 'DIRECT' | 'GROUP';
-  senderId: string;
-  senderName: string;
-  senderAvatarUrl: string | null;
-  content: string;
-  createdAt: string;
-  attachmentType?: ChatAttachmentType | null;
-  attachmentName?: string | null;
-  matchSource: 'local' | 'remote';
-  matchedSubstring?: string;
+  conversationType: 'GROUP' | 'DIRECT';
+  deletedByUserId: string;
+  deletedAt: string;
 }
 
-/**
- * Response structure for paginated chat search results.
- */
-export interface PaginatedChatSearchResponse {
-  results: ChatSearchResultItem[];
-  nextCursor?: string | null;
-  hasMore: boolean;
-  totalMatches?: number;
-}
-
-/**
- * Query parameters for browsing the in-chat media gallery.
- */
-export interface ChatMediaGalleryQueryParams {
-  type?: ChatAttachmentType;
-  cursor?: string;
-  limit?: number;
-}
-
-/**
- * Media item structure for photos, videos, audio/voice notes, and documents in the gallery.
- */
-export interface ChatMediaGalleryItem {
-  id: string; // attachment ID
+export interface DeleteChatMessageResponseData {
+  success: boolean;
   messageId: string;
-  conversationId?: string;
-  groupId?: string;
-  type: ChatAttachmentType;
-  fileName: string;
-  mimeType: string;
-  fileSizeBytes: number;
-  storagePath: string;
-  url: string;
-  duration?: number;
-  createdAt: string;
-  senderId: string;
-  senderName: string;
-  senderAvatarUrl?: string | null;
-}
-
-/**
- * Response structure for paginated chat media gallery queries.
- */
-export interface PaginatedChatMediaResponse {
-  media: ChatMediaGalleryItem[];
-  nextCursor?: string | null;
-  hasMore: boolean;
-}
-
-/**
- * Response structure when fetching context around a specific message (for jump navigation).
- */
-export interface ChatMessageContextResponse {
-  targetMessageId: string;
-  messages: (ChatMessageItem | DirectMessageItem)[];
-  targetIndex: number;
+  scope: MessageDeleteScope;
 }
 

@@ -121,3 +121,11 @@ export const chatMessageContextParamSchema = z.object({
 });
 
 export type ChatMessageContextParamInput = z.infer<typeof chatMessageContextParamSchema>;
+
+export const deleteChatMessageSchema = z.object({
+  scope: z.enum(['ME', 'EVERYONE'], {
+    errorMap: () => ({ message: 'Scope must be either "ME" or "EVERYONE"' }),
+  }),
+});
+
+export type DeleteChatMessageSchemaInput = z.infer<typeof deleteChatMessageSchema>;

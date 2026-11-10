@@ -21,7 +21,7 @@ export const ChatVideoMessage: React.FC<ChatVideoMessageProps> = ({ attachment }
   };
 
   const handlePlay = () => {
-    const videoUrl = resolveAttachmentDisplayUrl(attachment.url);
+    const videoUrl = resolveAttachmentDisplayUrl(attachment.url || (attachment as any).localUri);
     if (videoUrl) {
       Linking.openURL(videoUrl).catch((err) => {
         console.warn('[ChatVideoMessage] Could not open video URL:', err);

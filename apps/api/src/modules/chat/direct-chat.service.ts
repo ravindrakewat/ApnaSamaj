@@ -16,6 +16,9 @@ import {
   PaginatedChatMediaResponse,
   ChatMediaGalleryItem,
   ChatMessageContextResponse,
+  DELETED_CHAT_MESSAGE_PLACEHOLDER,
+  MessageDeleteScope,
+  DeleteChatMessageResponseData,
 } from '@apnasamaj/shared-types';
 import {
   ListDirectMessagesQueryInput,
@@ -27,9 +30,10 @@ import {
   ChatServiceError,
   ChatNotFoundError,
   ForbiddenChatError,
+  BadRequestChatError,
   aggregateReactions,
 } from './chat.service';
-import { createTemporarySignedChatAttachmentUrl, resolveChatAttachmentUrl } from '../../services/storage.service';
+import { createTemporarySignedChatAttachmentUrl, resolveChatAttachmentUrl, populateSignedAttachmentUrls } from '../../services/storage.service';
 import { dispatchPushNotificationToUser } from '../notifications/push-notification.service';
 import { chatIdempotencyService } from './chat-idempotency.service';
 
@@ -49,6 +53,67 @@ function assertDb(db?: PrismaClient): PrismaClient {
 }
 
 const directMessageInclude = {
+  sender: {
+    select: {
+      id: true,
+      profile: {
+        select: {
+          fullName: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  },
+  attachments: true,
+  replyTo: {
+    select: {
+      id: true,
+      senderId: true,
+      content: true,
+      isDeletedForEveryone: true,
+      sender: {
+        select: {
+          profile: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      },
+      attachments: {
+        take: 1,
+        select: {
+          type: true,
+          fileName: true,
+        },
+      },
+    },
+  },
+  reactions: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          profile: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.DirectMessageInclude;
+
+const legacyDirectMessageSelect = {
+  id: true,
+  conversationId: true,
+  senderId: true,
+  content: true,
+  createdAt: true,
+  updatedAt: true,
+  clientMessageId: true,
+  replyToMessageId: true,
   sender: {
     select: {
       id: true,
@@ -98,55 +163,46 @@ const directMessageInclude = {
       },
     },
   },
-} satisfies Prisma.DirectMessageInclude;
+};
 
 type RawDirectMessage = Prisma.DirectMessageGetPayload<{
   include: typeof directMessageInclude;
 }>;
 
 export function mapToDirectMessageItem(item: any, currentUserId?: string): DirectMessageItem {
+  const isDeletedForEveryone = Boolean(
+    item.isDeletedForEveryone || item.content === DELETED_CHAT_MESSAGE_PLACEHOLDER
+  );
+
   const replyToRaw = item.replyTo;
   let replyTo: ChatMessageReplyPreview | null = null;
   if (replyToRaw) {
+    const isReplyDeleted = Boolean(
+      replyToRaw.isDeletedForEveryone || replyToRaw.content === DELETED_CHAT_MESSAGE_PLACEHOLDER
+    );
     replyTo = {
       id: replyToRaw.id,
-      senderId: replyToRaw.senderId,
-      senderName: replyToRaw.sender?.profile?.fullName || 'Community Member',
-      content: replyToRaw.content || '',
-      attachmentType: replyToRaw.attachments?.[0]?.type || null,
-      attachmentName: replyToRaw.attachments?.[0]?.fileName || null,
+      senderId: isReplyDeleted ? '' : replyToRaw.senderId,
+      senderName: isReplyDeleted ? 'Message Deleted' : (replyToRaw.sender?.profile?.fullName || 'Community Member'),
+      content: isReplyDeleted ? DELETED_CHAT_MESSAGE_PLACEHOLDER : (replyToRaw.content || ''),
+      attachmentType: isReplyDeleted ? null : (replyToRaw.attachments?.[0]?.type || null),
+      attachmentName: isReplyDeleted ? null : (replyToRaw.attachments?.[0]?.fileName || null),
     };
   } else if (item.replyToMessageId) {
     replyTo = {
       id: item.replyToMessageId,
       senderId: '',
       senderName: 'Original Message',
-      content: 'This message was deleted',
+      content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
       attachmentType: null,
       attachmentName: null,
     };
   }
 
-  return {
-    id: item.id,
-    conversationId: item.conversationId,
-    senderId: item.senderId,
-    content: item.content,
-    clientMessageId: item.clientMessageId || null,
-    replyToMessageId: item.replyToMessageId || null,
-    replyTo,
-    reactions: aggregateReactions(item.reactions, currentUserId || item.senderId),
-    tempId: item.clientMessageId || undefined,
-    createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
-    updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : item.updatedAt,
-    sender: item.sender
-      ? {
-        id: item.sender.id,
-        fullName: item.sender.profile?.fullName || 'Community Member',
-        avatarUrl: item.sender.profile?.avatarUrl || null,
-      }
-      : null,
-    attachments: ((item as any).attachments || []).map((att: any) => ({
+  const content = isDeletedForEveryone ? DELETED_CHAT_MESSAGE_PLACEHOLDER : item.content;
+  const attachments = isDeletedForEveryone
+    ? []
+    : ((item as any).attachments || []).map((att: any) => ({
       id: att.id,
       directMessageId: att.directMessageId,
       type: att.type,
@@ -157,7 +213,38 @@ export function mapToDirectMessageItem(item: any, currentUserId?: string): Direc
       url: resolveChatAttachmentUrl(att.storagePath),
       duration: att.duration != null ? att.duration : undefined,
       createdAt: att.createdAt instanceof Date ? att.createdAt.toISOString() : att.createdAt,
-    })),
+    }));
+  const reactions = isDeletedForEveryone
+    ? []
+    : aggregateReactions(item.reactions, currentUserId || item.senderId);
+
+  return {
+    id: item.id,
+    conversationId: item.conversationId,
+    senderId: item.senderId,
+    content,
+    clientMessageId: item.clientMessageId || null,
+    replyToMessageId: item.replyToMessageId || null,
+    replyTo,
+    reactions,
+    tempId: item.clientMessageId || undefined,
+    isDeletedForEveryone: isDeletedForEveryone ? true : Boolean(item.isDeletedForEveryone),
+    deletedAt: item.deletedAt
+      ? item.deletedAt instanceof Date
+        ? item.deletedAt.toISOString()
+        : item.deletedAt
+      : null,
+    deletedByUserId: item.deletedByUserId || null,
+    createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
+    updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : item.updatedAt,
+    sender: item.sender
+      ? {
+        id: item.sender.id,
+        fullName: item.sender.profile?.fullName || 'Community Member',
+        avatarUrl: item.sender.profile?.avatarUrl || null,
+      }
+      : null,
+    attachments,
   };
 }
 
@@ -239,7 +326,7 @@ export async function getOrCreateDirectConversation(
   const [userOneId, userTwoId] =
     initiatorId < recipientId ? [initiatorId, recipientId] : [recipientId, initiatorId];
 
-  let conversation = await client.directConversation.findUnique({
+  let conversation: any = await client.directConversation.findUnique({
     where: {
       userOneId_userTwoId: { userOneId, userTwoId },
     },
@@ -299,7 +386,7 @@ export async function getOrCreateDirectConversation(
           messages: {
             take: 1,
             orderBy: { createdAt: 'desc' },
-            include: directMessageInclude,
+            select: legacyDirectMessageSelect,
           },
         },
       });
@@ -329,7 +416,7 @@ export async function getOrCreateDirectConversation(
             messages: {
               take: 1,
               orderBy: { createdAt: 'desc' },
-              include: directMessageInclude,
+              select: legacyDirectMessageSelect,
             },
           },
         });
@@ -344,8 +431,8 @@ export async function getOrCreateDirectConversation(
   }
 
   // Calculate unread count and otherUser profile
-  const otherParticipant = conversation.participants.find((p) => p.userId === recipientId);
-  const myParticipant = conversation.participants.find((p) => p.userId === initiatorId);
+  const otherParticipant = conversation.participants.find((p: any) => p.userId === recipientId);
+  const myParticipant = conversation.participants.find((p: any) => p.userId === initiatorId);
 
   const otherUser: DirectChatParticipant = {
     id: recipient.id,
@@ -398,36 +485,75 @@ export async function getDirectChatInbox(
     }
   }
 
-  const rawConversations = await client.directConversation.findMany({
-    where: {
-      OR: [{ userOneId: userId }, { userTwoId: userId }],
-      ...cursorFilter,
-    },
-    take: limit + 1,
-    orderBy: { updatedAt: 'desc' },
-    include: {
-      participants: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              profile: {
-                select: {
-                  fullName: true,
-                  avatarUrl: true,
+  let rawConversations: any[] = [];
+  try {
+    rawConversations = await client.directConversation.findMany({
+      where: {
+        OR: [{ userOneId: userId }, { userTwoId: userId }],
+        ...cursorFilter,
+      },
+      take: limit + 1,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                profile: {
+                  select: {
+                    fullName: true,
+                    avatarUrl: true,
+                  },
                 },
               },
             },
           },
         },
+        messages: {
+          where: {
+            deletions: {
+              none: { userId },
+            },
+          },
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+          include: directMessageInclude,
+        },
       },
-      messages: {
-        take: 1,
-        orderBy: { createdAt: 'desc' },
-        include: directMessageInclude,
+    });
+  } catch {
+    rawConversations = await client.directConversation.findMany({
+      where: {
+        OR: [{ userOneId: userId }, { userTwoId: userId }],
+        ...cursorFilter,
       },
-    },
-  });
+      take: limit + 1,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                profile: {
+                  select: {
+                    fullName: true,
+                    avatarUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        messages: {
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+          select: legacyDirectMessageSelect,
+        },
+      },
+    });
+  }
 
   const hasMore = rawConversations.length > limit;
   const list = hasMore ? rawConversations.slice(0, limit) : rawConversations;
@@ -436,8 +562,8 @@ export async function getDirectChatInbox(
   const conversations: DirectConversationItem[] = await Promise.all(
     list.map(async (conv) => {
       const otherUserId = conv.userOneId === userId ? conv.userTwoId : conv.userOneId;
-      const otherPart = conv.participants.find((p) => p.userId === otherUserId);
-      const myPart = conv.participants.find((p) => p.userId === userId);
+      const otherPart = conv.participants?.find((p: any) => p.userId === otherUserId);
+      const myPart = conv.participants?.find((p: any) => p.userId === userId);
 
       const otherUser: DirectChatParticipant = {
         id: otherUserId,
@@ -501,22 +627,53 @@ export async function getDirectMessageHistory(
     }
   }
 
-  const rawMessages = await client.directMessage.findMany({
-    where: {
-      conversationId,
-      ...cursorFilter,
-    },
-    take: limit + 1,
-    orderBy: { createdAt: 'desc' },
-    include: directMessageInclude,
-  });
+  let rawMessages: any[] = [];
+  try {
+    rawMessages = await client.directMessage.findMany({
+      where: {
+        conversationId,
+        ...cursorFilter,
+        deletions: {
+          none: { userId },
+        },
+      },
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: directMessageInclude,
+    });
+  } catch {
+    try {
+      rawMessages = await (client.directMessage as any).findMany({
+        where: {
+          conversationId,
+          ...cursorFilter,
+        },
+        take: limit + 1,
+        orderBy: { createdAt: 'desc' },
+        select: legacyDirectMessageSelect,
+      });
+    } catch {
+      rawMessages = await client.directMessage.findMany({
+        where: {
+          conversationId,
+          ...cursorFilter,
+        },
+        take: limit + 1,
+        orderBy: { createdAt: 'desc' },
+        include: directMessageInclude,
+      });
+    }
+  }
 
   const hasMore = rawMessages.length > limit;
   const list = hasMore ? rawMessages.slice(0, limit) : rawMessages;
   const nextCursor = hasMore && list.length > 0 ? list[list.length - 1].id : null;
 
+  const mappedMessages = list.map((m) => mapToDirectMessageItem(m, userId));
+  await populateSignedAttachmentUrls(mappedMessages);
+
   return {
-    messages: list.map((m) => mapToDirectMessageItem(m, userId)),
+    messages: mappedMessages,
     nextCursor,
     hasMore,
   };
@@ -607,7 +764,9 @@ export async function sendDirectMessage(
         include: directMessageInclude,
       });
       if (existing) {
-        return mapToDirectMessageItem(existing, senderId);
+        const mapped = mapToDirectMessageItem(existing, senderId);
+        await populateSignedAttachmentUrls([mapped]);
+        return mapped;
       }
     } catch {
       // Suppress if column query fails on unmigrated database
@@ -633,7 +792,9 @@ export async function sendDirectMessage(
         existingAttachment.directMessage.senderId === senderId &&
         (!resolvedTempId || (existingAttachment.directMessage as any).clientMessageId === resolvedTempId)
       ) {
-        return mapToDirectMessageItem(existingAttachment.directMessage, senderId);
+        const mapped = mapToDirectMessageItem(existingAttachment.directMessage, senderId);
+        await populateSignedAttachmentUrls([mapped]);
+        return mapped;
       }
       throw new ChatServiceError('Attachment has already been associated with an existing message.', 400);
     }
@@ -656,7 +817,9 @@ export async function sendDirectMessage(
           include: directMessageInclude,
         });
         if (existing) {
-          return mapToDirectMessageItem(existing, senderId);
+          const mapped = mapToDirectMessageItem(existing, senderId);
+          await populateSignedAttachmentUrls([mapped]);
+          return mapped;
         }
       } catch {
         // Suppress if column query fails on unmigrated database
@@ -703,7 +866,9 @@ export async function sendDirectMessage(
           include: directMessageInclude,
         });
         if (existing) {
-          return mapToDirectMessageItem(existing, senderId);
+          const mapped = mapToDirectMessageItem(existing, senderId);
+          await populateSignedAttachmentUrls([mapped]);
+          return mapped;
         }
       }
 
@@ -796,7 +961,9 @@ export async function sendDirectMessage(
       console.warn('[Direct Chat] FCM push notification dispatch warning (suppressed):', pushErr);
     }
 
-    return mapToDirectMessageItem(message, senderId);
+    const mapped = mapToDirectMessageItem(message, senderId);
+    await populateSignedAttachmentUrls([mapped]);
+    return mapped;
   });
 }
 
@@ -1071,6 +1238,51 @@ export async function getChatAttachmentDetails(
     throw new ChatNotFoundError('Attachment not found.');
   }
 
+  // Deletion revocation check: do not serve attachments from deleted messages
+  if (
+    (attachment.directMessage && (attachment.directMessage.isDeletedForEveryone || attachment.directMessage.content === DELETED_CHAT_MESSAGE_PLACEHOLDER)) ||
+    (attachment.chatMessage && (attachment.chatMessage.isDeletedForEveryone || attachment.chatMessage.content === DELETED_CHAT_MESSAGE_PLACEHOLDER))
+  ) {
+    throw new ForbiddenChatError('Attachment access revoked: Message was deleted.');
+  }
+
+  // Also verify user hasn't deleted this message for themselves
+  if (attachment.directMessageId) {
+    try {
+      const isDeletedForMe = await (client as any).directMessageDeletion.findUnique({
+        where: {
+          messageId_userId: {
+            messageId: attachment.directMessageId,
+            userId,
+          },
+        },
+      });
+      if (isDeletedForMe) {
+        throw new ForbiddenChatError('Attachment access revoked: Message was deleted.');
+      }
+    } catch {
+      // ignore if unmigrated
+    }
+  }
+
+  if (attachment.chatMessageId) {
+    try {
+      const isDeletedForMe = await (client as any).chatMessageDeletion.findUnique({
+        where: {
+          messageId_userId: {
+            messageId: attachment.chatMessageId,
+            userId,
+          },
+        },
+      });
+      if (isDeletedForMe) {
+        throw new ForbiddenChatError('Attachment access revoked: Message was deleted.');
+      }
+    } catch {
+      // ignore if unmigrated
+    }
+  }
+
   // 1. Direct message access authorization
   if (attachment.directMessage) {
     const conv = attachment.directMessage.conversation;
@@ -1135,8 +1347,9 @@ export async function searchDirectMessages(
   const rawKeyword = query.q.trim();
   const searchKeyword = rawKeyword.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
-  const where: Prisma.DirectMessageWhereInput = {
+  const baseWhere: Prisma.DirectMessageWhereInput = {
     conversationId,
+    content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
     OR: [
       { content: { contains: searchKeyword, mode: 'insensitive' } },
       { attachments: { some: { fileName: { contains: searchKeyword, mode: 'insensitive' } } } },
@@ -1153,21 +1366,70 @@ export async function searchDirectMessages(
     ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
   };
 
-  const [rawMessages, totalMatches] = await Promise.all([
-    client.directMessage.findMany({
-      where,
-      take: limit + 1,
-      orderBy: { createdAt: 'desc' },
-      include: directMessageInclude,
-    }),
-    client.directMessage.count({
-      where: {
-        conversationId,
-        OR: where.OR,
-        ...(query.senderId ? { senderId: query.senderId } : {}),
+  let rawMessages: any[] = [];
+  let totalMatches = 0;
+
+  try {
+    const where: Prisma.DirectMessageWhereInput = {
+      ...baseWhere,
+      isDeletedForEveryone: false,
+      deletions: {
+        none: { userId },
       },
-    }),
-  ]);
+    };
+
+    [rawMessages, totalMatches] = await Promise.all([
+      client.directMessage.findMany({
+        where,
+        take: limit + 1,
+        orderBy: { createdAt: 'desc' },
+        include: directMessageInclude,
+      }),
+      client.directMessage.count({
+        where: {
+          ...where,
+          OR: where.OR,
+          ...(query.senderId ? { senderId: query.senderId } : {}),
+        },
+      }),
+    ]);
+  } catch {
+    try {
+      [rawMessages, totalMatches] = await Promise.all([
+        (client.directMessage as any).findMany({
+          where: baseWhere,
+          take: limit + 1,
+          orderBy: { createdAt: 'desc' },
+          select: legacyDirectMessageSelect,
+        }),
+        client.directMessage.count({
+          where: {
+            conversationId,
+            content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
+            OR: baseWhere.OR,
+            ...(query.senderId ? { senderId: query.senderId } : {}),
+          },
+        }),
+      ]);
+    } catch {
+      [rawMessages, totalMatches] = await Promise.all([
+        client.directMessage.findMany({
+          where: baseWhere,
+          take: limit + 1,
+          orderBy: { createdAt: 'desc' },
+          include: directMessageInclude,
+        }),
+        client.directMessage.count({
+          where: {
+            conversationId,
+            content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
+            OR: baseWhere.OR,
+            ...(query.senderId ? { senderId: query.senderId } : {}),
+          },
+        }),
+      ]);
+    }
+  }
 
   const hasMore = rawMessages.length > limit;
   const sliced = hasMore ? rawMessages.slice(0, limit) : rawMessages;
@@ -1215,36 +1477,76 @@ export async function getDirectMediaGallery(
   const limit = Math.min(Math.max(query.limit || 30, 1), 50);
   const cursorDate = query.cursor ? new Date(query.cursor) : undefined;
 
-  const where: Prisma.ChatAttachmentWhereInput = {
-    directMessage: {
-      conversationId,
-    },
-    ...(query.type ? { type: query.type } : {}),
-    ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
-  };
-
-  const rawAttachments = await client.chatAttachment.findMany({
-    where,
-    take: limit + 1,
-    orderBy: { createdAt: 'desc' },
-    include: {
+  let rawAttachments: any[] = [];
+  try {
+    const where: Prisma.ChatAttachmentWhereInput = {
       directMessage: {
-        include: {
-          sender: {
-            select: {
-              id: true,
-              profile: {
-                select: {
-                  fullName: true,
-                  avatarUrl: true,
+        conversationId,
+        isDeletedForEveryone: false,
+        content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
+        deletions: {
+          none: { userId },
+        },
+      },
+      ...(query.type ? { type: query.type } : {}),
+      ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
+    };
+
+    rawAttachments = await client.chatAttachment.findMany({
+      where,
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        directMessage: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                profile: {
+                  select: {
+                    fullName: true,
+                    avatarUrl: true,
+                  },
                 },
               },
             },
           },
         },
       },
-    },
-  });
+    });
+  } catch {
+    const fallbackWhere: Prisma.ChatAttachmentWhereInput = {
+      directMessage: {
+        conversationId,
+        content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
+      },
+      ...(query.type ? { type: query.type } : {}),
+      ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
+    };
+
+    rawAttachments = await client.chatAttachment.findMany({
+      where: fallbackWhere,
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        directMessage: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                profile: {
+                  select: {
+                    fullName: true,
+                    avatarUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
 
   const hasMore = rawAttachments.length > limit;
   const sliced = hasMore ? rawAttachments.slice(0, limit) : rawAttachments;
@@ -1293,41 +1595,183 @@ export async function getDirectMessageContext(
   const client = assertDb(db);
   await verifyDirectConversationAccess(conversationId, userId, db);
 
-  const targetMsg = await client.directMessage.findFirst({
-    where: { id: messageId, conversationId },
-    include: directMessageInclude,
-  });
+  let targetMsg: any;
+  try {
+    targetMsg = await client.directMessage.findFirst({
+      where: { id: messageId, conversationId },
+      include: directMessageInclude,
+    });
+  } catch {
+    targetMsg = await (client.directMessage as any).findFirst({
+      where: { id: messageId, conversationId },
+      select: legacyDirectMessageSelect,
+    });
+  }
 
   if (!targetMsg) {
     throw new ChatNotFoundError('Target message not found.');
   }
 
+  try {
+    const isDeletedForMe = await (client as any).directMessageDeletion.findUnique({
+      where: {
+        messageId_userId: {
+          messageId,
+          userId,
+        },
+      },
+    });
+    if (isDeletedForMe) {
+      throw new ChatNotFoundError('Target message not found.');
+    }
+  } catch (err) {
+    if (err instanceof ChatNotFoundError) throw err;
+  }
+
   const half = Math.floor(limit / 2);
 
-  // Older messages
-  const olderMessages = await client.directMessage.findMany({
-    where: { conversationId, createdAt: { lt: targetMsg.createdAt } },
-    take: half,
-    orderBy: { createdAt: 'desc' },
-    include: directMessageInclude,
-  });
+  let olderMessages: any[] = [];
+  let newerMessages: any[] = [];
 
-  // Newer messages
-  const newerMessages = await client.directMessage.findMany({
-    where: { conversationId, createdAt: { gt: targetMsg.createdAt } },
-    take: half,
-    orderBy: { createdAt: 'asc' },
-    include: directMessageInclude,
-  });
+  try {
+    // Older messages
+    olderMessages = await client.directMessage.findMany({
+      where: { conversationId, createdAt: { lt: targetMsg.createdAt } },
+      take: half,
+      orderBy: { createdAt: 'desc' },
+      include: directMessageInclude,
+    });
+
+    // Newer messages
+    newerMessages = await client.directMessage.findMany({
+      where: { conversationId, createdAt: { gt: targetMsg.createdAt } },
+      take: half,
+      orderBy: { createdAt: 'asc' },
+      include: directMessageInclude,
+    });
+  } catch {
+    olderMessages = await (client.directMessage as any).findMany({
+      where: { conversationId, createdAt: { lt: targetMsg.createdAt } },
+      take: half,
+      orderBy: { createdAt: 'desc' },
+      select: legacyDirectMessageSelect,
+    });
+
+    newerMessages = await (client.directMessage as any).findMany({
+      where: { conversationId, createdAt: { gt: targetMsg.createdAt } },
+      take: half,
+      orderBy: { createdAt: 'asc' },
+      select: legacyDirectMessageSelect,
+    });
+  }
 
   const allRaw = [...newerMessages.reverse(), targetMsg, ...olderMessages];
   const targetIndex = newerMessages.length;
 
   const mapped = allRaw.map((m) => mapToDirectMessageItem(m, userId));
+  await populateSignedAttachmentUrls(mapped);
 
   return {
     targetMessageId: messageId,
     messages: mapped,
     targetIndex,
   };
+}
+
+/**
+ * Deletes a direct message for the requesting user (ME) or for both participants (EVERYONE).
+ * - "ME": Persisted in DirectMessageDeletion so it disappears only for the requesting user.
+ * - "EVERYONE": Replaces content with deleted placeholder, revokes attachments/reactions.
+ *   - Only the message sender can delete for everyone.
+ *   - Allowed within 60 minutes of sending.
+ */
+export async function deleteDirectMessage(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+  scope: MessageDeleteScope,
+  db?: PrismaClient
+): Promise<DeleteChatMessageResponseData> {
+  const client = assertDb(db);
+  await verifyDirectConversationAccess(conversationId, userId, db);
+
+  const message = await client.directMessage.findFirst({
+    where: { id: messageId, conversationId },
+  });
+
+  if (!message) {
+    throw new ChatNotFoundError('Direct message not found.');
+  }
+
+  if (scope === 'ME') {
+    try {
+      await (client as any).directMessageDeletion.upsert({
+        where: {
+          messageId_userId: {
+            messageId,
+            userId,
+          },
+        },
+        create: {
+          messageId,
+          userId,
+        },
+        update: {},
+      });
+    } catch (err) {
+      console.warn('[Direct Chat Service] DirectMessageDeletion write failed (unmigrated DB?), falling back:', err);
+    }
+    return {
+      success: true,
+      messageId,
+      scope: 'ME',
+    };
+  }
+
+  if (scope === 'EVERYONE') {
+    if (message.isDeletedForEveryone || message.content === DELETED_CHAT_MESSAGE_PLACEHOLDER) {
+      return {
+        success: true,
+        messageId,
+        scope: 'EVERYONE',
+      };
+    }
+
+    if (message.senderId !== userId) {
+      throw new ForbiddenChatError('Only the message sender can delete this message for everyone.');
+    }
+
+    const ageMs = Date.now() - message.createdAt.getTime();
+    const WINDOW_MS = 60 * 60 * 1000; // 60 minutes
+    if (ageMs > WINDOW_MS) {
+      throw new BadRequestChatError('Messages can only be deleted for everyone within 60 minutes of sending.');
+    }
+
+    try {
+      await client.directMessage.update({
+        where: { id: messageId },
+        data: {
+          content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
+          isDeletedForEveryone: true,
+          deletedAt: new Date(),
+          deletedByUserId: userId,
+        },
+      });
+    } catch {
+      await client.directMessage.update({
+        where: { id: messageId },
+        data: {
+          content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
+        },
+      });
+    }
+
+    return {
+      success: true,
+      messageId,
+      scope: 'EVERYONE',
+    };
+  }
+
+  throw new BadRequestChatError('Invalid delete scope. Must be ME or EVERYONE.');
 }

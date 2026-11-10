@@ -17,6 +17,7 @@ import {
   searchDirectMessagesHandler,
   getDirectMediaGalleryHandler,
   getDirectMessageContextHandler,
+  deleteDirectMessageHandler,
 } from './direct-chat.controller';
 
 export const chatRouter = Router();
@@ -38,6 +39,9 @@ chatRouter.get('/conversations/:id/messages', getDirectMessagesHandler);
 
 // POST /api/v1/chat/conversations/:id/messages - Send a direct message
 chatRouter.post('/conversations/:id/messages', sendDirectMessageHandler);
+
+// DELETE /api/v1/chat/conversations/:id/messages/:messageId - Delete a direct message (ME or EVERYONE)
+chatRouter.delete('/conversations/:id/messages/:messageId', deleteDirectMessageHandler);
 
 // POST /api/v1/chat/conversations/:id/messages/:messageId/reactions - Toggle emoji reaction on direct message
 chatRouter.post('/conversations/:id/messages/:messageId/reactions', toggleDirectMessageReactionHandler);

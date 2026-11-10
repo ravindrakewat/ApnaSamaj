@@ -14,7 +14,13 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { GroupDetails, GroupPrivacy, ChatAttachmentInput, ChatSearchResultItem } from '@apnasamaj/shared-types';
+import {
+  GroupDetails,
+  GroupPrivacy,
+  ChatAttachmentInput,
+  ChatSearchResultItem,
+  DELETED_CHAT_MESSAGE_PLACEHOLDER,
+} from '@apnasamaj/shared-types';
 import {
   Typography,
   Card,
@@ -114,6 +120,7 @@ export default function GroupChatScreen() {
     setReplyingToMessage,
     toggleReaction,
     jumpToMessage,
+    deleteMessage,
   } = useGroupChat({
     groupId: group?.id || '',
     isMember,
@@ -421,6 +428,10 @@ export default function GroupChatScreen() {
       !prevItem ||
       new Date(item.createdAt).toDateString() !== new Date(prevItem.createdAt).toDateString();
 
+    const isDeleted = Boolean(
+      item.isDeletedForEveryone || item.content === DELETED_CHAT_MESSAGE_PLACEHOLDER
+    );
+
     return (
       <View style={styles.messageRowWrapper}>
         {/* Date separator pill above the first message of each day */}
@@ -451,27 +462,127 @@ export default function GroupChatScreen() {
             </View>
           )}
 
-          {/* Bubble Card with Long Press Reaction/Reply */}
+          {/* Bubble Card with Long Press Reaction/Reply/Delete */}
           <View style={isOwn ? styles.bubbleColumnOwn : styles.bubbleColumnOther}>
             <Pressable
               onLongPress={() => {
+                if (isDeleted) {
+                  Alert.alert(
+                    language === 'hi' ? 'हटाया गया संदेश' : 'Deleted Message',
+                    undefined,
+                    [
+                      {
+                        text: language === 'hi' ? 'मेरे लिए हटाएं' : 'Delete for Me',
+                        style: 'destructive',
+                        onPress: () => {
+                          Alert.alert(
+                            language === 'hi' ? 'संदेश हटाएं?' : 'Delete message?',
+                            language === 'hi' ? 'यह संदेश केवल आपके लिए हटा दिया जाएगा।' : 'This message will be deleted for you only.',
+                            [
+                              { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+                              {
+                                text: language === 'hi' ? 'हटाएं' : 'Delete',
+                                style: 'destructive',
+                                onPress: () => deleteMessage(item.id, 'ME'),
+                              },
+                            ]
+                          );
+                        },
+                      },
+                      { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+                    ]
+                  );
+                  return;
+                }
+
+                const isSender = item.senderId === user?.id;
+                const messageAgeMs = Date.now() - new Date(item.createdAt).getTime();
+                const canDeleteForEveryone = isSender && messageAgeMs <= 60 * 60 * 1000;
+                const isGroupAdmin = group?.myRole === 'ADMIN' || group?.createdById === user?.id;
+                const canAdminDelete = !canDeleteForEveryone && isGroupAdmin;
+
+                const actionButtons: any[] = [
+                  {
+                    text: language === 'hi' ? 'प्रतिक्रिया दें' : 'React',
+                    onPress: () => setReactionTargetMessage(item),
+                  },
+                  {
+                    text: language === 'hi' ? 'उत्तर दें (Reply)' : 'Reply',
+                    onPress: () => setReplyingToMessage(item),
+                  },
+                  {
+                    text: language === 'hi' ? 'मेरे लिए हटाएं' : 'Delete for Me',
+                    style: 'destructive',
+                    onPress: () => {
+                      Alert.alert(
+                        language === 'hi' ? 'संदेश हटाएं?' : 'Delete message?',
+                        language === 'hi' ? 'यह संदेश केवल आपके लिए हटा दिया जाएगा।' : 'This message will be deleted for you only.',
+                        [
+                          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+                          {
+                            text: language === 'hi' ? 'हटाएं' : 'Delete',
+                            style: 'destructive',
+                            onPress: () => deleteMessage(item.id, 'ME'),
+                          },
+                        ]
+                      );
+                    },
+                  },
+                ];
+
+                if (canDeleteForEveryone) {
+                  actionButtons.push({
+                    text: language === 'hi' ? 'सभी के लिए हटाएं' : 'Delete for Everyone',
+                    style: 'destructive',
+                    onPress: () => {
+                      Alert.alert(
+                        language === 'hi' ? 'सभी के लिए हटाएं?' : 'Delete for Everyone?',
+                        language === 'hi'
+                          ? 'यह संदेश सभी समूह सदस्यों के लिए हटा दिया जाएगा।'
+                          : 'This message will be deleted for all group members.',
+                        [
+                          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+                          {
+                            text: language === 'hi' ? 'सभी के लिए हटाएं' : 'Delete for Everyone',
+                            style: 'destructive',
+                            onPress: () => deleteMessage(item.id, 'EVERYONE'),
+                          },
+                        ]
+                      );
+                    },
+                  });
+                } else if (canAdminDelete) {
+                  actionButtons.push({
+                    text: language === 'hi' ? 'व्यवस्थापक द्वारा हटाएं' : 'Admin Delete',
+                    style: 'destructive',
+                    onPress: () => {
+                      Alert.alert(
+                        language === 'hi' ? 'व्यवस्थापक द्वारा हटाएं?' : 'Admin Delete (Moderation)?',
+                        language === 'hi'
+                          ? 'समूह व्यवस्थापक के रूप में यह संदेश सभी के लिए हटा दिया जाएगा।'
+                          : 'As a group admin, this message will be deleted for all group members.',
+                        [
+                          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+                          {
+                            text: language === 'hi' ? 'व्यवस्थापक द्वारा हटाएं' : 'Admin Delete',
+                            style: 'destructive',
+                            onPress: () => deleteMessage(item.id, 'EVERYONE'),
+                          },
+                        ]
+                      );
+                    },
+                  });
+                }
+
+                actionButtons.push({
+                  text: language === 'hi' ? 'रद्द करें' : 'Cancel',
+                  style: 'cancel',
+                });
+
                 Alert.alert(
                   item.sender?.fullName || (isOwn ? 'You' : 'Member'),
                   undefined,
-                  [
-                    {
-                      text: language === 'hi' ? 'प्रतिक्रिया दें' : 'React',
-                      onPress: () => setReactionTargetMessage(item),
-                    },
-                    {
-                      text: language === 'hi' ? 'उत्तर दें (Reply)' : 'Reply',
-                      onPress: () => setReplyingToMessage(item),
-                    },
-                    {
-                      text: language === 'hi' ? 'रद्द करें' : 'Cancel',
-                      style: 'cancel',
-                    },
-                  ]
+                  actionButtons
                 );
               }}
               style={[
@@ -500,38 +611,49 @@ export default function GroupChatScreen() {
                 </Typography>
               )}
 
-              {/* Attachment Rendering */}
-              {item.attachments && item.attachments.length > 0 && (
-                <View style={styles.attachmentsWrapper}>
-                  {item.attachments.map((att) => {
-                    if (att.type === 'IMAGE') {
-                      return <ChatImageMessage key={att.id} attachment={att} />;
-                    }
-                    if (att.type === 'VIDEO') {
-                      return <ChatVideoMessage key={att.id} attachment={att} />;
-                    }
-                    if (att.type === 'AUDIO') {
-                      return (
-                        <ChatAudioMessage
-                          key={att.id || att.storagePath || att.localUri}
-                          attachment={att}
-                          isCurrentUser={isOwn}
-                          deliveryStatus={item.deliveryStatus}
-                          onRetry={() => item.tempId && retryMessage(item.tempId)}
-                        />
-                      );
-                    }
-                    return <ChatDocumentMessage key={att.id} attachment={att} />;
-                  })}
+              {isDeleted ? (
+                <View style={styles.deletedContainer}>
+                  <Ionicons name="ban-outline" size={14} color="#94A3B8" style={{ marginRight: 6 }} />
+                  <Typography variant="sm" color="#64748B" style={styles.deletedText}>
+                    {language === 'hi' ? 'यह संदेश हटा दिया गया था' : 'This message was deleted'}
+                  </Typography>
                 </View>
-              )}
+              ) : (
+                <>
+                  {/* Attachment Rendering */}
+                  {item.attachments && item.attachments.length > 0 && (
+                    <View style={styles.attachmentsWrapper}>
+                      {item.attachments.map((att) => {
+                        if (att.type === 'IMAGE') {
+                          return <ChatImageMessage key={att.id} attachment={att} />;
+                        }
+                        if (att.type === 'VIDEO') {
+                          return <ChatVideoMessage key={att.id} attachment={att} />;
+                        }
+                        if (att.type === 'AUDIO') {
+                          return (
+                            <ChatAudioMessage
+                              key={att.id || att.storagePath || att.localUri}
+                              attachment={att}
+                              isCurrentUser={isOwn}
+                              deliveryStatus={item.deliveryStatus}
+                              onRetry={() => item.tempId && retryMessage(item.tempId)}
+                            />
+                          );
+                        }
+                        return <ChatDocumentMessage key={att.id} attachment={att} />;
+                      })}
+                    </View>
+                  )}
 
-              {/* Message Body (only rendered if non-empty content exists) */}
-              {item.content && item.content.trim().length > 0 ? (
-                <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
-                  {item.content}
-                </Typography>
-              ) : null}
+                  {/* Message Body (only rendered if non-empty content exists) */}
+                  {item.content && item.content.trim().length > 0 ? (
+                    <Typography variant="sm" color={theme.colors.textPrimary} style={styles.messageContent}>
+                      {item.content}
+                    </Typography>
+                  ) : null}
+                </>
+              )}
 
               {/* Timestamp & Status Metadata */}
               <View style={styles.messageMeta}>
@@ -577,11 +699,13 @@ export default function GroupChatScreen() {
             </Pressable>
 
             {/* Reaction Badges */}
-            <ReactionBadgeList
-              reactions={item.reactions}
-              isMyMessage={isOwn}
-              onToggleReaction={(emoji) => toggleReaction(item.id, emoji)}
-            />
+            {!isDeleted && (
+              <ReactionBadgeList
+                reactions={item.reactions}
+                isMyMessage={isOwn}
+                onToggleReaction={(emoji) => toggleReaction(item.id, emoji)}
+              />
+            )}
           </View>
         </View>
       </View>
@@ -1163,6 +1287,16 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     backgroundColor: '#FEE2E2',
     borderRadius: 8,
+  },
+  deletedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  deletedText: {
+    fontStyle: 'italic',
+    color: '#64748B',
   },
 });
 

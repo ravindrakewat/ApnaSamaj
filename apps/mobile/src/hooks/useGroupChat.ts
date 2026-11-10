@@ -8,6 +8,9 @@ import {
   MessageDeliveryStatus,
   ChatReactionEventPayload,
   ChatReactionSummary,
+  ChatMessageDeletedEvent,
+  MessageDeleteScope,
+  DELETED_CHAT_MESSAGE_PLACEHOLDER,
 } from '@apnasamaj/shared-types';
 import { chatApi } from '../api/chat.api';
 import { connectChatSocket, getChatSocket } from '../services/socket.service';
@@ -330,11 +333,43 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
       chatPersistenceService.updateMessageReactions(payload.messageId, payload.reactions);
     };
 
+    const handleMessageDeleted = (payload: ChatMessageDeletedEvent) => {
+      if (!payload || payload.groupId !== groupId) return;
+
+      if (payload.scope === 'ME') {
+        setMessages((prev) => prev.filter((m) => m.id !== payload.messageId && m.tempId !== payload.messageId));
+        chatPersistenceService.deleteLocalMessage(payload.messageId);
+      } else if (payload.scope === 'EVERYONE') {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === payload.messageId || m.tempId === payload.messageId) {
+              return {
+                ...m,
+                content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
+                attachments: [],
+                reactions: [],
+                isDeletedForEveryone: true,
+                deletedAt: payload.deletedAt,
+                deletedByUserId: payload.deletedByUserId,
+              };
+            }
+            return m;
+          })
+        );
+        chatPersistenceService.updateMessageContent(
+          payload.messageId,
+          DELETED_CHAT_MESSAGE_PLACEHOLDER,
+          true
+        );
+      }
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('new_message', handleNewMessage);
     socket.on('user_typing', handleUserTyping);
     socket.on('chat:reaction', handleReaction);
+    socket.on('chat:message_deleted', handleMessageDeleted);
 
     if (socket.connected) {
       handleConnect();
@@ -361,6 +396,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
         socket.off('new_message', handleNewMessage);
         socket.off('user_typing', handleUserTyping);
         socket.off('chat:reaction', handleReaction);
+        socket.off('chat:message_deleted', handleMessageDeleted);
       }
       appStateSub.remove();
 
@@ -477,7 +513,8 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
               fileSizeBytes: attachment.fileSizeBytes,
               storagePath: attachment.storagePath,
               duration: attachment.duration,
-              localUri: (attachment as any).localUri,
+              url: (attachment as any).url || (attachment as any).localUri || '',
+              localUri: (attachment as any).localUri || (attachment as any).uri || '',
               createdAt: nowIso,
             },
           ]
@@ -725,6 +762,62 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
     [groupId, messages]
   );
 
+  /**
+   * Delete a message (ME or EVERYONE)
+   */
+  const deleteMessage = useCallback(
+    async (messageId: string, scope: MessageDeleteScope) => {
+      if (!groupId || !messageId) return;
+
+      // Optimistic local update
+      if (scope === 'ME') {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId && m.tempId !== messageId));
+        chatPersistenceService.deleteLocalMessage(messageId);
+      } else if (scope === 'EVERYONE') {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === messageId || m.tempId === messageId) {
+              return {
+                ...m,
+                content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
+                attachments: [],
+                reactions: [],
+                isDeletedForEveryone: true,
+              };
+            }
+            return m;
+          })
+        );
+        chatPersistenceService.updateMessageContent(
+          messageId,
+          DELETED_CHAT_MESSAGE_PLACEHOLDER,
+          true
+        );
+      }
+
+      // Socket or HTTP call
+      const socket = getChatSocket();
+      if (socket && socket.connected) {
+        socket.emit(
+          'chat:delete_message',
+          { groupId, messageId, scope },
+          async (res: { success: boolean; error?: string }) => {
+            if (!res?.success) {
+              try {
+                await chatApi.deleteGroupMessage(groupId, messageId, scope);
+              } catch (httpErr) {
+                console.error('[useGroupChat] Failed to delete group message:', httpErr);
+              }
+            }
+          }
+        );
+      } else {
+        await chatApi.deleteGroupMessage(groupId, messageId, scope);
+      }
+    },
+    [groupId]
+  );
+
   return {
     messages,
     isLoadingHistory,
@@ -743,6 +836,7 @@ export function useGroupChat({ groupId, isMember, isPrivate }: UseGroupChatOptio
     setReplyingToMessage,
     toggleReaction,
     jumpToMessage,
+    deleteMessage,
   };
 }
 

@@ -9,6 +9,8 @@ import {
   PaginatedChatSearchResponse,
   PaginatedChatMediaResponse,
   ChatMessageContextResponse,
+  DeleteChatMessageResponseData,
+  ChatMessageDeletedEvent,
 } from '@apnasamaj/shared-types';
 import {
   idParamSchema,
@@ -20,6 +22,7 @@ import {
   chatSearchQuerySchema,
   chatMediaQuerySchema,
   chatMessageContextParamSchema,
+  deleteChatMessageSchema,
 } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
@@ -35,11 +38,13 @@ import {
   searchDirectMessages,
   getDirectMediaGallery,
   getDirectMessageContext,
+  deleteDirectMessage,
 } from './direct-chat.service';
 import {
   ChatServiceError,
   ChatNotFoundError,
   ForbiddenChatError,
+  BadRequestChatError,
 } from './chat.service';
 import { getIO } from './chat.socket';
 import { uploadChatAttachment } from '../../services/storage.service';
@@ -764,5 +769,75 @@ export async function getDirectMessageContextHandler(
     res.status(200).json(response);
   } catch (err: unknown) {
     handleChatError(res, err, 'Failed to retrieve direct message context.');
+  }
+}
+
+/**
+ * DELETE /api/v1/chat/conversations/:id/messages/:messageId
+ * Deletes a direct message for the user (ME) or both participants (EVERYONE).
+ */
+export async function deleteDirectMessageHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Authentication required.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const { id: conversationId, messageId } = req.params;
+    if (!conversationId || !messageId) {
+      res.status(400).json({ success: false, error: 'Conversation ID and Message ID are required.', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const parsedBody = deleteChatMessageSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      res.status(400).json({
+        success: false,
+        error: parsedBody.error.errors[0]?.message || 'Invalid delete scope.',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const result = await deleteDirectMessage(
+      conversationId,
+      messageId,
+      userId,
+      parsedBody.data.scope,
+      req.db
+    );
+
+    // If deleted for everyone, broadcast real-time event to conversation room
+    if (parsedBody.data.scope === 'EVERYONE') {
+      try {
+        const io = getIO();
+        const tenantSlug = req.tenant?.slug || 'default';
+        const roomName = `${tenantSlug}:conversation:${conversationId}`;
+        const eventPayload: ChatMessageDeletedEvent = {
+          messageId,
+          scope: 'EVERYONE',
+          conversationId,
+          conversationType: 'DIRECT',
+          deletedByUserId: userId,
+          deletedAt: new Date().toISOString(),
+        };
+        io.to(roomName).emit('direct:message_deleted', eventPayload);
+      } catch (socketErr) {
+        // Socket broadcast failure should not fail HTTP response
+      }
+    }
+
+    const response: ApiResponse<DeleteChatMessageResponseData> = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    handleChatError(res, err, 'Failed to delete direct message.');
   }
 }

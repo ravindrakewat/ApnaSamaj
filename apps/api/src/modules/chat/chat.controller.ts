@@ -9,6 +9,8 @@ import {
   PaginatedChatSearchResponse,
   PaginatedChatMediaResponse,
   ChatMessageContextResponse,
+  DeleteChatMessageResponseData,
+  ChatMessageDeletedEvent,
 } from '@apnasamaj/shared-types';
 import {
   idParamSchema,
@@ -19,6 +21,7 @@ import {
   chatSearchQuerySchema,
   chatMediaQuerySchema,
   chatMessageContextParamSchema,
+  deleteChatMessageSchema,
 } from '@apnasamaj/validation';
 import { AuthenticatedRequest } from '../../middleware/authenticate';
 import {
@@ -30,12 +33,16 @@ import {
   searchGroupMessages,
   getGroupMediaGallery,
   getGroupMessageContext,
+  deleteGroupMessage,
   ChatServiceError,
   ChatNotFoundError,
   ForbiddenChatError,
+  BadRequestChatError,
 } from './chat.service';
 import { getIO } from './chat.socket';
-import { uploadChatAttachment } from '../../services/storage.service';
+import { uploadChatAttachment, CHAT_ATTACHMENTS_BUCKET } from '../../services/storage.service';
+import { config } from '../../config/env';
+import { getSupabaseClient } from '../../config/supabase';
 
 /**
  * GET /api/v1/groups/:id/messages
@@ -677,11 +684,117 @@ export async function getGroupMessageContextHandler(
 }
 
 /**
- * GET /api/v1/chat/attachments/raw/*
- * Public attachment streaming handler for local development and media preview.
- * Serves real disk file if present, or clean SVG fallback if file was uploaded prior to local cache.
+ * DELETE /api/v1/groups/:id/messages/:messageId
+ * Deletes a group chat message for the requesting user (ME) or for everyone (EVERYONE).
  */
-export function serveLocalChatAttachmentHandler(req: Request, res: Response): void {
+export async function deleteGroupMessageHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Authentication required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    const parsedGroupId = groupIdSchema.safeParse(req.params.id);
+    if (!parsedGroupId.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Invalid group ID.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const { messageId } = req.params;
+    if (!messageId) {
+      const response: ApiResponse = {
+        success: false,
+        error: 'Message ID is required.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const parsedBody = deleteChatMessageSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      const response: ApiResponse = {
+        success: false,
+        error: parsedBody.error.errors[0]?.message || 'Invalid delete scope.',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    const result = await deleteGroupMessage(
+      parsedGroupId.data,
+      messageId,
+      userId,
+      parsedBody.data.scope,
+      req.db
+    );
+
+    // If deleted for everyone, broadcast real-time event to group room
+    if (parsedBody.data.scope === 'EVERYONE') {
+      try {
+        const io = getIO();
+        const tenantSlug = req.tenant?.slug;
+        const roomName = tenantSlug ? `${tenantSlug}:group:${parsedGroupId.data}` : `group:${parsedGroupId.data}`;
+        const eventPayload: ChatMessageDeletedEvent = {
+          messageId,
+          scope: 'EVERYONE',
+          groupId: parsedGroupId.data,
+          conversationType: 'GROUP',
+          deletedByUserId: userId,
+          deletedAt: new Date().toISOString(),
+        };
+        io.to(roomName).emit('chat:message_deleted', eventPayload);
+      } catch (socketErr) {
+        // Socket broadcast failure should not fail HTTP response
+      }
+    }
+
+    const response: ApiResponse<DeleteChatMessageResponseData> = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+    res.status(200).json(response);
+  } catch (err: unknown) {
+    if (err instanceof ChatNotFoundError) {
+      res.status(404).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    if (err instanceof ForbiddenChatError) {
+      res.status(403).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    if (err instanceof BadRequestChatError || err instanceof ChatServiceError) {
+      res.status(err.statusCode || 400).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      return;
+    }
+    console.error('[Chat Controller] Error deleting group message:', err);
+    res.status(500).json({ success: false, error: 'Internal server error.', timestamp: new Date().toISOString() });
+  }
+}
+
+/**
+ * GET /api/v1/chat/attachments/raw/*
+ * Attachment streaming handler for local development, media preview, and private storage proxying.
+ * Serves real disk file if present, redirects to Supabase signed URL if stored in cloud,
+ * or safely returns 404 with strict security headers without unescaped reflection.
+ */
+export async function serveLocalChatAttachmentHandler(req: Request, res: Response): Promise<void> {
   const rawParam = (req.params as any)[0] || '';
   const safePath = path.normalize(rawParam).replace(/^(\.\.[\/\\])+/, '');
   const localUploadsDir = path.resolve(process.cwd(), 'uploads/chat-attachments');
@@ -693,6 +806,7 @@ export function serveLocalChatAttachmentHandler(req: Request, res: Response): vo
     return;
   }
 
+  // 1. If file exists on local disk (local dev fallback), stream it directly
   if (fs.existsSync(fullPath)) {
     const ext = path.extname(fullPath).toLowerCase();
     const mimeMap: Record<string, string> = {
@@ -711,19 +825,36 @@ export function serveLocalChatAttachmentHandler(req: Request, res: Response): vo
     };
     const contentType = mimeMap[ext] || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     fs.createReadStream(fullPath).pipe(res);
     return;
   }
 
-  // Graceful fallback for prior test/mock files that weren't written to disk
-  const fileName = path.basename(safePath) || 'Image';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-    <rect width="100%" height="100%" fill="#e2e8f0"/>
-    <text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="48">🖼️</text>
-    <text x="50%" y="65%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#475569">${fileName}</text>
-  </svg>`;
+  // 2. If file is stored in Supabase Storage, redirect (307 Temporary Redirect) to fresh signed URL
+  if (config.supabaseUrl && config.supabaseSecretKey) {
+    try {
+      const supabase = getSupabaseClient();
+      const normalizedStoragePath = safePath.replace(/\\/g, '/');
+      const { data, error } = await supabase.storage
+        .from(CHAT_ATTACHMENTS_BUCKET)
+        .createSignedUrl(normalizedStoragePath, 3600);
+
+      if (!error && data?.signedUrl) {
+        res.redirect(307, data.signedUrl);
+        return;
+      }
+    } catch (sbErr) {
+      console.warn('[Chat Controller] Failed to generate Supabase signed URL for raw request:', sbErr);
+    }
+  }
+
+  // 3. Fallback: file does not exist anywhere. Safe 404 response with strict security headers.
+  // Never interpolate dynamic/user-controlled input into SVG or HTML!
   res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'");
   res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.send(svg);
+  const staticFallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="#e2e8f0"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="48">🖼️</text></svg>`;
+  res.status(404).send(staticFallbackSvg);
 }

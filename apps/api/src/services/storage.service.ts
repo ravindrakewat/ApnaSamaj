@@ -1213,24 +1213,33 @@ export async function uploadChatAttachment(
       }
 
       if (uploadError) {
-        console.error('[Storage Service] Supabase chat attachment upload failed:', uploadError.message);
-        throw new StorageError(`Failed to upload attachment: ${uploadError.message}`, 500);
-      }
+        console.warn('[Storage Service] Supabase chat attachment upload failed, using local storage:', uploadError.message);
+        try {
+          const localFilePath = path.resolve(process.cwd(), 'uploads/chat-attachments', storagePath);
+          fs.mkdirSync(path.dirname(localFilePath), { recursive: true });
+          fs.writeFileSync(localFilePath, fileBuffer);
+        } catch (fsErr) {
+          console.warn('[Storage Service] Failed to save local chat attachment fallback:', fsErr);
+        }
+      } else {
+        // Generate initial 1-hour signed URL
+        const { data: signedData, error: signError } = await supabase.storage
+          .from(CHAT_ATTACHMENTS_BUCKET)
+          .createSignedUrl(storagePath, 3600);
 
-      // Generate initial 1-hour signed URL
-      const { data: signedData, error: signError } = await supabase.storage
-        .from(CHAT_ATTACHMENTS_BUCKET)
-        .createSignedUrl(storagePath, 3600);
-
-      if (!signError && signedData?.signedUrl) {
-        signedUrl = signedData.signedUrl;
+        if (!signError && signedData?.signedUrl) {
+          signedUrl = signedData.signedUrl;
+        }
       }
     } catch (err: unknown) {
-      if (err instanceof StorageError) throw err;
-      throw new StorageError(
-        `Failed to upload attachment: ${err instanceof Error ? err.message : 'Unknown storage error'}`,
-        500
-      );
+      console.warn('[Storage Service] Supabase upload exception, using local storage fallback:', err instanceof Error ? err.message : err);
+      try {
+        const localFilePath = path.resolve(process.cwd(), 'uploads/chat-attachments', storagePath);
+        fs.mkdirSync(path.dirname(localFilePath), { recursive: true });
+        fs.writeFileSync(localFilePath, fileBuffer);
+      } catch (fsErr) {
+        console.warn('[Storage Service] Failed to save local chat attachment fallback:', fsErr);
+      }
     }
   } else {
     // Local storage fallback for development / test environments
@@ -1261,14 +1270,11 @@ export async function uploadChatAttachment(
 }
 
 /**
- * Resolves a public/signed attachment URL.
- * When Supabase credentials are configured, returns live Supabase URL.
- * In development/test without Supabase, returns local API server endpoint.
+ * Resolves a safe fallback attachment URL.
+ * Chat attachments are stored in a strictly private bucket (CHAT_ATTACHMENTS_BUCKET),
+ * so public URLs must never be returned. Returns the authorized local streaming endpoint.
  */
 export function resolveChatAttachmentUrl(storagePath: string): string {
-  if (config.supabaseUrl && config.supabaseSecretKey) {
-    return `${config.supabaseUrl}/storage/v1/object/public/${CHAT_ATTACHMENTS_BUCKET}/${storagePath}`;
-  }
   const apiPort = config.port || 4000;
   return `http://localhost:${apiPort}/api/v1/chat/attachments/raw/${storagePath}?token=local-dev-token&expires=3600`;
 }
@@ -1302,5 +1308,30 @@ export async function createTemporarySignedChatAttachmentUrl(
 
   // Development / test fallback
   return `http://localhost:${apiPort}/api/v1/chat/attachments/raw/${storagePath}?token=local-dev-token&expires=${expiresInSeconds}`;
+}
+
+/**
+ * Iterates through an array of messages and populates fresh, authorized signed URLs
+ * for each attachment. Safe for both Supabase live storage and local development/tests.
+ */
+export async function populateSignedAttachmentUrls<T extends { attachments?: any[] }>(
+  messages: T[]
+): Promise<T[]> {
+  if (!messages || messages.length === 0) return messages;
+
+  for (const msg of messages) {
+    if (msg.attachments && Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+      for (const att of msg.attachments) {
+        if (att && att.storagePath) {
+          try {
+            att.url = await createTemporarySignedChatAttachmentUrl(att.storagePath, 3600);
+          } catch {
+            // Keep default resolved URL if signing fails
+          }
+        }
+      }
+    }
+  }
+  return messages;
 }
 

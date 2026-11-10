@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Linking } from 'react-native';
 import { ChatAttachmentItem } from '@apnasamaj/shared-types';
 import { Typography } from '../Typography';
 import { useTheme } from '../../hooks/useTheme';
 import { resolveAttachmentDisplayUrl } from '../../utils/attachment';
+import { chatApi } from '../../api/chat.api';
 
 interface ChatImageMessageProps {
   attachment: ChatAttachmentItem;
@@ -14,17 +15,59 @@ export const ChatImageMessage: React.FC<ChatImageMessageProps> = ({ attachment }
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const imageUrl = resolveAttachmentDisplayUrl(attachment.url);
+  const initialUrl = resolveAttachmentDisplayUrl(attachment.url || (attachment as any).localUri || '');
+  const [currentUrl, setCurrentUrl] = useState<string>(initialUrl);
+  const [retryAttempted, setRetryAttempted] = useState(false);
+
+  useEffect(() => {
+    const nextUrl = resolveAttachmentDisplayUrl(attachment.url || (attachment as any).localUri || '');
+    if (nextUrl && nextUrl !== currentUrl) {
+      setCurrentUrl(nextUrl);
+      setHasError(false);
+      setIsLoading(true);
+      setRetryAttempted(false);
+    }
+  }, [attachment.url, (attachment as any).localUri]);
+
+  const handleImageError = async () => {
+    // 1. If signed URL expired or failed, refresh via chatApi.getAttachmentUrl
+    if (!retryAttempted && attachment.id && !attachment.id.startsWith('temp-')) {
+      setRetryAttempted(true);
+      try {
+        const freshSignedUrl = await chatApi.getAttachmentUrl(attachment.id);
+        if (freshSignedUrl && freshSignedUrl !== currentUrl) {
+          setCurrentUrl(resolveAttachmentDisplayUrl(freshSignedUrl));
+          setHasError(false);
+          setIsLoading(true);
+          return;
+        }
+      } catch (refreshErr) {
+        console.warn('[ChatImageMessage] Could not refresh signed URL on error:', refreshErr);
+      }
+    }
+
+    // 2. Try localUri fallback if available
+    const localFallback = (attachment as any).localUri;
+    if (localFallback && localFallback !== currentUrl) {
+      setCurrentUrl(localFallback);
+      setHasError(false);
+      setIsLoading(true);
+      return;
+    }
+
+    setIsLoading(false);
+    setHasError(true);
+  };
 
   const handlePress = () => {
-    if (imageUrl) {
-      Linking.openURL(imageUrl).catch((err) => {
+    if (currentUrl) {
+      Linking.openURL(currentUrl).catch((err) => {
         console.warn('[ChatImageMessage] Could not open image URL:', err);
       });
     }
   };
 
-  if (hasError || !imageUrl) {
+  if (hasError || !currentUrl) {
     return (
       <View style={styles.fallbackBox}>
         <Typography variant="sm" color={theme.colors.textSecondary}>
@@ -43,15 +86,12 @@ export const ChatImageMessage: React.FC<ChatImageMessageProps> = ({ attachment }
       accessibilityLabel={`View image: ${attachment.fileName}`}
     >
       <Image
-        source={{ uri: imageUrl }}
+        source={{ uri: currentUrl }}
         style={styles.image}
         resizeMode="cover"
         onLoadStart={() => setIsLoading(true)}
         onLoadEnd={() => setIsLoading(false)}
-        onError={() => {
-          setIsLoading(false);
-          setHasError(true);
-        }}
+        onError={handleImageError}
       />
       {isLoading && (
         <View style={styles.loadingOverlay}>

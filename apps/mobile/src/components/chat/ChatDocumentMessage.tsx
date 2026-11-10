@@ -29,7 +29,7 @@ export const ChatDocumentMessage: React.FC<ChatDocumentMessageProps> = ({ attach
   };
 
   const handleOpen = () => {
-    const docUrl = resolveAttachmentDisplayUrl(attachment.url);
+    const docUrl = resolveAttachmentDisplayUrl(attachment.url || (attachment as any).localUri);
     if (docUrl) {
       Linking.openURL(docUrl).catch((err) => {
         console.warn('[ChatDocumentMessage] Could not open document URL:', err);

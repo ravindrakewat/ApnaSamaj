@@ -16,6 +16,8 @@ import {
   ChatMediaGalleryQueryParams,
   PaginatedChatMediaResponse,
   ChatMessageContextResponse,
+  MessageDeleteScope,
+  DeleteChatMessageResponseData,
 } from '@apnasamaj/shared-types';
 
 export interface ListGroupMessagesParams {
@@ -581,6 +583,46 @@ export const chatApi = {
 
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Failed to fetch direct message context.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Deletes a group message (ME or EVERYONE).
+   */
+  async deleteGroupMessage(
+    groupId: string,
+    messageId: string,
+    scope: MessageDeleteScope
+  ): Promise<DeleteChatMessageResponseData> {
+    const response = await apiClient.delete<ApiResponse<DeleteChatMessageResponseData>>(
+      `/groups/${encodeURIComponent(groupId.trim())}/messages/${encodeURIComponent(messageId.trim())}`,
+      { body: { scope } }
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to delete group message.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Deletes a direct message (ME or EVERYONE).
+   */
+  async deleteDirectMessage(
+    conversationId: string,
+    messageId: string,
+    scope: MessageDeleteScope
+  ): Promise<DeleteChatMessageResponseData> {
+    const response = await apiClient.delete<ApiResponse<DeleteChatMessageResponseData>>(
+      `/chat/conversations/${encodeURIComponent(conversationId.trim())}/messages/${encodeURIComponent(messageId.trim())}`,
+      { body: { scope } }
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to delete direct message.');
     }
 
     return response.data;

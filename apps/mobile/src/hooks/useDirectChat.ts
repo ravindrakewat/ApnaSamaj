@@ -9,6 +9,9 @@ import {
   MessageDeliveryStatus,
   ChatReactionEventPayload,
   ChatReactionSummary,
+  ChatMessageDeletedEvent,
+  MessageDeleteScope,
+  DELETED_CHAT_MESSAGE_PLACEHOLDER,
 } from '@apnasamaj/shared-types';
 import { chatApi } from '../api/chat.api';
 import { connectChatSocket, getChatSocket } from '../services/socket.service';
@@ -355,12 +358,44 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
       chatPersistenceService.updateMessageReactions(payload.messageId, payload.reactions);
     };
 
+    const handleMessageDeleted = (payload: ChatMessageDeletedEvent) => {
+      if (!payload || payload.conversationId !== conversationId) return;
+
+      if (payload.scope === 'ME') {
+        setMessages((prev) => prev.filter((m) => m.id !== payload.messageId && m.tempId !== payload.messageId));
+        chatPersistenceService.deleteLocalMessage(payload.messageId);
+      } else if (payload.scope === 'EVERYONE') {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === payload.messageId || m.tempId === payload.messageId) {
+              return {
+                ...m,
+                content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
+                attachments: [],
+                reactions: [],
+                isDeletedForEveryone: true,
+                deletedAt: payload.deletedAt,
+                deletedByUserId: payload.deletedByUserId,
+              };
+            }
+            return m;
+          })
+        );
+        chatPersistenceService.updateMessageContent(
+          payload.messageId,
+          DELETED_CHAT_MESSAGE_PLACEHOLDER,
+          true
+        );
+      }
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('direct:new_message', handleNewMessage);
     socket.on('direct:user_typing', handleUserTyping);
     socket.on('direct:message_read', handleMessageRead);
     socket.on('direct:reaction', handleReaction);
+    socket.on('direct:message_deleted', handleMessageDeleted);
 
     if (socket.connected) {
       handleConnect();
@@ -388,6 +423,7 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
         socket.off('direct:user_typing', handleUserTyping);
         socket.off('direct:message_read', handleMessageRead);
         socket.off('direct:reaction', handleReaction);
+        socket.off('direct:message_deleted', handleMessageDeleted);
       }
       appStateSub.remove();
 
@@ -501,7 +537,8 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
                 fileSizeBytes: attachment.fileSizeBytes,
                 storagePath: attachment.storagePath,
                 duration: attachment.duration,
-                localUri: (attachment as any).localUri,
+                url: (attachment as any).url || (attachment as any).localUri || '',
+                localUri: (attachment as any).localUri || (attachment as any).uri || '',
                 createdAt: nowIso,
               },
             ]
@@ -755,6 +792,62 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
     [conversationId, messages]
   );
 
+  /**
+   * Delete a direct message (ME or EVERYONE)
+   */
+  const deleteMessage = useCallback(
+    async (messageId: string, scope: MessageDeleteScope) => {
+      if (!conversationId || !messageId) return;
+
+      // Optimistic local update
+      if (scope === 'ME') {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId && m.tempId !== messageId));
+        chatPersistenceService.deleteLocalMessage(messageId);
+      } else if (scope === 'EVERYONE') {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === messageId || m.tempId === messageId) {
+              return {
+                ...m,
+                content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
+                attachments: [],
+                reactions: [],
+                isDeletedForEveryone: true,
+              };
+            }
+            return m;
+          })
+        );
+        chatPersistenceService.updateMessageContent(
+          messageId,
+          DELETED_CHAT_MESSAGE_PLACEHOLDER,
+          true
+        );
+      }
+
+      // Socket or HTTP call
+      const socket = getChatSocket();
+      if (socket && socket.connected) {
+        socket.emit(
+          'direct:delete_message',
+          { conversationId, messageId, scope },
+          async (res: { success: boolean; error?: string }) => {
+            if (!res?.success) {
+              try {
+                await chatApi.deleteDirectMessage(conversationId, messageId, scope);
+              } catch (httpErr) {
+                console.error('[useDirectChat] Failed to delete direct message:', httpErr);
+              }
+            }
+          }
+        );
+      } else {
+        await chatApi.deleteDirectMessage(conversationId, messageId, scope);
+      }
+    },
+    [conversationId]
+  );
+
   return {
     messages,
     isLoadingHistory,
@@ -776,5 +869,6 @@ export function useDirectChat({ conversationId }: UseDirectChatOptions) {
     setReplyingToMessage,
     toggleReaction,
     jumpToMessage,
+    deleteMessage,
   };
 }

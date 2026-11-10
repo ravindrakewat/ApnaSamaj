@@ -229,6 +229,8 @@ model User {
   notificationLogs             NotificationLog[]
   chatMessageReactions         ChatMessageReaction[]
   directMessageReactions       DirectMessageReaction[]
+  chatMessageDeletions         ChatMessageDeletion[]
+  directMessageDeletions       DirectMessageDeletion[]
 
   @@index([role])
   @@index([status])
@@ -509,9 +511,13 @@ model ChatMessage {
   replies          ChatMessage[]         @relation("ChatMessageReplies")
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
+  isDeletedForEveryone Boolean           @default(false)
+  deletedAt        DateTime?
+  deletedByUserId  String?
 
   attachments ChatAttachment[]
   reactions   ChatMessageReaction[]
+  deletions   ChatMessageDeletion[]
 
   @@unique([groupId, senderId, clientMessageId])
   @@index([groupId, createdAt(sort: Desc)])
@@ -570,9 +576,13 @@ model DirectMessage {
   replies          DirectMessage[]        @relation("DirectMessageReplies")
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
+  isDeletedForEveryone Boolean            @default(false)
+  deletedAt        DateTime?
+  deletedByUserId  String?
 
   attachments ChatAttachment[]
   reactions   DirectMessageReaction[]
+  deletions   DirectMessageDeletion[]
 
   @@unique([conversationId, senderId, clientMessageId])
   @@index([conversationId, createdAt(sort: Desc)])
@@ -632,6 +642,36 @@ model DirectMessageReaction {
   @@unique([messageId, userId])
   @@index([messageId])
   @@index([userId])
+}
+
+// --------------------------------------------------------
+// CHAT MESSAGE DELETIONS (FOR ME)
+// --------------------------------------------------------
+
+model ChatMessageDeletion {
+  id        String      @id @default(uuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+  @@index([messageId])
+}
+
+model DirectMessageDeletion {
+  id        String        @id @default(uuid())
+  messageId String
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+  @@index([messageId])
 }
 
 // MATRIMONIAL MODULE

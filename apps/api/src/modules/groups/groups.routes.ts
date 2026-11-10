@@ -27,6 +27,7 @@ import {
   searchGroupMessagesHandler,
   getGroupMediaGalleryHandler,
   getGroupMessageContextHandler,
+  deleteGroupMessageHandler,
 } from '../chat/chat.controller';
 
 export const groupsRouter = Router();
@@ -78,6 +79,9 @@ groupsRouter.get('/:id/messages', getGroupMessagesHandler);
 
 // POST /api/v1/groups/:id/messages - Send a chat message (HTTP fallback)
 groupsRouter.post('/:id/messages', sendGroupMessageHandler);
+
+// DELETE /api/v1/groups/:id/messages/:messageId - Delete a group message (ME or EVERYONE)
+groupsRouter.delete('/:id/messages/:messageId', deleteGroupMessageHandler);
 
 // POST /api/v1/groups/:id/messages/:messageId/reactions - Toggle emoji reaction on group message
 groupsRouter.post('/:id/messages/:messageId/reactions', toggleGroupMessageReactionHandler);

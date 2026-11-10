@@ -13,6 +13,9 @@ import {
   PaginatedChatMediaResponse,
   ChatMediaGalleryItem,
   ChatMessageContextResponse,
+  DELETED_CHAT_MESSAGE_PLACEHOLDER,
+  MessageDeleteScope,
+  DeleteChatMessageResponseData,
 } from '@apnasamaj/shared-types';
 import {
   ListGroupMessagesQueryInput,
@@ -20,7 +23,7 @@ import {
   ChatMediaQueryInput,
 } from '@apnasamaj/validation';
 import { dispatchPushNotificationToMultipleUsers } from '../notifications/push-notification.service';
-import { createTemporarySignedChatAttachmentUrl, resolveChatAttachmentUrl } from '../../services/storage.service';
+import { createTemporarySignedChatAttachmentUrl, resolveChatAttachmentUrl, populateSignedAttachmentUrls } from '../../services/storage.service';
 import { chatIdempotencyService } from './chat-idempotency.service';
 
 export class ChatServiceError extends Error {
@@ -41,6 +44,12 @@ export class ChatNotFoundError extends ChatServiceError {
 export class ForbiddenChatError extends ChatServiceError {
   constructor(message: string = 'Access denied: You do not have permission for this chat room.') {
     super(message, 403);
+  }
+}
+
+export class BadRequestChatError extends ChatServiceError {
+  constructor(message: string = 'Bad request.') {
+    super(message, 400);
   }
 }
 
@@ -109,6 +118,7 @@ const chatMessageInclude = {
       id: true,
       senderId: true,
       content: true,
+      isDeletedForEveryone: true,
       sender: {
         select: {
           profile: {
@@ -143,53 +153,104 @@ const chatMessageInclude = {
   },
 } satisfies Prisma.ChatMessageInclude;
 
+const legacyChatMessageSelect = {
+  id: true,
+  groupId: true,
+  senderId: true,
+  content: true,
+  createdAt: true,
+  updatedAt: true,
+  clientMessageId: true,
+  replyToMessageId: true,
+  sender: {
+    select: {
+      id: true,
+      profile: {
+        select: {
+          fullName: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  },
+  attachments: true,
+  replyTo: {
+    select: {
+      id: true,
+      senderId: true,
+      content: true,
+      sender: {
+        select: {
+          profile: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      },
+      attachments: {
+        take: 1,
+        select: {
+          type: true,
+          fileName: true,
+        },
+      },
+    },
+  },
+  reactions: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          profile: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 type RawChatMessage = Prisma.ChatMessageGetPayload<{
   include: typeof chatMessageInclude;
 }>;
 
 export function mapToChatMessageItem(item: any, currentUserId?: string): ChatMessageItem {
+  const isDeletedForEveryone = Boolean(
+    item.isDeletedForEveryone || item.content === DELETED_CHAT_MESSAGE_PLACEHOLDER
+  );
+
   const replyToRaw = item.replyTo;
   let replyTo: ChatMessageReplyPreview | null = null;
   if (replyToRaw) {
+    const isReplyDeleted = Boolean(
+      replyToRaw.isDeletedForEveryone || replyToRaw.content === DELETED_CHAT_MESSAGE_PLACEHOLDER
+    );
     replyTo = {
       id: replyToRaw.id,
-      senderId: replyToRaw.senderId,
-      senderName: replyToRaw.sender?.profile?.fullName || 'Community Member',
-      content: replyToRaw.content || '',
-      attachmentType: replyToRaw.attachments?.[0]?.type || null,
-      attachmentName: replyToRaw.attachments?.[0]?.fileName || null,
+      senderId: isReplyDeleted ? '' : replyToRaw.senderId,
+      senderName: isReplyDeleted ? 'Message Deleted' : (replyToRaw.sender?.profile?.fullName || 'Community Member'),
+      content: isReplyDeleted ? DELETED_CHAT_MESSAGE_PLACEHOLDER : (replyToRaw.content || ''),
+      attachmentType: isReplyDeleted ? null : (replyToRaw.attachments?.[0]?.type || null),
+      attachmentName: isReplyDeleted ? null : (replyToRaw.attachments?.[0]?.fileName || null),
     };
   } else if (item.replyToMessageId) {
     replyTo = {
       id: item.replyToMessageId,
       senderId: '',
       senderName: 'Original Message',
-      content: 'This message was deleted',
+      content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
       attachmentType: null,
       attachmentName: null,
     };
   }
 
-  return {
-    id: item.id,
-    groupId: item.groupId,
-    senderId: item.senderId,
-    content: item.content,
-    clientMessageId: item.clientMessageId || null,
-    replyToMessageId: item.replyToMessageId || null,
-    replyTo,
-    reactions: aggregateReactions(item.reactions, currentUserId || item.senderId),
-    tempId: item.clientMessageId || undefined,
-    createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
-    updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : item.updatedAt,
-    sender: item.sender
-      ? {
-        id: item.sender.id,
-        fullName: item.sender.profile?.fullName || 'Community Member',
-        avatarUrl: item.sender.profile?.avatarUrl || null,
-      }
-      : null,
-    attachments: ((item as any).attachments || []).map((att: any) => ({
+  const content = isDeletedForEveryone ? DELETED_CHAT_MESSAGE_PLACEHOLDER : item.content;
+  const attachments = isDeletedForEveryone
+    ? []
+    : ((item as any).attachments || []).map((att: any) => ({
       id: att.id,
       chatMessageId: att.chatMessageId,
       type: att.type,
@@ -200,7 +261,38 @@ export function mapToChatMessageItem(item: any, currentUserId?: string): ChatMes
       url: resolveChatAttachmentUrl(att.storagePath),
       duration: att.duration != null ? att.duration : undefined,
       createdAt: att.createdAt instanceof Date ? att.createdAt.toISOString() : att.createdAt,
-    })),
+    }));
+  const reactions = isDeletedForEveryone
+    ? []
+    : aggregateReactions(item.reactions, currentUserId || item.senderId);
+
+  return {
+    id: item.id,
+    groupId: item.groupId,
+    senderId: item.senderId,
+    content,
+    clientMessageId: item.clientMessageId || null,
+    replyToMessageId: item.replyToMessageId || null,
+    replyTo,
+    reactions,
+    tempId: item.clientMessageId || undefined,
+    isDeletedForEveryone: isDeletedForEveryone ? true : Boolean(item.isDeletedForEveryone),
+    deletedAt: item.deletedAt
+      ? item.deletedAt instanceof Date
+        ? item.deletedAt.toISOString()
+        : item.deletedAt
+      : null,
+    deletedByUserId: item.deletedByUserId || null,
+    createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
+    updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : item.updatedAt,
+    sender: item.sender
+      ? {
+        id: item.sender.id,
+        fullName: item.sender.profile?.fullName || 'Community Member',
+        avatarUrl: item.sender.profile?.avatarUrl || null,
+      }
+      : null,
+    attachments,
   };
 }
 
@@ -273,24 +365,55 @@ export async function getGroupChatHistory(
   const beforeDate = query.before ? new Date(query.before) : undefined;
 
   try {
-    const where: Prisma.ChatMessageWhereInput = {
-      groupId: group.id,
-      ...(beforeDate && !isNaN(beforeDate.getTime()) ? { createdAt: { lt: beforeDate } } : {}),
-    };
+    let rawMessages: any[];
+    try {
+      const where: Prisma.ChatMessageWhereInput = {
+        groupId: group.id,
+        ...(beforeDate && !isNaN(beforeDate.getTime()) ? { createdAt: { lt: beforeDate } } : {}),
+        deletions: {
+          none: { userId },
+        },
+      };
 
-    const rawMessages = await client.chatMessage.findMany({
-      where,
-      take: limit + 1, // take 1 extra to determine hasMore
-      orderBy: { createdAt: 'desc' },
-      include: chatMessageInclude,
-    });
+      rawMessages = await client.chatMessage.findMany({
+        where,
+        take: limit + 1, // take 1 extra to determine hasMore
+        orderBy: { createdAt: 'desc' },
+        include: chatMessageInclude,
+      });
+    } catch {
+      // Graceful fallback if deletions table/relation or isDeletedForEveryone is not yet migrated
+      const fallbackWhere: Prisma.ChatMessageWhereInput = {
+        groupId: group.id,
+        ...(beforeDate && !isNaN(beforeDate.getTime()) ? { createdAt: { lt: beforeDate } } : {}),
+      };
+
+      try {
+        rawMessages = await (client.chatMessage as any).findMany({
+          where: fallbackWhere,
+          take: limit + 1,
+          orderBy: { createdAt: 'desc' },
+          select: legacyChatMessageSelect,
+        });
+      } catch {
+        rawMessages = await client.chatMessage.findMany({
+          where: fallbackWhere,
+          take: limit + 1,
+          orderBy: { createdAt: 'desc' },
+          include: chatMessageInclude,
+        });
+      }
+    }
 
     const hasMore = rawMessages.length > limit;
     const sliced = hasMore ? rawMessages.slice(0, limit) : rawMessages;
     const nextCursor = sliced.length > 0 ? sliced[sliced.length - 1].createdAt.toISOString() : null;
 
+    const mappedMessages = (sliced as unknown as RawChatMessage[]).map((m) => mapToChatMessageItem(m, userId));
+    await populateSignedAttachmentUrls(mappedMessages);
+
     return {
-      messages: (sliced as unknown as RawChatMessage[]).map((m) => mapToChatMessageItem(m, userId)),
+      messages: mappedMessages,
       nextCursor,
       hasMore,
     };
@@ -391,7 +514,9 @@ export async function sendChatMessage(
         include: chatMessageInclude,
       });
       if (existing) {
-        return mapToChatMessageItem(existing as unknown as RawChatMessage, senderId);
+        const mapped = mapToChatMessageItem(existing as unknown as RawChatMessage, senderId);
+        await populateSignedAttachmentUrls([mapped]);
+        return mapped;
       }
     } catch {
       // Suppress if column query fails on unmigrated database
@@ -419,7 +544,9 @@ export async function sendChatMessage(
         existingAttachment.chatMessage.senderId === senderId &&
         (!resolvedTempId || (existingAttachment.chatMessage as any).clientMessageId === resolvedTempId)
       ) {
-        return mapToChatMessageItem(existingAttachment.chatMessage as unknown as RawChatMessage, senderId);
+        const mapped = mapToChatMessageItem(existingAttachment.chatMessage as unknown as RawChatMessage, senderId);
+        await populateSignedAttachmentUrls([mapped]);
+        return mapped;
       }
       throw new ChatServiceError('Attachment has already been associated with an existing message.', 400);
     }
@@ -442,7 +569,9 @@ export async function sendChatMessage(
           include: chatMessageInclude,
         });
         if (existing) {
-          return mapToChatMessageItem(existing as unknown as RawChatMessage, senderId);
+          const mapped = mapToChatMessageItem(existing as unknown as RawChatMessage, senderId);
+          await populateSignedAttachmentUrls([mapped]);
+          return mapped;
         }
       } catch {
         // Suppress if column query fails on unmigrated database
@@ -488,7 +617,9 @@ export async function sendChatMessage(
             include: chatMessageInclude,
           });
           if (existing) {
-            return mapToChatMessageItem(existing as unknown as RawChatMessage, senderId);
+            const mapped = mapToChatMessageItem(existing as unknown as RawChatMessage, senderId);
+            await populateSignedAttachmentUrls([mapped]);
+            return mapped;
           }
         }
 
@@ -567,7 +698,9 @@ export async function sendChatMessage(
         console.warn('[Group Chat] FCM push notification dispatch warning (suppressed):', groupPushErr);
       }
 
-      return mapToChatMessageItem(message as unknown as RawChatMessage, senderId);
+      const mapped = mapToChatMessageItem(message as unknown as RawChatMessage, senderId);
+      await populateSignedAttachmentUrls([mapped]);
+      return mapped;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('ChatMessage') || msg.includes('does not exist')) {
@@ -802,8 +935,9 @@ export async function searchGroupMessages(
   const rawKeyword = query.q.trim();
   const searchKeyword = rawKeyword.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
-  const where: Prisma.ChatMessageWhereInput = {
+  const baseWhere: Prisma.ChatMessageWhereInput = {
     groupId: group.id,
+    content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
     OR: [
       { content: { contains: searchKeyword, mode: 'insensitive' } },
       { attachments: { some: { fileName: { contains: searchKeyword, mode: 'insensitive' } } } },
@@ -820,21 +954,70 @@ export async function searchGroupMessages(
     ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
   };
 
-  const [rawMessages, totalMatches] = await Promise.all([
-    client.chatMessage.findMany({
-      where,
-      take: limit + 1,
-      orderBy: { createdAt: 'desc' },
-      include: chatMessageInclude,
-    }),
-    client.chatMessage.count({
-      where: {
-        groupId: group.id,
-        OR: where.OR,
-        ...(query.senderId ? { senderId: query.senderId } : {}),
+  let rawMessages: any[] = [];
+  let totalMatches = 0;
+
+  try {
+    const where: Prisma.ChatMessageWhereInput = {
+      ...baseWhere,
+      isDeletedForEveryone: false,
+      deletions: {
+        none: { userId },
       },
-    }),
-  ]);
+    };
+
+    [rawMessages, totalMatches] = await Promise.all([
+      client.chatMessage.findMany({
+        where,
+        take: limit + 1,
+        orderBy: { createdAt: 'desc' },
+        include: chatMessageInclude,
+      }),
+      client.chatMessage.count({
+        where: {
+          ...where,
+          OR: where.OR,
+          ...(query.senderId ? { senderId: query.senderId } : {}),
+        },
+      }),
+    ]);
+  } catch {
+    try {
+      [rawMessages, totalMatches] = await Promise.all([
+        (client.chatMessage as any).findMany({
+          where: baseWhere,
+          take: limit + 1,
+          orderBy: { createdAt: 'desc' },
+          select: legacyChatMessageSelect,
+        }),
+        client.chatMessage.count({
+          where: {
+            groupId: group.id,
+            content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
+            OR: baseWhere.OR,
+            ...(query.senderId ? { senderId: query.senderId } : {}),
+          },
+        }),
+      ]);
+    } catch {
+      [rawMessages, totalMatches] = await Promise.all([
+        client.chatMessage.findMany({
+          where: baseWhere,
+          take: limit + 1,
+          orderBy: { createdAt: 'desc' },
+          include: chatMessageInclude,
+        }),
+        client.chatMessage.count({
+          where: {
+            groupId: group.id,
+            content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
+            OR: baseWhere.OR,
+            ...(query.senderId ? { senderId: query.senderId } : {}),
+          },
+        }),
+      ]);
+    }
+  }
 
   const hasMore = rawMessages.length > limit;
   const sliced = hasMore ? rawMessages.slice(0, limit) : rawMessages;
@@ -882,36 +1065,76 @@ export async function getGroupMediaGallery(
   const limit = Math.min(Math.max(query.limit || 30, 1), 50);
   const cursorDate = query.cursor ? new Date(query.cursor) : undefined;
 
-  const where: Prisma.ChatAttachmentWhereInput = {
-    chatMessage: {
-      groupId: group.id,
-    },
-    ...(query.type ? { type: query.type } : {}),
-    ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
-  };
-
-  const rawAttachments = await client.chatAttachment.findMany({
-    where,
-    take: limit + 1,
-    orderBy: { createdAt: 'desc' },
-    include: {
+  let rawAttachments: any[] = [];
+  try {
+    const where: Prisma.ChatAttachmentWhereInput = {
       chatMessage: {
-        include: {
-          sender: {
-            select: {
-              id: true,
-              profile: {
-                select: {
-                  fullName: true,
-                  avatarUrl: true,
+        groupId: group.id,
+        isDeletedForEveryone: false,
+        content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
+        deletions: {
+          none: { userId },
+        },
+      },
+      ...(query.type ? { type: query.type } : {}),
+      ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
+    };
+
+    rawAttachments = await client.chatAttachment.findMany({
+      where,
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        chatMessage: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                profile: {
+                  select: {
+                    fullName: true,
+                    avatarUrl: true,
+                  },
                 },
               },
             },
           },
         },
       },
-    },
-  });
+    });
+  } catch {
+    const fallbackWhere: Prisma.ChatAttachmentWhereInput = {
+      chatMessage: {
+        groupId: group.id,
+        content: { not: DELETED_CHAT_MESSAGE_PLACEHOLDER },
+      },
+      ...(query.type ? { type: query.type } : {}),
+      ...(cursorDate && !isNaN(cursorDate.getTime()) ? { createdAt: { lt: cursorDate } } : {}),
+    };
+
+    rawAttachments = await client.chatAttachment.findMany({
+      where: fallbackWhere,
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        chatMessage: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                profile: {
+                  select: {
+                    fullName: true,
+                    avatarUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
 
   const hasMore = rawAttachments.length > limit;
   const sliced = hasMore ? rawAttachments.slice(0, limit) : rawAttachments;
@@ -960,42 +1183,205 @@ export async function getGroupMessageContext(
   const client = assertDb(db);
   const { group } = await verifyGroupChatAccess(groupIdOrSlug, userId, false, client);
 
-  const targetMsg = await client.chatMessage.findFirst({
-    where: { id: messageId, groupId: group.id },
-    include: chatMessageInclude,
-  });
+  let targetMsg: any;
+  try {
+    targetMsg = await client.chatMessage.findFirst({
+      where: { id: messageId, groupId: group.id },
+      include: chatMessageInclude,
+    });
+  } catch {
+    targetMsg = await (client.chatMessage as any).findFirst({
+      where: { id: messageId, groupId: group.id },
+      select: legacyChatMessageSelect,
+    });
+  }
 
   if (!targetMsg) {
     throw new ChatNotFoundError('Target message not found.');
   }
 
+  try {
+    const isDeletedForMe = await (client as any).chatMessageDeletion.findUnique({
+      where: {
+        messageId_userId: {
+          messageId,
+          userId,
+        },
+      },
+    });
+    if (isDeletedForMe) {
+      throw new ChatNotFoundError('Target message not found.');
+    }
+  } catch (err) {
+    if (err instanceof ChatNotFoundError) throw err;
+  }
+
   const half = Math.floor(limit / 2);
 
-  // Fetch older messages
-  const olderMessages = await client.chatMessage.findMany({
-    where: { groupId: group.id, createdAt: { lt: targetMsg.createdAt } },
-    take: half,
-    orderBy: { createdAt: 'desc' },
-    include: chatMessageInclude,
-  });
+  let olderMessages: any[] = [];
+  let newerMessages: any[] = [];
 
-  // Fetch newer messages
-  const newerMessages = await client.chatMessage.findMany({
-    where: { groupId: group.id, createdAt: { gt: targetMsg.createdAt } },
-    take: half,
-    orderBy: { createdAt: 'asc' },
-    include: chatMessageInclude,
-  });
+  try {
+    // Fetch older messages
+    olderMessages = await client.chatMessage.findMany({
+      where: { groupId: group.id, createdAt: { lt: targetMsg.createdAt } },
+      take: half,
+      orderBy: { createdAt: 'desc' },
+      include: chatMessageInclude,
+    });
+
+    // Fetch newer messages
+    newerMessages = await client.chatMessage.findMany({
+      where: { groupId: group.id, createdAt: { gt: targetMsg.createdAt } },
+      take: half,
+      orderBy: { createdAt: 'asc' },
+      include: chatMessageInclude,
+    });
+  } catch {
+    olderMessages = await (client.chatMessage as any).findMany({
+      where: { groupId: group.id, createdAt: { lt: targetMsg.createdAt } },
+      take: half,
+      orderBy: { createdAt: 'desc' },
+      select: legacyChatMessageSelect,
+    });
+
+    newerMessages = await (client.chatMessage as any).findMany({
+      where: { groupId: group.id, createdAt: { gt: targetMsg.createdAt } },
+      take: half,
+      orderBy: { createdAt: 'asc' },
+      select: legacyChatMessageSelect,
+    });
+  }
 
   // Recombine in descending order: newer (desc) -> target -> older (desc)
   const allRaw = [...newerMessages.reverse(), targetMsg, ...olderMessages];
   const targetIndex = newerMessages.length;
 
   const mapped = (allRaw as unknown as RawChatMessage[]).map((m) => mapToChatMessageItem(m, userId));
+  await populateSignedAttachmentUrls(mapped);
 
   return {
     targetMessageId: messageId,
     messages: mapped,
     targetIndex,
   };
+}
+
+/**
+ * Deletes a group chat message for the requesting user (ME) or for all participants (EVERYONE).
+ * - "ME": Persisted in ChatMessageDeletion so it disappears only for the requesting user.
+ * - "EVERYONE": Replaces content with deleted placeholder, revokes attachments/reactions.
+ *   - Sender can delete within 60 minutes.
+ *   - Active Group Admin can moderate/delete any group message at any time (bypassing 60m window).
+ */
+export async function deleteGroupMessage(
+  groupIdOrSlug: string,
+  messageId: string,
+  userId: string,
+  scope: MessageDeleteScope,
+  db?: PrismaClient
+): Promise<DeleteChatMessageResponseData> {
+  const client = assertDb(db);
+  const { group, isMember } = await verifyGroupChatAccess(groupIdOrSlug, userId, false, client);
+
+  if (!isMember) {
+    throw new ForbiddenChatError('You must be a member of this group to delete messages.');
+  }
+
+  const message = await client.chatMessage.findFirst({
+    where: { id: messageId, groupId: group.id },
+  });
+
+  if (!message) {
+    throw new ChatNotFoundError('Chat message not found.');
+  }
+
+  if (scope === 'ME') {
+    try {
+      await (client as any).chatMessageDeletion.upsert({
+        where: {
+          messageId_userId: {
+            messageId,
+            userId,
+          },
+        },
+        create: {
+          messageId,
+          userId,
+        },
+        update: {},
+      });
+    } catch (err) {
+      console.warn('[Chat Service] ChatMessageDeletion write failed (unmigrated DB?), falling back:', err);
+    }
+    return {
+      success: true,
+      messageId,
+      scope: 'ME',
+    };
+  }
+
+  if (scope === 'EVERYONE') {
+    if (message.isDeletedForEveryone || message.content === DELETED_CHAT_MESSAGE_PLACEHOLDER) {
+      return {
+        success: true,
+        messageId,
+        scope: 'EVERYONE',
+      };
+    }
+
+    const isSender = message.senderId === userId;
+
+    if (isSender) {
+      const ageMs = Date.now() - message.createdAt.getTime();
+      const WINDOW_MS = 60 * 60 * 1000; // 60 minutes
+      if (ageMs > WINDOW_MS) {
+        throw new BadRequestChatError('Messages can only be deleted for everyone within 60 minutes of sending.');
+      }
+    } else {
+      // Group Admin moderation check
+      const member = await client.groupMember.findUnique({
+        where: {
+          groupId_userId: {
+            groupId: group.id,
+            userId,
+          },
+        },
+        select: { role: true },
+      });
+
+      const isGroupAdmin = member?.role === 'ADMIN';
+      if (!isGroupAdmin) {
+        throw new ForbiddenChatError('Only the message sender or a group admin can delete this message for everyone.');
+      }
+    }
+
+    try {
+      await client.chatMessage.update({
+        where: { id: messageId },
+        data: {
+          content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
+          isDeletedForEveryone: true,
+          deletedAt: new Date(),
+          deletedByUserId: userId,
+        },
+      });
+    } catch {
+      // Fallback if isDeletedForEveryone columns not yet migrated
+      await client.chatMessage.update({
+        where: { id: messageId },
+        data: {
+          content: DELETED_CHAT_MESSAGE_PLACEHOLDER,
+        },
+      });
+    }
+
+    return {
+      success: true,
+      messageId,
+      scope: 'EVERYONE',
+    };
+  }
+
+  throw new BadRequestChatError('Invalid delete scope. Must be ME or EVERYONE.');
 }

@@ -149,15 +149,15 @@ export class ChatPersistenceService {
       updatedAt: nowIso,
       attachment: payload.attachment
         ? {
-            id: payload.attachment.id,
-            type: payload.attachment.type,
-            fileName: payload.attachment.fileName,
-            mimeType: payload.attachment.mimeType,
-            fileSizeBytes: payload.attachment.fileSizeBytes,
-            storagePath: payload.attachment.storagePath,
-            duration: payload.attachment.duration,
-            localUri: payload.attachment.localUri,
-          }
+          id: payload.attachment.id,
+          type: payload.attachment.type,
+          fileName: payload.attachment.fileName,
+          mimeType: payload.attachment.mimeType,
+          fileSizeBytes: payload.attachment.fileSizeBytes,
+          storagePath: payload.attachment.storagePath,
+          duration: payload.attachment.duration,
+          localUri: payload.attachment.localUri,
+        }
         : null,
     };
 
@@ -277,7 +277,7 @@ export class ChatPersistenceService {
       if (json) {
         try {
           message = JSON.parse(json);
-        } catch {}
+        } catch { }
       }
     }
 
@@ -323,6 +323,58 @@ export class ChatPersistenceService {
   }
 
   /**
+   * Updates message content (e.g. replaced by deleted placeholder).
+   */
+  public async updateMessageContent(
+    messageIdOrTempId: string,
+    content: string,
+    isDeletedForEveryone: boolean = true
+  ): Promise<void> {
+    const msg = this.inMemoryCache.get(messageIdOrTempId);
+    if (msg) {
+      msg.content = content;
+      if (isDeletedForEveryone) {
+        msg.attachment = null as any;
+        msg.reactions = [];
+      }
+      msg.updatedAt = new Date().toISOString();
+      this.inMemoryCache.set(messageIdOrTempId, msg);
+      if (msg.serverMessageId && msg.serverMessageId !== messageIdOrTempId) {
+        this.inMemoryCache.set(msg.serverMessageId, msg);
+      }
+      if (msg.tempId && msg.tempId !== messageIdOrTempId) {
+        this.inMemoryCache.set(msg.tempId, msg);
+      }
+      const msgKey = this.getMsgKey(msg.tenantSlug, msg.userId, msg.tempId);
+      await this.writeChunkedItem(msgKey, JSON.stringify(msg));
+    }
+  }
+
+  /**
+   * Deletes a local message from memory cache and storage (for "Delete for Me").
+   */
+  public async deleteLocalMessage(messageIdOrTempId: string): Promise<void> {
+    const msg = this.inMemoryCache.get(messageIdOrTempId);
+    if (msg) {
+      this.inMemoryCache.delete(messageIdOrTempId);
+      if (msg.serverMessageId) this.inMemoryCache.delete(msg.serverMessageId);
+      if (msg.tempId) this.inMemoryCache.delete(msg.tempId);
+
+      const convKey = this.getConvKey(msg.tenantSlug, msg.conversationId);
+      const convList = this.conversationIndex.get(convKey);
+      if (convList) {
+        this.conversationIndex.set(
+          convKey,
+          convList.filter((id) => id !== messageIdOrTempId && id !== msg.tempId && id !== msg.serverMessageId)
+        );
+      }
+
+      const msgKey = this.getMsgKey(msg.tenantSlug, msg.userId, msg.tempId);
+      await this.removeChunkedItem(msgKey);
+    }
+  }
+
+  /**
    * Saves recently received server messages into local conversation cache.
    */
   public async saveReceivedMessages(
@@ -351,14 +403,14 @@ export class ChatPersistenceService {
         content: msg.content || '',
         attachment: msg.attachments?.[0]
           ? {
-              id: msg.attachments[0].id,
-              type: msg.attachments[0].type,
-              fileName: msg.attachments[0].fileName,
-              mimeType: msg.attachments[0].mimeType,
-              fileSizeBytes: msg.attachments[0].fileSizeBytes,
-              storagePath: msg.attachments[0].storagePath,
-              duration: msg.attachments[0].duration,
-            }
+            id: msg.attachments[0].id,
+            type: msg.attachments[0].type,
+            fileName: msg.attachments[0].fileName,
+            mimeType: msg.attachments[0].mimeType,
+            fileSizeBytes: msg.attachments[0].fileSizeBytes,
+            storagePath: msg.attachments[0].storagePath,
+            duration: msg.attachments[0].duration,
+          }
           : null,
         replyToMessageId: msg.replyToMessageId || null,
         replyTo: msg.replyTo || null,

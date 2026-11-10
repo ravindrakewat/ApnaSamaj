@@ -10,6 +10,7 @@ import {
   verifyGroupChatAccess,
   toggleChatMessageReaction,
   removeChatMessageReaction,
+  deleteGroupMessage,
 } from './chat.service';
 import {
   sendDirectMessage,
@@ -17,6 +18,7 @@ import {
   markDirectConversationAsRead,
   toggleDirectMessageReaction,
   removeDirectMessageReaction,
+  deleteDirectMessage,
 } from './direct-chat.service';
 import {
   ChatMessageItem,
@@ -30,6 +32,8 @@ import {
   ChatAttachmentInput,
   ChatReactionEventPayload,
   ToggleChatReactionResponseData,
+  ChatMessageDeletedEvent,
+  MessageDeleteScope,
 } from '@apnasamaj/shared-types';
 
 export interface AuthenticatedSocketUser {
@@ -549,6 +553,42 @@ export function initChatSocketServer(httpServer: http.Server): Server {
       }
     });
 
+    // 5. Delete Group Message
+    socket.on(
+      'chat:delete_message',
+      async (
+        payload: { groupId: string; messageId: string; scope: MessageDeleteScope },
+        callback?: (res: { success: boolean; error?: string }) => void
+      ) => {
+        try {
+          const { groupId, messageId, scope } = payload || {};
+          if (!groupId || !messageId || !scope) {
+            callback?.({ success: false, error: 'Group ID, message ID, and scope are required.' });
+            return;
+          }
+
+          const result = await deleteGroupMessage(groupId, messageId, user.id, scope, db);
+
+          if (scope === 'EVERYONE') {
+            const eventPayload: ChatMessageDeletedEvent = {
+              messageId,
+              scope: 'EVERYONE',
+              groupId,
+              conversationType: 'GROUP',
+              deletedByUserId: user.id,
+              deletedAt: new Date().toISOString(),
+            };
+            io.to(getTenantRoomName(groupId)).emit('chat:message_deleted', eventPayload);
+          }
+
+          callback?.({ success: true });
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : 'Failed to delete message.';
+          callback?.({ success: false, error: errorMsg });
+        }
+      }
+    );
+
     // --------------------------------------------------------
     // DIRECT ONE-TO-ONE CHAT LISTENERS
     // --------------------------------------------------------
@@ -733,6 +773,42 @@ export function initChatSocketServer(httpServer: http.Server): Server {
           callback?.({ success: true, readAt: result.readAt });
         } catch (err: unknown) {
           const errorMsg = err instanceof Error ? err.message : 'Failed to mark conversation as read.';
+          callback?.({ success: false, error: errorMsg });
+        }
+      }
+    );
+
+    // F. Delete Direct Message
+    socket.on(
+      'direct:delete_message',
+      async (
+        payload: { conversationId: string; messageId: string; scope: MessageDeleteScope },
+        callback?: (res: { success: boolean; error?: string }) => void
+      ) => {
+        try {
+          const { conversationId, messageId, scope } = payload || {};
+          if (!conversationId || !messageId || !scope) {
+            callback?.({ success: false, error: 'Conversation ID, message ID, and scope are required.' });
+            return;
+          }
+
+          const result = await deleteDirectMessage(conversationId, messageId, user.id, scope, db);
+
+          if (scope === 'EVERYONE') {
+            const eventPayload: ChatMessageDeletedEvent = {
+              messageId,
+              scope: 'EVERYONE',
+              conversationId,
+              conversationType: 'DIRECT',
+              deletedByUserId: user.id,
+              deletedAt: new Date().toISOString(),
+            };
+            io.to(getDirectRoomName(conversationId)).emit('direct:message_deleted', eventPayload);
+          }
+
+          callback?.({ success: true });
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : 'Failed to delete message.';
           callback?.({ success: false, error: errorMsg });
         }
       }
