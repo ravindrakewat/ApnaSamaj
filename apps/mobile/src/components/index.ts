@@ -12,4 +12,5 @@ export * from './MemberCard';
 export * from './GroupCard';
 export * from './MatrimonialCard';
 export * from './chat';
+export * from './video';
 

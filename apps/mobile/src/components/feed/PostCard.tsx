@@ -14,14 +14,24 @@ import { Badge } from '../Badge';
 import { useTheme } from '../../hooks/useTheme';
 import { useLocalization } from '../../hooks/useLocalization';
 import { formatRelativeTime } from '../../utils/date';
+import {
+  identifyVideoSource,
+  getYouTubeThumbnailUrl,
+  getVideoSourceDetails,
+} from '../../utils/video';
+import { NativeVideoPlayer } from '../video/NativeVideoPlayer';
+import { YouTubeVideoPlayer } from '../video/YouTubeVideoPlayer';
 
 export interface PostCardProps {
   post: PostItem;
   onPressPost?: (postId: string) => void;
   onPressComments?: (postId: string) => void;
   onToggleLike?: (postId: string) => Promise<void>;
-  onPlayVideo?: (media: PostMediaItem) => void;
+  onPlayVideo?: (media: PostMediaItem, postTitle?: string, authorName?: string) => void;
   communitySlug?: string;
+  isPlayingInline?: boolean;
+  onPlayInline?: (postId: string) => void;
+  onPauseInline?: () => void;
 }
 
 export const PostCard: React.FC<PostCardProps> = ({
@@ -31,6 +41,9 @@ export const PostCard: React.FC<PostCardProps> = ({
   onToggleLike,
   onPlayVideo,
   communitySlug = 'demo',
+  isPlayingInline = false,
+  onPlayInline,
+  onPauseInline,
 }) => {
   const theme = useTheme();
   const { language, t } = useLocalization();
@@ -81,8 +94,27 @@ export const PostCard: React.FC<PostCardProps> = ({
     post.type === 'ANNOUNCEMENT'
       ? t('feed:postTypeAnnouncement') || (language === 'hi' ? 'महत्वपूर्ण सूचना' : 'Announcement')
       : post.type === 'EVENT'
-      ? t('feed:postTypeEvent') || (language === 'hi' ? 'सामुदायिक आयोजन' : 'Community Event')
-      : null;
+        ? t('feed:postTypeEvent') || (language === 'hi' ? 'सामुदायिक आयोजन' : 'Community Event')
+        : post.title?.startsWith('[रोजगार')
+          ? (language === 'hi' ? '💼 रोजगार' : '💼 Employment')
+          : post.title?.startsWith('[सरकारी')
+            ? (language === 'hi' ? '🏛️ सरकारी योजना' : '🏛️ Govt Scheme')
+            : post.title?.startsWith('[वैवाहिक')
+              ? (language === 'hi' ? '💍 वैवाहिक' : '💍 Matrimonial')
+              : null;
+
+  const postTypeVariant =
+    post.type === 'ANNOUNCEMENT'
+      ? 'error'
+      : post.type === 'EVENT'
+        ? 'info'
+        : post.title?.startsWith('[रोजगार')
+          ? 'success'
+          : post.title?.startsWith('[सरकारी')
+            ? 'info'
+            : post.title?.startsWith('[वैवाहिक')
+              ? 'warning'
+              : 'default';
 
   return (
     <Card style={styles.cardContainer}>
@@ -140,7 +172,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         {postTypeLabel && (
           <Badge
             label={postTypeLabel}
-            variant={post.type === 'ANNOUNCEMENT' ? 'error' : 'info'}
+            variant={postTypeVariant as any}
             size="sm"
           />
         )}
@@ -203,41 +235,94 @@ export const PostCard: React.FC<PostCardProps> = ({
         </Pressable>
       )}
 
-      {/* 5. Attached Video Preview (Autoplay Disabled) */}
-      {videos.length > 0 && (
-        <Pressable
-          onPress={() => onPlayVideo ? onPlayVideo(videos[0]) : (onPressPost && onPressPost(post.id))}
-          style={[styles.videoContainer, { backgroundColor: '#1E293B' }]}
-          accessibilityRole="button"
-          accessibilityLabel="Play attached video"
-        >
-          {videos[0].thumbnail ? (
-            <Image
-              source={{ uri: videos[0].thumbnail }}
-              style={styles.postImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={styles.videoPlaceholder}>
-              <Typography variant="xs" color="#94A3B8">
-                {language === 'hi' ? 'वीडियो पूर्वावलोकन' : 'Video Preview'}
-              </Typography>
-            </View>
-          )}
+      {/* 5. Attached Video (Inline Facebook-Style Player or Preview Thumbnail) */}
+      {videos.length > 0 && (() => {
+        const video = videos[0];
+        const details = getVideoSourceDetails(video.url, video.thumbnail);
+        const isYt = details.sourceType === 'YOUTUBE';
+        const displayThumb = details.thumbnailUrl || video.thumbnail || (isYt ? getYouTubeThumbnailUrl(video.url) : null);
 
-          {/* Centered Play Button Overlay */}
-          <View style={styles.videoPlayOverlay}>
-            <View style={styles.playIconCircle}>
-              <Typography variant="lg" color="#FFFFFF" weight="bold" style={styles.playIconText}>
-                ▶
+        // If this post is currently active for inline playback in feed
+        if (isPlayingInline) {
+          return (
+            <View style={styles.inlinePlayerContainer}>
+              {isYt ? (
+                <YouTubeVideoPlayer
+                  embedUrl={details.playbackUrl}
+                  youtubeId={details.youtubeId}
+                  thumbnailUrl={displayThumb}
+                  isFullscreen={false}
+                  onPlaybackError={(err) => {
+                    console.warn('[PostCard] Inline YouTube error:', err);
+                  }}
+                />
+              ) : (
+                <NativeVideoPlayer
+                  videoUrl={details.playbackUrl}
+                  thumbnailUrl={displayThumb}
+                  autoPlay={true}
+                  isFullscreen={false}
+                  onPlaybackError={(err) => {
+                    console.warn('[PostCard] Inline native video error:', err);
+                  }}
+                />
+              )}
+            </View>
+          );
+        }
+
+        return (
+          <Pressable
+            onPress={() => {
+              if (onPlayInline) {
+                onPlayInline(post.id);
+              } else if (onPlayVideo) {
+                onPlayVideo(video, post.title || undefined, post.author?.fullName || undefined);
+              } else if (onPressPost) {
+                onPressPost(post.id);
+              }
+            }}
+            style={[styles.videoContainer, { backgroundColor: '#1E293B' }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Play video in post: ${post.title || 'Community post'}`}
+          >
+            {displayThumb ? (
+              <Image
+                source={{ uri: displayThumb }}
+                style={styles.videoThumbnailImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.videoPlaceholder}>
+                <Typography variant="xs" color="#94A3B8">
+                  {language === 'hi' ? 'वीडियो पूर्वावलोकन' : 'Video Preview'}
+                </Typography>
+              </View>
+            )}
+
+            {/* Video Source Badge */}
+            <View style={styles.videoSourceBadgePill}>
+              <Badge
+                label={isYt ? '🔴 YouTube' : (language === 'hi' ? '🎥 वीडियो' : '🎥 Video')}
+                variant={isYt ? 'error' : 'info'}
+                size="sm"
+              />
+            </View>
+
+            {/* Centered Play Button Overlay */}
+            <View style={styles.videoPlayOverlay}>
+              <View style={styles.playIconCircle}>
+                <Typography variant="lg" color="#FFFFFF" weight="bold" style={styles.playIconText}>
+                  ▶
+                </Typography>
+              </View>
+              <Typography variant="xs" weight="semibold" color="#FFFFFF" style={styles.videoLabel}>
+                {language === 'hi' ? 'वीडियो देखें' : 'Watch Video'}
               </Typography>
             </View>
-            <Typography variant="xs" weight="semibold" color="#FFFFFF" style={styles.videoLabel}>
-              {language === 'hi' ? 'वीडियो देखें' : 'Watch Video'}
-            </Typography>
-          </View>
-        </Pressable>
-      )}
+          </Pressable>
+        );
+      })()}
 
       {/* 6. Interaction Action Bar (Like, Comment, Share) */}
       <View style={[styles.actionBar, { borderTopColor: theme.colors.border }]}>
@@ -373,18 +458,41 @@ const styles = StyleSheet.create({
   },
   videoContainer: {
     position: 'relative',
-    height: 200,
+    width: '100%',
+    aspectRatio: 16 / 9,
+    maxHeight: 450,
     borderRadius: 8,
     overflow: 'hidden',
     marginBottom: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  inlinePlayerContainer: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 16 / 9,
+    maxHeight: 450,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 10,
+    backgroundColor: '#000000',
+  },
+  videoThumbnailImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#0F172A',
+  },
   videoPlaceholder: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  videoSourceBadgePill: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 2,
   },
   videoPlayOverlay: {
     position: 'absolute',

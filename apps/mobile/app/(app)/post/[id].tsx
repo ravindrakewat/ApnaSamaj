@@ -17,7 +17,6 @@ import {
   Button,
   PostCard,
   CommentItem,
-  VideoModal,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -45,8 +44,8 @@ export default function PostDetailScreen() {
   const [isPostingComment, setIsPostingComment] = useState<boolean>(false);
   const [commentError, setCommentError] = useState<string | null>(null);
 
-  // Video Preview Modal
-  const [activeVideo, setActiveVideo] = useState<PostMediaItem | null>(null);
+  // Facebook-Style Inline Video Playback State
+  const [isPlayingInline, setIsPlayingInline] = useState<boolean>(false);
 
   const isPostingRef = useRef(false);
 
@@ -205,8 +204,10 @@ export default function PostDetailScreen() {
         <PostCard
           post={post}
           communitySlug={communitySlug}
+          isPlayingInline={isPlayingInline}
+          onPlayInline={() => setIsPlayingInline(true)}
+          onPauseInline={() => setIsPlayingInline(false)}
           onToggleLike={handleToggleLike}
-          onPlayVideo={(media) => setActiveVideo(media)}
         />
 
         {/* Comments Section */}
@@ -295,13 +296,6 @@ export default function PostDetailScreen() {
           />
         </View>
       </View>
-
-      {/* Video Modal Player */}
-      <VideoModal
-        visible={Boolean(activeVideo)}
-        media={activeVideo}
-        onClose={() => setActiveVideo(null)}
-      />
     </KeyboardAvoidingView>
   );
 }

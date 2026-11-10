@@ -19,7 +19,6 @@ import {
   Badge,
   Input,
   PostCard,
-  VideoModal,
   BottomNavigation,
 } from '../../src/components';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -49,8 +48,27 @@ export default function SocialFeedHomeScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeSearch, setActiveSearch] = useState<string>('');
 
-  // Media Modal
-  const [activeVideo, setActiveVideo] = useState<PostMediaItem | null>(null);
+  // Facebook-Style Inline Video Playback State (Only 1 active video across entire feed)
+  const [activePlayingPostId, setActivePlayingPostId] = useState<string | null>(null);
+  const activePlayingPostIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activePlayingPostIdRef.current = activePlayingPostId;
+  }, [activePlayingPostId]);
+
+  // Pause & release decoder resources when the playing post scrolls out of visible viewport
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ item: PostItem }> }) => {
+    if (activePlayingPostIdRef.current) {
+      const isStillVisible = viewableItems.some((v) => v.item?.id === activePlayingPostIdRef.current);
+      if (!isStillVisible) {
+        setActivePlayingPostId(null);
+      }
+    }
+  }).current;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 40,
+  }).current;
 
   // Profile Drawer Modal State
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
@@ -138,6 +156,7 @@ export default function SocialFeedHomeScreen() {
   );
 
   const handleRefresh = () => {
+    setActivePlayingPostId(null);
     loadPosts(1, true);
   };
 
@@ -415,6 +434,9 @@ export default function SocialFeedHomeScreen() {
           <PostCard
             post={item}
             communitySlug={communitySlug}
+            isPlayingInline={activePlayingPostId === item.id}
+            onPlayInline={(postId) => setActivePlayingPostId(postId)}
+            onPauseInline={() => setActivePlayingPostId(null)}
             onPressPost={(postId) =>
               router.push({
                 pathname: '/(app)/post/[id]',
@@ -428,13 +450,14 @@ export default function SocialFeedHomeScreen() {
               })
             }
             onToggleLike={handleToggleLike}
-            onPlayVideo={(media) => setActiveVideo(media)}
           />
         )}
         ListHeaderComponent={renderListHeader}
         ListFooterComponent={renderListFooter}
         ListEmptyComponent={renderEmptyComponent}
         contentContainerStyle={styles.listContent}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -465,13 +488,6 @@ export default function SocialFeedHomeScreen() {
 
       {/* Bottom Navigation Tabs */}
       <BottomNavigation activeTab="feed" />
-
-      {/* Video Modal Player (Autoplay Disabled) */}
-      <VideoModal
-        visible={Boolean(activeVideo)}
-        media={activeVideo}
-        onClose={() => setActiveVideo(null)}
-      />
 
       {/* Member Profile & Tenant Switcher Modal */}
       <Modal

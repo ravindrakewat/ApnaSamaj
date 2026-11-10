@@ -111,27 +111,28 @@ export function validatePassword(
 }
 
 /**
- * Validates full name meets requirements (2 to 100 characters).
+ * Validates member full name.
+ * Length must be between 2 and 100 characters.
  */
 export function validateFullName(
   fullName: string,
   lang: 'hi' | 'en' = 'hi'
 ): ValidationResult {
-  const trimmed = fullName ? fullName.trim() : '';
-  if (!trimmed) {
+  if (!fullName || !fullName.trim()) {
     return {
       isValid: false,
       error: lang === 'hi' ? 'पूरा नाम आवश्यक है' : 'Full name is required',
     };
   }
 
+  const trimmed = fullName.trim();
   if (trimmed.length < 2) {
     return {
       isValid: false,
       error:
         lang === 'hi'
-          ? 'पूरा नाम कम से कम 2 अक्षरों का होना चाहिए'
-          : 'Full name must be at least 2 characters',
+          ? 'पूरा नाम कम से कम 2 वर्णों का होना चाहिए'
+          : 'Full name must be at least 2 characters long',
     };
   }
 
@@ -149,21 +150,33 @@ export function validateFullName(
 }
 
 /**
- * Validates community tenant slug.
+ * Validates community slug format.
+ * Must be alphanumeric with hyphens or underscores (2-50 chars).
  */
 export function validateCommunitySlug(
   slug: string,
   lang: 'hi' | 'en' = 'hi'
 ): ValidationResult {
-  const trimmed = slug ? slug.trim().toLowerCase() : '';
-  if (!trimmed) {
+  if (!slug || !slug.trim()) {
     return {
       isValid: false,
-      error: lang === 'hi' ? 'कम्युनिटी स्लग आवश्यक है' : 'Community slug is required',
+      error: lang === 'hi' ? 'समुदाय स्लग आवश्यक है' : 'Community slug is required',
     };
   }
 
-  if (!/^[a-z0-9_-]+$/.test(trimmed)) {
+  const trimmed = slug.trim().toLowerCase();
+  if (trimmed.length < 2 || trimmed.length > 50) {
+    return {
+      isValid: false,
+      error:
+        lang === 'hi'
+          ? 'समुदाय स्लग 2 से 50 वर्णों के बीच होना चाहिए'
+          : 'Community slug must be between 2 and 50 characters',
+    };
+  }
+
+  const slugRegex = /^[a-z0-9_\-]+$/;
+  if (!slugRegex.test(trimmed)) {
     return {
       isValid: false,
       error:
@@ -185,19 +198,43 @@ export const ALLOWED_IMAGE_MIMES = [
   'image/jpg',
 ];
 
+export const MAX_VIDEO_FILE_SIZE_BYTES = 30 * 1024 * 1024; // 30 MB
+export const MAX_VIDEO_DURATION_SECONDS = 90; // 90 seconds
+export const ALLOWED_VIDEO_MIMES = [
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/mov',
+];
+
+export type PostCategoryType =
+  | 'GENERAL'
+  | 'ANNOUNCEMENT'
+  | 'EVENT'
+  | 'EMPLOYMENT'
+  | 'GOVERNMENT_SCHEME'
+  | 'MATRIMONIAL';
+
 /**
- * Validates post title according to post type rules:
- * - ANNOUNCEMENT and EVENT require title (1-150 chars).
+ * Validates post title according to post category rules:
+ * - ANNOUNCEMENT, EVENT, EMPLOYMENT, GOVERNMENT_SCHEME, and MATRIMONIAL require title (1-150 chars).
  * - GENERAL post title is optional (max 150 chars).
  */
 export function validatePostTitle(
   title: string,
-  type: 'GENERAL' | 'ANNOUNCEMENT' | 'EVENT' = 'GENERAL',
+  type: PostCategoryType | string = 'GENERAL',
   lang: 'hi' | 'en' = 'hi'
 ): ValidationResult {
   const trimmed = title ? title.trim() : '';
 
-  if (type === 'ANNOUNCEMENT' || type === 'EVENT') {
+  const isTitleRequired =
+    type === 'ANNOUNCEMENT' ||
+    type === 'EVENT' ||
+    type === 'EMPLOYMENT' ||
+    type === 'GOVERNMENT_SCHEME' ||
+    type === 'MATRIMONIAL';
+
+  if (isTitleRequired) {
     if (!trimmed) {
       return {
         isValid: false,
@@ -285,6 +322,49 @@ export function validateImageAttachment(
         lang === 'hi'
           ? 'असमर्थित छवि प्रारूप (केवल JPEG, PNG, WebP और GIF समर्थित हैं)'
           : 'Unsupported image format (only JPEG, PNG, WebP, and GIF are supported)',
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Validates selected video size, duration, and format.
+ */
+export function validateVideoAttachment(
+  fileSizeBytes: number,
+  durationSeconds?: number,
+  mimeType?: string,
+  lang: 'hi' | 'en' = 'hi'
+): ValidationResult {
+  if (fileSizeBytes > MAX_VIDEO_FILE_SIZE_BYTES) {
+    return {
+      isValid: false,
+      error:
+        lang === 'hi'
+          ? 'वीडियो फ़ाइल 30MB की अधिकतम सीमा से अधिक है'
+          : 'Video file size exceeds the 30MB maximum limit',
+    };
+  }
+
+  if (durationSeconds !== undefined && durationSeconds > MAX_VIDEO_DURATION_SECONDS) {
+    return {
+      isValid: false,
+      error:
+        lang === 'hi'
+          ? `वीडियो 90 सेकंड से लंबा नहीं हो सकता (वर्तमान: ${Math.round(durationSeconds)}s)`
+          : `Video duration cannot exceed 90 seconds (actual: ${Math.round(durationSeconds)}s)`,
+    };
+  }
+
+  const cleanMime = mimeType ? mimeType.toLowerCase().trim() : '';
+  if (cleanMime && !ALLOWED_VIDEO_MIMES.includes(cleanMime)) {
+    return {
+      isValid: false,
+      error:
+        lang === 'hi'
+          ? 'असमर्थित वीडियो प्रारूप (केवल MP4, WebM और MOV समर्थित हैं)'
+          : 'Unsupported video format (only MP4, WebM, and MOV are supported)',
     };
   }
 

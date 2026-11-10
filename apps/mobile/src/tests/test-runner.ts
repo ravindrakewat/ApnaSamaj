@@ -59,6 +59,12 @@ async function runAll() {
   await runChatSearchMediaMobileTests();
   const { runChatDeletionModerationMobileTests } = await import('./chat-deletion-moderation-flow.test');
   await runChatDeletionModerationMobileTests();
+  const { runUnifiedVideoPlayerTests } = await import('./unified-video-player.test');
+  await runUnifiedVideoPlayerTests();
+  const { runInlineVideoPlaybackTests } = await import('./inline-video-playback.test');
+  await runInlineVideoPlaybackTests();
+  const { runWebToMobilePostParityTests } = await import('./web-to-mobile-post-parity.test');
+  await runWebToMobilePostParityTests();
 }
 
 runAll()

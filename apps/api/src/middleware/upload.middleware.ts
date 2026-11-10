@@ -138,12 +138,17 @@ const videoUpload = multer({
   fileFilter: videoFileFilter,
 });
 
+const videoUploadFields = videoUpload.fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'video', maxCount: 1 },
+]);
+
 export const singleVideoUpload = (
   req: Request,
   res: Response,
   next: NextFunction
 ): void => {
-  videoUpload.single('file')(req, res, (err: unknown) => {
+  videoUploadFields(req, res, (err: unknown) => {
     if (err) {
       if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
@@ -183,6 +188,13 @@ export const singleVideoUpload = (
       };
       res.status(400).json(response);
       return;
+    }
+
+    // Support both 'file' and 'video' multipart field names
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    const resolvedFile = files?.file?.[0] || files?.video?.[0] || (req as any).file;
+    if (resolvedFile) {
+      req.file = resolvedFile;
     }
 
     if (!req.file) {
