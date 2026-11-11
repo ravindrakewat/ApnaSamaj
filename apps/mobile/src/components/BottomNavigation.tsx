@@ -74,8 +74,8 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab })
         styles.container,
         {
           backgroundColor: theme.colors.surface,
-          borderTopColor: theme.colors.border,
-          paddingBottom: Math.max(insets.bottom, 10),
+          borderTopColor: '#E2E8F0',
+          paddingBottom: Math.max(insets.bottom, 8),
         },
       ]}
     >
@@ -91,11 +91,15 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab })
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
             accessibilityLabel={label}
+            hitSlop={4}
           >
+            {/* Top Active Indicator Highlight */}
+            {isActive && <View style={[styles.activeIndicatorBar, { backgroundColor: theme.colors.primary }]} />}
+
             <View
               style={[
                 styles.iconContainer,
-                isActive && { backgroundColor: theme.colors.primaryLight },
+                isActive && { backgroundColor: '#E0F2FE' },
               ]}
             >
               <Typography
@@ -105,10 +109,11 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab })
                 {tab.icon}
               </Typography>
             </View>
+
             <Typography
               variant="xs"
-              weight={isActive ? 'bold' : 'regular'}
-              color={isActive ? theme.colors.primary : theme.colors.textMuted}
+              weight={isActive ? 'bold' : 'medium'}
+              color={isActive ? theme.colors.primary : '#64748B'}
               style={styles.tabLabel}
               numberOfLines={1}
             >
@@ -123,24 +128,37 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab })
 
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 6,
+    borderTopWidth: 1,
+    paddingTop: 4,
     elevation: 8,
-    shadowColor: '#000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowRadius: 5,
+    zIndex: 10,
   },
   tabButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 2,
+    paddingVertical: 3,
     minWidth: 0,
+    position: 'relative',
+  },
+  activeIndicatorBar: {
+    position: 'absolute',
+    top: -4,
+    width: 24,
+    height: 3,
+    borderRadius: 1.5,
   },
   iconContainer: {
-    width: 32,
+    width: 36,
     height: 24,
     borderRadius: 12,
     justifyContent: 'center',
@@ -149,10 +167,11 @@ const styles = StyleSheet.create({
   },
   iconText: {
     fontSize: 15,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 10.5,
     textAlign: 'center',
+    letterSpacing: -0.1,
   },
 });

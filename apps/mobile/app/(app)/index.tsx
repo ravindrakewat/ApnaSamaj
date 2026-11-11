@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
+  TextInput,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -229,73 +230,138 @@ export default function SocialFeedHomeScreen() {
   // Header Component for FlatList
   const renderListHeader = () => (
     <View style={styles.listHeaderContainer}>
-      {/* Category Filter Chips */}
-      <View style={styles.filterRow}>
-        {(
-          [
-            { key: undefined, hi: 'सभी', en: 'All' },
-            { key: 'GENERAL' as PostType, hi: 'सामान्य', en: 'General' },
-            { key: 'ANNOUNCEMENT' as PostType, hi: 'सूचनाएं', en: 'Announcements' },
-            { key: 'EVENT' as PostType, hi: 'आयोजन', en: 'Events' },
-          ] as const
-        ).map((item) => {
-          const isSelected = selectedType === item.key;
-          return (
-            <Pressable
-              key={item.key || 'ALL'}
-              onPress={() => setSelectedType(item.key)}
-              style={[
-                styles.filterChip,
-                {
-                  borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                  backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
-                },
-              ]}
-              accessibilityRole="button"
-            >
-              <Typography
-                variant="xs"
-                weight="semibold"
-                color={isSelected ? theme.colors.textInverse : theme.colors.textPrimary}
-              >
-                {language === 'hi' ? item.hi : item.en}
-              </Typography>
-            </Pressable>
-          );
-        })}
+      {/* 1. Facebook-Style "What's on your mind?" Composer Box */}
+      <View style={[styles.createPromptCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+        <View style={[styles.promptAvatar, { backgroundColor: theme.colors.primaryLight }]}>
+          <Typography variant="sm" weight="bold" color={theme.colors.primaryDark}>
+            {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'स'}
+          </Typography>
+        </View>
+
+        <Pressable
+          onPress={() => router.push('/(app)/post/create')}
+          style={styles.promptInputPill}
+          accessibilityRole="button"
+          accessibilityLabel="Create a new post"
+        >
+          <Typography variant="xs" color={theme.colors.textMuted} numberOfLines={1}>
+            {language === 'hi'
+              ? 'अपने समाज से कुछ नया साझा करें...'
+              : "What's on your mind? Share with community..."}
+          </Typography>
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push('/(app)/post/create')}
+          style={styles.promptMediaButton}
+          accessibilityRole="button"
+          accessibilityLabel="Add photos or video"
+          hitSlop={8}
+        >
+          <Typography variant="md">📷</Typography>
+        </Pressable>
       </View>
 
-      {/* Search Input Bar */}
-      <View style={styles.searchRow}>
-        <Input
+      {/* 2. Category Filter Pills Carousel */}
+      <View style={styles.filterSection}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={[
+            { key: undefined, hi: 'सभी', en: 'All', icon: '📰' },
+            { key: 'GENERAL' as PostType, hi: 'सामान्य', en: 'General', icon: '💬' },
+            { key: 'ANNOUNCEMENT' as PostType, hi: 'सूचनाएं', en: 'Notices', icon: '📢' },
+            { key: 'EVENT' as PostType, hi: 'आयोजन', en: 'Events', icon: '📅' },
+          ]}
+          keyExtractor={(item) => item.key || 'ALL'}
+          contentContainerStyle={styles.filterScroll}
+          renderItem={({ item }) => {
+            const isSelected = selectedType === item.key;
+            return (
+              <Pressable
+                onPress={() => setSelectedType(item.key)}
+                style={[
+                  styles.filterChip,
+                  {
+                    borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                    backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
+                    borderWidth: isSelected ? 1.5 : 1,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+              >
+                <Typography variant="xs" style={{ marginRight: 5 }}>
+                  {item.icon}
+                </Typography>
+                <Typography
+                  variant="xs"
+                  weight={isSelected ? 'bold' : 'semibold'}
+                  color={isSelected ? theme.colors.textInverse : theme.colors.textPrimary}
+                >
+                  {language === 'hi' ? item.hi : item.en}
+                </Typography>
+              </Pressable>
+            );
+          }}
+        />
+      </View>
+
+      {/* 3. Modern Search Bar */}
+      <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+        <Typography variant="sm" color={theme.colors.textMuted} style={styles.searchIcon}>
+          🔍
+        </Typography>
+
+        <TextInput
           placeholder={language === 'hi' ? 'समाज की पोस्ट खोजें...' : 'Search posts...'}
+          placeholderTextColor={theme.colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
           onSubmitEditing={handleSearchSubmit}
           returnKeyType="search"
-          containerStyle={styles.searchInput}
-          rightAccessory={
-            searchQuery ? (
-              <Pressable
-                onPress={handleClearSearch}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-              >
-                <Typography variant="xs" weight="bold" color={theme.colors.textMuted}>
-                  ✕
-                </Typography>
-              </Pressable>
-            ) : null
-          }
+          style={[styles.searchInputField, { color: theme.colors.textPrimary }]}
         />
-        <Button
-          title={language === 'hi' ? 'खोजें' : 'Search'}
-          size="sm"
+
+        {searchQuery.length > 0 && (
+          <Pressable
+            onPress={handleClearSearch}
+            style={styles.clearSearchBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
+            <Typography variant="xs" weight="bold" color={theme.colors.textMuted}>
+              ✕
+            </Typography>
+          </Pressable>
+        )}
+
+        <Pressable
           onPress={handleSearchSubmit}
-          style={styles.searchBtn}
-        />
+          style={[styles.searchActionBtn, { backgroundColor: theme.colors.primary }]}
+          accessibilityRole="button"
+          accessibilityLabel="Search"
+        >
+          <Typography variant="xs" weight="bold" color="#FFFFFF">
+            {language === 'hi' ? 'खोजें' : 'Search'}
+          </Typography>
+        </Pressable>
       </View>
+
+      {/* Active Search Result Tag */}
+      {activeSearch.length > 0 && (
+        <View style={styles.activeSearchResultRow}>
+          <Typography variant="xs" color={theme.colors.textSecondary}>
+            {language === 'hi' ? `खोज परिणाम: "${activeSearch}"` : `Results for: "${activeSearch}"`}
+          </Typography>
+          <Pressable onPress={handleClearSearch} hitSlop={6}>
+            <Typography variant="xs" weight="bold" color={theme.colors.primary}>
+              {language === 'hi' ? 'हटाएं' : 'Clear'}
+            </Typography>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 
@@ -315,7 +381,7 @@ export default function SocialFeedHomeScreen() {
       return (
         <View style={styles.footerDone}>
           <Typography variant="xs" color={theme.colors.textMuted}>
-            {language === 'hi' ? 'सभी पोस्ट लोड हो चुकी हैं' : 'All posts loaded'}
+            {language === 'hi' ? '• आप सभी नवीनतम पोस्ट देख चुके हैं •' : '• You have viewed all recent posts •'}
           </Typography>
         </View>
       );
@@ -381,43 +447,56 @@ export default function SocialFeedHomeScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      {/* Top Navbar */}
-      <View style={[styles.topBar, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, paddingTop: Math.max(insets.top, 12) }]}>
+      {/* 1. Modern Top Header Bar */}
+      <View
+        style={[
+          styles.topBar,
+          {
+            backgroundColor: theme.colors.surface,
+            borderBottomColor: theme.colors.border,
+            paddingTop: Math.max(insets.top, 10),
+          },
+        ]}
+      >
         <View style={styles.brandRow}>
           <View style={[styles.brandIcon, { backgroundColor: theme.colors.primary }]}>
-            <Typography variant="sm" weight="bold" color={theme.colors.textInverse}>
+            <Typography variant="md" weight="bold" color={theme.colors.textInverse}>
               अ
             </Typography>
           </View>
-          <View>
-            <Typography variant="md" weight="bold" color={theme.colors.primary}>
+          <View style={styles.brandTextCol}>
+            <Typography variant="md" weight="bold" color={theme.colors.primary} style={styles.brandTitle}>
               {language === 'hi' ? 'अपना समाज' : 'Apna Samaj'}
             </Typography>
-            <Typography variant="xs" color={theme.colors.textMuted}>
-              {communitySlug}
-            </Typography>
+            <View style={styles.communitySlugPill}>
+              <Typography variant="xs" weight="bold" color="#0369A1" style={{ fontSize: 10 }}>
+                {communitySlug}
+              </Typography>
+            </View>
           </View>
         </View>
 
         <View style={styles.topActions}>
-          {/* Language Toggle Pill */}
+          {/* Language Switcher Pill */}
           <Pressable
             onPress={toggleLanguage}
             style={[styles.langPill, { borderColor: theme.colors.border }]}
             accessibilityRole="button"
             accessibilityLabel="Switch language"
+            hitSlop={8}
           >
-            <Typography variant="xs" weight="semibold" color={theme.colors.primary}>
+            <Typography variant="xs" weight="bold" color={theme.colors.primary}>
               {language === 'hi' ? 'English' : 'हिन्दी'}
             </Typography>
           </Pressable>
 
-          {/* User Profile Avatar / Drawer Trigger */}
+          {/* User Profile Avatar */}
           <Pressable
             onPress={() => router.push('/(app)/profile' as any)}
-            style={[styles.profileAvatar, { backgroundColor: theme.colors.primaryLight }]}
+            style={[styles.profileAvatar, { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary }]}
             accessibilityRole="button"
-            accessibilityLabel="Open profile options"
+            accessibilityLabel="Open profile"
+            hitSlop={8}
           >
             <Typography variant="xs" weight="bold" color={theme.colors.primaryDark}>
               {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'स'}
@@ -426,7 +505,7 @@ export default function SocialFeedHomeScreen() {
         </View>
       </View>
 
-      {/* Main Social Feed List */}
+      {/* 2. Main Social Feed FlatList */}
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
@@ -455,7 +534,10 @@ export default function SocialFeedHomeScreen() {
         ListHeaderComponent={renderListHeader}
         ListFooterComponent={renderListFooter}
         ListEmptyComponent={renderEmptyComponent}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: Math.max(insets.bottom, 16) + 70 },
+        ]}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         refreshControl={
@@ -471,25 +553,31 @@ export default function SocialFeedHomeScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Floating Action Button (FAB) - Create Post */}
+      {/* 3. Floating Action Button (FAB) - Create Post */}
       <Pressable
-        style={[styles.fab, { backgroundColor: theme.colors.primary, bottom: 64 + Math.max(insets.bottom, 10) }]}
+        style={[
+          styles.fab,
+          {
+            backgroundColor: theme.colors.primary,
+            bottom: Math.max(insets.bottom, 12) + 64,
+          },
+        ]}
         onPress={() => router.push('/(app)/post/create')}
         accessibilityRole="button"
         accessibilityLabel={language === 'hi' ? 'नई पोस्ट लिखें' : 'Create new post'}
       >
         <Typography variant="md" weight="bold" color={theme.colors.textInverse} style={styles.fabIcon}>
-          +
+          ✍️
         </Typography>
         <Typography variant="xs" weight="bold" color={theme.colors.textInverse} style={styles.fabText}>
           {language === 'hi' ? 'पोस्ट लिखें' : 'Post'}
         </Typography>
       </Pressable>
 
-      {/* Bottom Navigation Tabs */}
+      {/* 4. Bottom Navigation Tabs */}
       <BottomNavigation activeTab="feed" />
 
-      {/* Member Profile & Tenant Switcher Modal */}
+      {/* 5. Member Profile & Tenant Switcher Modal */}
       <Modal
         visible={isProfileModalOpen}
         transparent
@@ -572,9 +660,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    elevation: 2,
+    elevation: 3,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    zIndex: 10,
   },
   brandRow: {
     flexDirection: 'row',
@@ -582,11 +675,27 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   brandIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  brandTextCol: {
+    justifyContent: 'center',
+  },
+  brandTitle: {
+    fontSize: 17,
+    lineHeight: 20,
+    letterSpacing: -0.3,
+  },
+  communitySlugPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginTop: 2,
   },
   topActions: {
     flexDirection: 'row',
@@ -596,71 +705,128 @@ const styles = StyleSheet.create({
   langPill: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
+    backgroundColor: '#F8FAFC',
   },
   profileAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
   },
   listContent: {
     paddingHorizontal: 12,
-    paddingBottom: 80,
+  },
+  listHeaderContainer: {
+    paddingTop: 10,
+    marginBottom: 6,
+  },
+  createPromptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 10,
+    gap: 10,
+  },
+  promptAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promptInputPill: {
+    flex: 1,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  promptMediaButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  filterSection: {
+    marginBottom: 10,
+  },
+  filterScroll: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingLeft: 10,
+    paddingRight: 4,
+    height: 42,
+    marginBottom: 6,
+  },
+  searchIcon: {
+    marginRight: 6,
+  },
+  searchInputField: {
+    flex: 1,
+    height: '100%',
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+  clearSearchBtn: {
+    padding: 6,
+    marginRight: 4,
+  },
+  searchActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  activeSearchResultRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    marginBottom: 6,
   },
   fab: {
     position: 'absolute',
-    bottom: 72,
-    right: 20,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 28,
+    paddingVertical: 11,
+    borderRadius: 24,
     elevation: 6,
-    shadowColor: '#000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.27,
-    shadowRadius: 4.65,
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
     gap: 6,
     zIndex: 10,
   },
   fabIcon: {
-    fontSize: 20,
-    lineHeight: 22,
+    fontSize: 16,
   },
   fabText: {
-    letterSpacing: 0.3,
-  },
-  listHeaderContainer: {
-    paddingTop: 12,
-    marginBottom: 8,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-    flexWrap: 'wrap',
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    marginBottom: 0,
-  },
-  searchBtn: {
-    height: 48,
+    letterSpacing: 0.2,
   },
   footerLoader: {
     alignItems: 'center',

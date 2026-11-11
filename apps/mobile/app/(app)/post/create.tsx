@@ -18,7 +18,6 @@ import { PostType, PostMediaInput, UserRole } from '@apnasamaj/shared-types';
 import {
   Typography,
   Card,
-  Input,
   Button,
   Badge,
 } from '../../../src/components';
@@ -93,6 +92,10 @@ export default function CreatePostScreen() {
   const [attachedYoutubeVideo, setAttachedYoutubeVideo] = useState<ParsedYouTubeVideo | null>(null);
   const [youtubeInputError, setYoutubeInputError] = useState<string | null>(null);
 
+  // Focus States
+  const [isTitleFocused, setIsTitleFocused] = useState<boolean>(false);
+  const [isContentFocused, setIsContentFocused] = useState<boolean>(false);
+
   // Submission & Validation States
   const [titleError, setTitleError] = useState<string | undefined>();
   const [contentError, setContentError] = useState<string | undefined>();
@@ -112,6 +115,13 @@ export default function CreatePostScreen() {
 
   const hasMediaError =
     mediaList.some((m) => Boolean(m.error)) || Boolean(attachedVideo?.error);
+
+  const hasFormContent =
+    title.trim().length > 0 ||
+    content.trim().length > 0 ||
+    mediaList.length > 0 ||
+    Boolean(attachedVideo) ||
+    Boolean(attachedYoutubeVideo);
 
   // ---------------------------------------------------------------------------
   // 1. Photo Picker & Upload
@@ -421,6 +431,20 @@ export default function CreatePostScreen() {
     !hasMediaError &&
     !isSubmitting;
 
+  const handleClearAll = () => {
+    setTitle('');
+    setContent('');
+    setMediaList([]);
+    setAttachedVideo(null);
+    setAttachedYoutubeVideo(null);
+    setSelectedCategory('GENERAL');
+    setTitleError(undefined);
+    setContentError(undefined);
+    setSubmitError(null);
+    setSuccessMessage(null);
+    setYoutubeInputOpen(false);
+  };
+
   const handlePublish = async () => {
     if (isSubmittingRef.current || !canPublish) return;
 
@@ -541,7 +565,7 @@ export default function CreatePostScreen() {
         : '✅ Post published successfully!';
       setSuccessMessage(successMsg);
 
-      // 6. Seamlessly redirect back to feed after short delay for user feedback
+      // 6. Seamlessly redirect back to feed after short delay
       setTimeout(() => {
         if (router.canGoBack()) {
           router.back();
@@ -563,340 +587,698 @@ export default function CreatePostScreen() {
     }
   };
 
+  // Category Configuration Data
+  const categoriesList = [
+    {
+      key: 'GENERAL' as PostCategoryType,
+      hi: 'सामान्य',
+      en: 'General',
+      icon: '💬',
+      subHi: 'विचार व चर्चा',
+      subEn: 'Discussions',
+      color: '#0284C7',
+      bgLight: '#E0F2FE',
+    },
+    ...(isAdminOrMod
+      ? [
+          {
+            key: 'ANNOUNCEMENT' as PostCategoryType,
+            hi: 'सूचना',
+            en: 'Announcement',
+            icon: '📢',
+            subHi: 'आधिकारिक घोषणा',
+            subEn: 'Official Notice',
+            color: '#DC2626',
+            bgLight: '#FEE2E2',
+          },
+        ]
+      : []),
+    {
+      key: 'EVENT' as PostCategoryType,
+      hi: 'आयोजन',
+      en: 'Event',
+      icon: '📅',
+      subHi: 'समारोह व बैठक',
+      subEn: 'Events & Meetings',
+      color: '#059669',
+      bgLight: '#D1FAE5',
+    },
+    {
+      key: 'EMPLOYMENT' as PostCategoryType,
+      hi: 'रोजगार',
+      en: 'Employment',
+      icon: '💼',
+      subHi: 'नौकरी व अवसर',
+      subEn: 'Jobs & Careers',
+      color: '#7C3AED',
+      bgLight: '#EDE9FE',
+    },
+    {
+      key: 'GOVERNMENT_SCHEME' as PostCategoryType,
+      hi: 'सरकारी योजना',
+      en: 'Govt Scheme',
+      icon: '🏛️',
+      subHi: 'कल्याणकारी योजनाएं',
+      subEn: 'Welfare Schemes',
+      color: '#0D9488',
+      bgLight: '#CCFBF1',
+    },
+    {
+      key: 'MATRIMONIAL' as PostCategoryType,
+      hi: 'वैवाहिक',
+      en: 'Matrimonial',
+      icon: '💍',
+      subHi: 'रिश्ते व बायोडाटा',
+      subEn: 'Match & Biodata',
+      color: '#DB2777',
+      bgLight: '#FCE7F3',
+    },
+  ] as const;
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={[styles.screen, { backgroundColor: theme.colors.background }]}
     >
+      {/* 1. Modern Header Bar */}
+      <View style={[styles.navHeader, { paddingTop: Math.max(insets.top, 12), backgroundColor: theme.colors.surface }]}>
+        <Pressable
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(app)' as any);
+            }
+          }}
+          style={styles.backButtonPill}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={8}
+        >
+          <Typography variant="sm" weight="bold" color={theme.colors.primary}>
+            {isHindi ? '← वापस' : '← Back'}
+          </Typography>
+        </Pressable>
+
+        <View style={styles.headerCenter}>
+          <Typography variant="md" weight="bold" color={theme.colors.textPrimary}>
+            {isHindi ? 'नई पोस्ट बनाएं' : 'Create Post'}
+          </Typography>
+          <Typography variant="xs" color={theme.colors.textMuted} style={styles.communityScopeText}>
+            {isHindi ? '🌍 अपना समाज फ़ीड' : '🌍 Apna Samaj Feed'}
+          </Typography>
+        </View>
+
+        <Pressable
+          onPress={handleClearAll}
+          disabled={!hasFormContent}
+          style={[styles.clearButtonPill, !hasFormContent && styles.clearButtonDisabled]}
+          accessibilityRole="button"
+          accessibilityLabel="Clear form"
+          hitSlop={8}
+        >
+          <Typography
+            variant="xs"
+            weight="semibold"
+            color={hasFormContent ? theme.colors.error : theme.colors.textMuted}
+          >
+            {isHindi ? 'साफ़ करें' : 'Clear'}
+          </Typography>
+        </Pressable>
+      </View>
+
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 16) }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 24) + 80 },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Top Header Row with Back Button */}
-        <View style={styles.topHeader}>
-          <Pressable
-            onPress={() => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace('/(app)' as any);
-              }
-            }}
-            style={styles.backBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <Typography variant="sm" weight="semibold" color={theme.colors.primary}>
-              {isHindi ? '← वापस' : '← Back'}
-            </Typography>
-          </Pressable>
-
-          <Typography variant="md" weight="bold" color={theme.colors.textPrimary}>
-            {isHindi ? 'नई पोस्ट बनाएं' : 'Create New Post'}
-          </Typography>
-
-          <Pressable
-            onPress={() => {
-              setTitle('');
-              setContent('');
-              setMediaList([]);
-              setAttachedVideo(null);
-              setAttachedYoutubeVideo(null);
-              setSelectedCategory('GENERAL');
-              setTitleError(undefined);
-              setContentError(undefined);
-              setSubmitError(null);
-              setSuccessMessage(null);
-            }}
-            style={styles.clearBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Clear fields"
-          >
-            <Typography variant="xs" color={theme.colors.textMuted}>
-              {isHindi ? 'साफ़ करें' : 'Clear'}
-            </Typography>
-          </Pressable>
-        </View>
-
-        {/* Post Form Card */}
-        <Card style={styles.formCard}>
-          {/* Success Confirmation Banner */}
-          {successMessage && (
-            <View style={[styles.successBanner, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
+        {/* Success Confirmation Banner */}
+        {successMessage && (
+          <View style={styles.successBanner}>
+            <View style={styles.successIconCircle}>
+              <Typography variant="md" color="#166534">
+                ✓
+              </Typography>
+            </View>
+            <View style={styles.successTextContainer}>
               <Typography variant="sm" weight="bold" color="#166534">
                 {successMessage}
               </Typography>
               <Typography variant="xs" color="#15803D" style={{ marginTop: 2 }}>
                 {isHindi ? 'फ़ीड पर रीडायरेक्ट किया जा रहा है...' : 'Redirecting to community feed...'}
               </Typography>
-              <Pressable
-                onPress={() => {
-                  if (router.canGoBack()) {
-                    router.back();
-                  } else {
-                    router.replace('/(app)' as any);
-                  }
-                }}
-                style={styles.successActionBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Go to feed"
-              >
-                <Typography variant="xs" weight="bold" color="#FFFFFF">
-                  {isHindi ? 'फ़ीड देखें →' : 'View Feed →'}
-                </Typography>
-              </Pressable>
             </View>
-          )}
-
-          {/* Server / Publish Error Alert */}
-          {submitError && (
-            <View
-              style={[
-                styles.errorBanner,
-                {
-                  backgroundColor: theme.colors.errorLight,
-                  borderColor: theme.colors.error,
-                },
-              ]}
+            <Pressable
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/(app)' as any);
+                }
+              }}
+              style={styles.successActionBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Go to feed"
             >
-              <Typography variant="xs" weight="medium" color={theme.colors.error}>
-                {submitError}
+              <Typography variant="xs" weight="bold" color="#FFFFFF">
+                {isHindi ? 'देखें →' : 'View →'}
               </Typography>
-            </View>
-          )}
+            </Pressable>
+          </View>
+        )}
 
-          {/* User Author Row */}
-          <View style={styles.authorRow}>
-            <View style={[styles.avatarInitial, { backgroundColor: theme.colors.primary }]}>
-              <Typography variant="sm" weight="bold" color={theme.colors.textInverse}>
-                {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'स'}
-              </Typography>
-            </View>
-            <View style={styles.authorMeta}>
+        {/* Server / Publish Error Alert */}
+        {submitError && (
+          <View style={[styles.errorBanner, { backgroundColor: theme.colors.errorLight, borderColor: theme.colors.error }]}>
+            <Typography variant="sm" color={theme.colors.error} style={{ marginRight: 6 }}>
+              ⚠️
+            </Typography>
+            <Typography variant="xs" weight="medium" color={theme.colors.error} style={{ flex: 1 }}>
+              {submitError}
+            </Typography>
+          </View>
+        )}
+
+        {/* Author Info Bar */}
+        <View style={[styles.authorCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <View style={[styles.avatarInitial, { backgroundColor: theme.colors.primary }]}>
+            <Typography variant="md" weight="bold" color={theme.colors.textInverse}>
+              {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'स'}
+            </Typography>
+          </View>
+          <View style={styles.authorMeta}>
+            <View style={styles.authorNameRow}>
               <Typography variant="sm" weight="bold" color={theme.colors.textPrimary}>
                 {user?.fullName || (isHindi ? 'समाज सदस्य' : 'Community Member')}
               </Typography>
-              <Typography variant="xs" color={theme.colors.textMuted}>
-                {isHindi ? 'अपने समाज के साथ साझा करें' : 'Share with community'}
+              {isAdminOrMod && (
+                <View style={styles.roleBadgeContainer}>
+                  <Badge
+                    label={isHindi ? 'प्रशासक' : 'Admin'}
+                    variant="info"
+                    size="sm"
+                  />
+                </View>
+              )}
+            </View>
+            <View style={styles.audienceRow}>
+              <Typography variant="xs" color={theme.colors.textSecondary}>
+                {isHindi ? 'समाज के साथ साझा कर रहे हैं • 🌐 सार्वजनिक' : 'Sharing with community • 🌐 Public'}
               </Typography>
             </View>
           </View>
+        </View>
 
-          {/* 1. Category Selector Chips */}
-          <Typography variant="sm" weight="medium" style={styles.sectionLabel}>
-            {isHindi ? 'पोस्ट का प्रकार चुनें' : 'Select Category'}
+        {/* 2. Modern Post Type Selectable Cards */}
+        <View style={styles.sectionHeaderRow}>
+          <Typography variant="sm" weight="bold" color={theme.colors.textPrimary}>
+            {isHindi ? 'पोस्ट का प्रकार चुनें' : 'Select Post Type'}
           </Typography>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryScroll}
-          >
-            {(
-              [
-                { key: 'GENERAL' as PostCategoryType, hi: '💬 सामान्य', en: '💬 General' },
-                ...(isAdminOrMod
-                  ? [{ key: 'ANNOUNCEMENT' as PostCategoryType, hi: '📢 सूचना', en: '📢 Announcement' }]
-                  : []),
-                { key: 'EVENT' as PostCategoryType, hi: '📅 आयोजन', en: '📅 Event' },
-                { key: 'EMPLOYMENT' as PostCategoryType, hi: '💼 रोजगार', en: '💼 Employment' },
-                { key: 'GOVERNMENT_SCHEME' as PostCategoryType, hi: '🏛️ सरकारी योजना', en: '🏛️ Govt Scheme' },
-                { key: 'MATRIMONIAL' as PostCategoryType, hi: '💍 वैवाहिक', en: '💍 Matrimonial' },
-              ] as const
-            ).map((item) => {
-              const isSelected = selectedCategory === item.key;
-              return (
-                <Pressable
-                  key={item.key}
-                  onPress={() => {
-                    setSelectedCategory(item.key);
-                    setTitleError(undefined);
-                  }}
-                  style={[
-                    styles.typeChip,
-                    {
-                      borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                      backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
-                    },
-                  ]}
-                  accessibilityRole="button"
-                >
-                  <Typography
-                    variant="xs"
-                    weight="semibold"
-                    color={isSelected ? theme.colors.textInverse : theme.colors.textPrimary}
-                  >
-                    {isHindi ? item.hi : item.en}
-                  </Typography>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          <Typography variant="xs" color={theme.colors.textMuted}>
+            {isHindi ? 'आवश्यकतानुसार चुनें' : 'Choose category'}
+          </Typography>
+        </View>
 
-          {/* Matrimonial Info Banner if selected */}
-          {selectedCategory === 'MATRIMONIAL' && (
-            <View style={[styles.infoBanner, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}>
-              <Typography variant="xs" color="#0369A1">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryCardsScroll}
+        >
+          {categoriesList.map((cat) => {
+            const isSelected = selectedCategory === cat.key;
+            return (
+              <Pressable
+                key={cat.key}
+                onPress={() => {
+                  setSelectedCategory(cat.key);
+                  setTitleError(undefined);
+                }}
+                style={[
+                  styles.categoryCard,
+                  {
+                    borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                    backgroundColor: isSelected ? '#EFF6FF' : theme.colors.surface,
+                    borderWidth: isSelected ? 2 : 1,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+              >
+                {/* Checkmark badge for selected state */}
+                {isSelected && (
+                  <View style={[styles.categoryCheckBadge, { backgroundColor: theme.colors.primary }]}>
+                    <Typography variant="xs" weight="bold" color="#FFFFFF" style={{ fontSize: 9 }}>
+                      ✓
+                    </Typography>
+                  </View>
+                )}
+
+                <View style={[styles.categoryIconCircle, { backgroundColor: cat.bgLight }]}>
+                  <Typography variant="md">{cat.icon}</Typography>
+                </View>
+
+                <Typography
+                  variant="sm"
+                  weight={isSelected ? 'bold' : 'semibold'}
+                  color={isSelected ? theme.colors.primaryDark : theme.colors.textPrimary}
+                  style={styles.categoryCardTitle}
+                  numberOfLines={1}
+                >
+                  {isHindi ? cat.hi : cat.en}
+                </Typography>
+
+                <Typography
+                  variant="xs"
+                  color={isSelected ? theme.colors.primary : theme.colors.textMuted}
+                  style={styles.categoryCardSubtitle}
+                  numberOfLines={1}
+                >
+                  {isHindi ? cat.subHi : cat.subEn}
+                </Typography>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* 3. Category-Specific Guidance Banner */}
+        {selectedCategory === 'ANNOUNCEMENT' && (
+          <View style={[styles.guidanceBanner, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+            <Typography variant="md" style={styles.guidanceIcon}>
+              📢
+            </Typography>
+            <View style={styles.guidanceTextCol}>
+              <Typography variant="xs" weight="bold" color="#991B1B">
+                {isHindi ? 'आधिकारिक सूचना (Official Announcement)' : 'Official Announcement'}
+              </Typography>
+              <Typography variant="xs" color="#B91C1C" style={styles.guidanceDesc}>
                 {isHindi
-                  ? '💍 वैवाहिक सूचना: यहाँ सामान्य वैवाहिक विवरण या सूचना साझा करें। आधिकारिक बायोडाटा एवं फ़ोटो प्रोफ़ाइल बनाने के लिए नीचे वैवाहिक अनुभाग पर जाएं।'
-                  : '💍 Matrimonial Notice: Share matrimonial announcements with the community. For a full verified matrimonial biodata profile, visit the Matrimonial tab.'}
+                  ? 'यह सूचना समाज के सभी सदस्यों को प्राथमिकता के साथ प्रदर्शित होगी। कृपया आधिकारिक व सटीक जानकारी ही दें।'
+                  : 'This notice will be highlighted for all community members. Please ensure accurate official information.'}
+              </Typography>
+            </View>
+          </View>
+        )}
+
+        {selectedCategory === 'EVENT' && (
+          <View style={[styles.guidanceBanner, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+            <Typography variant="md" style={styles.guidanceIcon}>
+              📅
+            </Typography>
+            <View style={styles.guidanceTextCol}>
+              <Typography variant="xs" weight="bold" color="#166534">
+                {isHindi ? 'आयोजन व समारोह (Community Event)' : 'Community Event'}
+              </Typography>
+              <Typography variant="xs" color="#15803D" style={styles.guidanceDesc}>
+                {isHindi
+                  ? 'कृपया शीर्षक में कार्यक्रम का नाम तथा विवरण में दिनांक, समय, मुख्य अतिथि व आयोजन स्थल (Venue) का उल्लेख करें।'
+                  : 'Please include the event name in the title, and specify the date, time, venue, and chief guests in the description.'}
+              </Typography>
+            </View>
+          </View>
+        )}
+
+        {selectedCategory === 'EMPLOYMENT' && (
+          <View style={[styles.guidanceBanner, { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE' }]}>
+            <Typography variant="md" style={styles.guidanceIcon}>
+              💼
+            </Typography>
+            <View style={styles.guidanceTextCol}>
+              <Typography variant="xs" weight="bold" color="#5B21B6">
+                {isHindi ? 'रोजगार व भर्ती अवसर (Employment & Job Opportunity)' : 'Employment & Job Opportunity'}
+              </Typography>
+              <Typography variant="xs" color="#6D28D9" style={styles.guidanceDesc}>
+                {isHindi
+                  ? 'कृपया पद का नाम, आवश्यक शैक्षणिक योग्यता, अनुभव, कार्य स्थल एवं आवेदन/संपर्क का तरीका विवरण में अवश्य लिखें।'
+                  : 'Please clearly state the job position, required qualifications, location, salary range, and contact details.'}
+              </Typography>
+            </View>
+          </View>
+        )}
+
+        {selectedCategory === 'GOVERNMENT_SCHEME' && (
+          <View style={[styles.guidanceBanner, { backgroundColor: '#F0FDFA', borderColor: '#99F6E4' }]}>
+            <Typography variant="md" style={styles.guidanceIcon}>
+              🏛️
+            </Typography>
+            <View style={styles.guidanceTextCol}>
+              <Typography variant="xs" weight="bold" color="#115E59">
+                {isHindi ? 'सरकारी योजना सहायता (Government Welfare Scheme)' : 'Government Welfare Scheme'}
+              </Typography>
+              <Typography variant="xs" color="#0F766E" style={styles.guidanceDesc}>
+                {isHindi
+                  ? 'योजना का नाम, मिलने वाले लाभ, आवश्यक दस्तावेज (Aadhaar, आय प्रमाण आदि) एवं आवेदन की अंतिम तिथि साझा करें।'
+                  : 'Share scheme benefits, eligibility criteria, required documents, and official application process.'}
+              </Typography>
+            </View>
+          </View>
+        )}
+
+        {selectedCategory === 'MATRIMONIAL' && (
+          <View style={[styles.guidanceBanner, { backgroundColor: '#FDF2F8', borderColor: '#FBCFE8' }]}>
+            <Typography variant="md" style={styles.guidanceIcon}>
+              💍
+            </Typography>
+            <View style={styles.guidanceTextCol}>
+              <Typography variant="xs" weight="bold" color="#9D174D">
+                {isHindi ? 'वैवाहिक सूचना (Matrimonial Notice)' : 'Matrimonial Notice'}
+              </Typography>
+              <Typography variant="xs" color="#BE185D" style={styles.guidanceDesc}>
+                {isHindi
+                  ? 'यहाँ सामान्य वैवाहिक सूचना साझा करें। यदि आप विस्तृत बायोडाटा, कुंडली एवं पारिवारिक विवरण के साथ प्रोफ़ाइल बनाना चाहते हैं, तो वैवाहिक अनुभाग का उपयोग करें।'
+                  : 'Share general matrimonial announcements here. For an official biodata profile with photos and horoscope, use the Matrimonial section.'}
+              </Typography>
+            </View>
+          </View>
+        )}
+
+        {/* 4. Title Input Section */}
+        <View style={[styles.cardSection, { backgroundColor: theme.colors.surface, borderColor: titleError ? theme.colors.error : isTitleFocused ? theme.colors.primary : theme.colors.border }]}>
+          <View style={styles.fieldHeaderRow}>
+            <View style={styles.fieldLabelContainer}>
+              <Typography variant="xs" weight="bold" color={theme.colors.textPrimary}>
+                {isHindi ? 'शीर्षक' : 'Title'}
+              </Typography>
+              <View
+                style={[
+                  styles.requiredBadgePill,
+                  { backgroundColor: isTitleRequired ? '#FEE2E2' : '#F1F5F9' },
+                ]}
+              >
+                <Typography
+                  variant="xs"
+                  weight="bold"
+                  color={isTitleRequired ? '#DC2626' : theme.colors.textMuted}
+                  style={{ fontSize: 10 }}
+                >
+                  {isTitleRequired
+                    ? isHindi ? 'आवश्यक *' : 'Required *'
+                    : isHindi ? 'वैकल्पिक' : 'Optional'}
+                </Typography>
+              </View>
+            </View>
+
+            <Typography
+              variant="xs"
+              weight="medium"
+              color={titleCharsRemaining < 20 ? theme.colors.error : theme.colors.textMuted}
+            >
+              {title.length}/150
+            </Typography>
+          </View>
+
+          <TextInput
+            placeholder={
+              selectedCategory === 'ANNOUNCEMENT'
+                ? isHindi ? 'सूचना का मुख्य विषय दर्ज करें *' : 'Enter announcement title *'
+                : selectedCategory === 'EVENT'
+                ? isHindi ? 'आयोजन का नाम दर्ज करें *' : 'Enter event title *'
+                : selectedCategory === 'EMPLOYMENT'
+                ? isHindi ? 'नौकरी / पद का नाम दर्ज करें *' : 'Enter job position / title *'
+                : selectedCategory === 'GOVERNMENT_SCHEME'
+                ? isHindi ? 'सरकारी योजना का नाम दर्ज करें *' : 'Enter government scheme name *'
+                : selectedCategory === 'MATRIMONIAL'
+                ? isHindi ? 'वैवाहिक सूचना शीर्षक दर्ज करें *' : 'Enter matrimonial notice title *'
+                : isHindi ? 'पोस्ट का शीर्षक (वैकल्पिक)' : 'Post title (optional)'
+            }
+            placeholderTextColor={theme.colors.textMuted}
+            value={title}
+            onFocus={() => setIsTitleFocused(true)}
+            onBlur={() => setIsTitleFocused(false)}
+            onChangeText={(text) => {
+              if (text.length <= 150) {
+                setTitle(text);
+                if (titleError) setTitleError(undefined);
+              }
+            }}
+            style={[
+              styles.titleInputField,
+              { color: theme.colors.textPrimary },
+            ]}
+            maxLength={150}
+          />
+
+          {titleError && (
+            <View style={styles.inlineErrorRow}>
+              <Typography variant="xs" color={theme.colors.error} style={{ marginRight: 4 }}>
+                ⚠️
+              </Typography>
+              <Typography variant="xs" weight="medium" color={theme.colors.error}>
+                {titleError}
+              </Typography>
+            </View>
+          )}
+        </View>
+
+        {/* 5. Description Input Section */}
+        <View style={[styles.cardSection, { backgroundColor: theme.colors.surface, borderColor: contentError ? theme.colors.error : isContentFocused ? theme.colors.primary : theme.colors.border }]}>
+          <View style={styles.fieldHeaderRow}>
+            <View style={styles.fieldLabelContainer}>
+              <Typography variant="xs" weight="bold" color={theme.colors.textPrimary}>
+                {isHindi ? 'विवरण' : 'Description'}
+              </Typography>
+            </View>
+
+            <Typography
+              variant="xs"
+              weight="medium"
+              color={charsRemaining < 200 ? theme.colors.error : theme.colors.textMuted}
+            >
+              {content.length}/5000
+            </Typography>
+          </View>
+
+          <TextInput
+            multiline
+            numberOfLines={6}
+            placeholder={
+              isHindi
+                ? 'अपने विचार, जानकारी या विवरण यहाँ विस्तार से लिखें...'
+                : 'Write your thoughts, details or information here in detail...'
+            }
+            placeholderTextColor={theme.colors.textMuted}
+            value={content}
+            onFocus={() => setIsContentFocused(true)}
+            onBlur={() => setIsContentFocused(false)}
+            onChangeText={(text) => {
+              if (text.length <= 5000) {
+                setContent(text);
+                if (contentError) setContentError(undefined);
+              }
+            }}
+            style={[
+              styles.contentInputField,
+              { color: theme.colors.textPrimary },
+            ]}
+            textAlignVertical="top"
+            maxLength={5000}
+          />
+
+          {contentError && (
+            <View style={styles.inlineErrorRow}>
+              <Typography variant="xs" color={theme.colors.error} style={{ marginRight: 4 }}>
+                ⚠️
+              </Typography>
+              <Typography variant="xs" weight="medium" color={theme.colors.error}>
+                {contentError}
               </Typography>
             </View>
           )}
 
-          {/* 2. Title Input (Required for Announcements, Events, Employment, Govt Scheme, Matrimonial) */}
-          <View style={styles.inputSection}>
-            <View style={styles.labelRow}>
-              <Typography variant="xs" weight="semibold" color={theme.colors.textSecondary}>
-                {isHindi ? 'शीर्षक (Title)' : 'Title'}
-                {isTitleRequired && (
-                  <Typography variant="xs" color={theme.colors.error}>
-                    {' *'}
-                  </Typography>
-                )}
-              </Typography>
-              <Typography
-                variant="xs"
-                color={titleCharsRemaining < 20 ? theme.colors.error : theme.colors.textMuted}
-              >
-                {titleCharsRemaining} {isHindi ? 'वर्ण शेष' : 'chars left'}
-              </Typography>
-            </View>
-
-            <Input
-              placeholder={
-                selectedCategory === 'ANNOUNCEMENT'
-                  ? isHindi ? 'सूचना का मुख्य विषय दर्ज करें *' : 'Enter announcement title *'
-                  : selectedCategory === 'EVENT'
-                  ? isHindi ? 'आयोजन का नाम दर्ज करें *' : 'Enter event title *'
-                  : selectedCategory === 'EMPLOYMENT'
-                  ? isHindi ? 'नौकरी / रोजगार का पद दर्ज करें *' : 'Enter job position / title *'
-                  : selectedCategory === 'GOVERNMENT_SCHEME'
-                  ? isHindi ? 'सरकारी योजना का नाम दर्ज करें *' : 'Enter government scheme name *'
-                  : selectedCategory === 'MATRIMONIAL'
-                  ? isHindi ? 'वैवाहिक सूचना शीर्षक दर्ज करें *' : 'Enter matrimonial notice title *'
-                  : isHindi ? 'पोस्ट का शीर्षक (वैकल्पिक)' : 'Post title (optional)'
-              }
-              value={title}
-              onChangeText={(text) => {
-                if (text.length <= 150) {
-                  setTitle(text);
-                  if (titleError) setTitleError(undefined);
-                }
-              }}
-              error={titleError}
-              containerStyle={styles.textInput}
-            />
+          <View style={styles.editorFooterHintRow}>
+            <Typography variant="xs" color={theme.colors.textMuted}>
+              {isHindi ? '💡 विनम्र व उपयोगी जानकारी साझा करें' : '💡 Share clear and helpful information'}
+            </Typography>
           </View>
+        </View>
 
-          {/* 3. Post Content Textarea */}
-          <View style={styles.inputSection}>
-            <View style={styles.labelRow}>
-              <Typography variant="xs" weight="semibold" color={theme.colors.textSecondary}>
-                {isHindi ? 'विवरण (Description)' : 'Description'}
+        {/* 6. Media Attachment Section */}
+        <View style={[styles.mediaCardContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <View style={styles.mediaSectionHeader}>
+            <View style={styles.mediaTitleRow}>
+              <Typography variant="sm" weight="bold" color={theme.colors.textPrimary}>
+                {isHindi ? 'मीडिया जोड़ें' : 'Attach Media'}
               </Typography>
-              <Typography
-                variant="xs"
-                color={charsRemaining < 200 ? theme.colors.error : theme.colors.textMuted}
-              >
-                {charsRemaining} {isHindi ? 'वर्ण शेष' : 'chars left'}
-              </Typography>
-            </View>
-
-            <TextInput
-              multiline
-              numberOfLines={5}
-              placeholder={
-                isHindi
-                  ? 'अपने विचार, जानकारी या विवरण यहाँ लिखें...'
-                  : 'Write your thoughts, details or information here...'
-              }
-              placeholderTextColor={theme.colors.textMuted}
-              value={content}
-              onChangeText={(text) => {
-                if (text.length <= 5000) {
-                  setContent(text);
-                  if (contentError) setContentError(undefined);
-                }
-              }}
-              style={[
-                styles.contentArea,
-                {
-                  borderColor: contentError ? theme.colors.error : theme.colors.border,
-                  color: theme.colors.textPrimary,
-                  backgroundColor: theme.colors.surface,
-                },
-              ]}
-              textAlignVertical="top"
-            />
-            {contentError && (
-              <Typography variant="xs" color={theme.colors.error} style={styles.fieldError}>
-                {contentError}
-              </Typography>
-            )}
-          </View>
-
-          {/* 4. Collapsible YouTube URL Input Box */}
-          {youtubeInputOpen && !attachedYoutubeVideo && (
-            <View style={[styles.youtubeInputContainer, { backgroundColor: '#F8FAFC', borderColor: theme.colors.border }]}>
-              <View style={styles.youtubeHeaderRow}>
-                <Typography variant="xs" weight="bold" color="#DC2626">
-                  🔴 {isHindi ? 'YouTube वीडियो लिंक जोड़ें' : 'Attach YouTube Video'}
+              <View style={[styles.mediaCountBadge, { backgroundColor: theme.colors.primaryLight }]}>
+                <Typography variant="xs" weight="bold" color={theme.colors.primaryDark}>
+                  {totalMediaCount}/4
                 </Typography>
+              </View>
+            </View>
+
+            <Typography variant="xs" color={theme.colors.textMuted}>
+              {isHindi ? 'फ़ोटो • वीडियो • YouTube' : 'Photos • Video • YouTube'}
+            </Typography>
+          </View>
+
+          {/* Quick Action Tiles */}
+          <View style={styles.mediaTilesRow}>
+            {/* 1. Photos Tile */}
+            <Pressable
+              onPress={handlePickImages}
+              disabled={isSubmitting || totalMediaCount >= MAX_TOTAL_MEDIA}
+              style={[
+                styles.mediaActionTile,
+                totalMediaCount >= MAX_TOTAL_MEDIA && styles.tileDisabled,
+                { borderColor: theme.colors.border },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Attach photos"
+            >
+              <View style={[styles.tileIconCircle, { backgroundColor: '#E0F2FE' }]}>
+                <Typography variant="md">📷</Typography>
+              </View>
+              <Typography variant="xs" weight="bold" color={theme.colors.textPrimary}>
+                {isHindi ? 'फ़ोटो' : 'Photo'}
+              </Typography>
+              <Typography variant="xs" color={theme.colors.textMuted} style={styles.tileSubtext}>
+                {mediaList.length > 0 ? `${mediaList.length}/4` : (isHindi ? 'अधिकतम 4' : 'Max 4')}
+              </Typography>
+            </Pressable>
+
+            {/* 2. Direct Video Tile */}
+            <Pressable
+              onPress={handlePickVideo}
+              disabled={
+                isSubmitting ||
+                Boolean(attachedVideo) ||
+                Boolean(attachedYoutubeVideo) ||
+                totalMediaCount >= MAX_TOTAL_MEDIA
+              }
+              style={[
+                styles.mediaActionTile,
+                (Boolean(attachedVideo) || Boolean(attachedYoutubeVideo) || totalMediaCount >= MAX_TOTAL_MEDIA) &&
+                  styles.tileDisabled,
+                { borderColor: theme.colors.border },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Attach video"
+            >
+              <View style={[styles.tileIconCircle, { backgroundColor: '#F3E8FF' }]}>
+                <Typography variant="md">🎥</Typography>
+              </View>
+              <Typography variant="xs" weight="bold" color={theme.colors.textPrimary}>
+                {isHindi ? 'वीडियो' : 'Video'}
+              </Typography>
+              <Typography variant="xs" color={theme.colors.textMuted} style={styles.tileSubtext}>
+                {attachedVideo ? (isHindi ? 'संलग्न है' : 'Attached') : (isHindi ? '30MB · 90s' : '30MB · 90s')}
+              </Typography>
+            </Pressable>
+
+            {/* 3. YouTube Link Tile */}
+            <Pressable
+              onPress={() => {
+                if (!attachedYoutubeVideo && !attachedVideo) {
+                  setYoutubeInputOpen((prev) => !prev);
+                }
+              }}
+              disabled={
+                isSubmitting ||
+                Boolean(attachedVideo) ||
+                Boolean(attachedYoutubeVideo) ||
+                totalMediaCount >= MAX_TOTAL_MEDIA
+              }
+              style={[
+                styles.mediaActionTile,
+                (Boolean(attachedVideo) || Boolean(attachedYoutubeVideo) || totalMediaCount >= MAX_TOTAL_MEDIA) &&
+                  styles.tileDisabled,
+                { borderColor: theme.colors.border },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Attach YouTube link"
+            >
+              <View style={[styles.tileIconCircle, { backgroundColor: '#FEE2E2' }]}>
+                <Typography variant="md">🔴</Typography>
+              </View>
+              <Typography variant="xs" weight="bold" color="#DC2626">
+                YouTube
+              </Typography>
+              <Typography variant="xs" color={theme.colors.textMuted} style={styles.tileSubtext}>
+                {attachedYoutubeVideo ? (isHindi ? 'संलग्न है' : 'Attached') : (isHindi ? 'लिंक जोड़ें' : 'Embed')}
+              </Typography>
+            </Pressable>
+          </View>
+
+          {/* YouTube Input Box (Expandable) */}
+          {youtubeInputOpen && !attachedYoutubeVideo && (
+            <View style={[styles.youtubeCardBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+              <View style={styles.youtubeCardHeader}>
+                <View style={styles.ytHeaderLeft}>
+                  <Typography variant="sm" color="#DC2626" style={{ marginRight: 6 }}>
+                    🔴
+                  </Typography>
+                  <Typography variant="xs" weight="bold" color="#991B1B">
+                    {isHindi ? 'YouTube वीडियो लिंक दर्ज करें' : 'Enter YouTube Video URL'}
+                  </Typography>
+                </View>
                 <Pressable onPress={() => setYoutubeInputOpen(false)} hitSlop={8}>
-                  <Typography variant="xs" color={theme.colors.textMuted}>
+                  <Typography variant="xs" weight="bold" color="#991B1B">
                     ✕
                   </Typography>
                 </Pressable>
               </View>
 
-              <View style={styles.youtubeInputRow}>
-                <Input
+              <View style={styles.youtubeInputGroup}>
+                <TextInput
                   placeholder="https://www.youtube.com/watch?v=..."
+                  placeholderTextColor="#F87171"
                   value={youtubeUrlInput}
                   onChangeText={(val) => {
                     setYoutubeUrlInput(val);
                     if (youtubeInputError) setYoutubeInputError(null);
                   }}
-                  containerStyle={styles.youtubeField}
-                  error={youtubeInputError || undefined}
+                  style={[
+                    styles.ytUrlInput,
+                    { borderColor: youtubeInputError ? theme.colors.error : '#FCA5A5' },
+                  ]}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
                 <Button
                   title={isHindi ? 'जोड़ें' : 'Add'}
                   size="sm"
                   onPress={handleAddYouTubeVideo}
-                  style={styles.addYtBtn}
+                  style={styles.ytAddButton}
                 />
               </View>
+
+              {youtubeInputError && (
+                <Typography variant="xs" color={theme.colors.error} style={{ marginTop: 4 }}>
+                  {youtubeInputError}
+                </Typography>
+              )}
             </View>
           )}
 
-          {/* 5. Attached YouTube Video Preview Card */}
+          {/* Attached YouTube Preview Card */}
           {attachedYoutubeVideo && (
-            <View style={[styles.mediaCard, { borderColor: theme.colors.border }]}>
+            <View style={[styles.attachedYtCard, { borderColor: '#FCA5A5' }]}>
               <Image
                 source={{ uri: attachedYoutubeVideo.thumbnailUrl }}
-                style={styles.ytThumb}
+                style={styles.attachedYtThumb}
                 resizeMode="cover"
               />
-              <View style={styles.mediaDetails}>
-                <Typography variant="xs" weight="bold" color="#DC2626">
-                  🔴 YouTube
-                </Typography>
-                <Typography variant="xs" color={theme.colors.textPrimary} numberOfLines={1}>
+              <View style={styles.attachedYtMeta}>
+                <View style={styles.ytBadgeTag}>
+                  <Typography variant="xs" weight="bold" color="#DC2626" style={{ fontSize: 10 }}>
+                    🔴 YouTube
+                  </Typography>
+                </View>
+                <Typography variant="xs" weight="bold" color={theme.colors.textPrimary} numberOfLines={1}>
                   ID: {attachedYoutubeVideo.videoId}
                 </Typography>
-                {attachedYoutubeVideo.startTimeSeconds !== undefined && (
-                  <Typography variant="xs" color={theme.colors.textMuted}>
-                    {isHindi ? `शुरुआत: ${attachedYoutubeVideo.startTimeSeconds}s` : `Starts at: ${attachedYoutubeVideo.startTimeSeconds}s`}
-                  </Typography>
-                )}
+                <Typography variant="xs" color={theme.colors.textMuted} numberOfLines={1}>
+                  {attachedYoutubeVideo.embedUrl}
+                </Typography>
               </View>
               <Pressable
                 onPress={handleRemoveYouTubeVideo}
-                style={styles.removeMediaBtn}
+                style={styles.circularRemoveBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Remove YouTube video"
+                hitSlop={8}
               >
                 <Typography variant="xs" weight="bold" color="#FFFFFF">
                   ✕
@@ -905,34 +1287,45 @@ export default function CreatePostScreen() {
             </View>
           )}
 
-          {/* 6. Attached Direct Video Preview Card with Progress & Retry */}
+          {/* Attached Direct Video Preview Card */}
           {attachedVideo && (
-            <View style={[styles.videoPreviewCard, { borderColor: attachedVideo.error ? theme.colors.error : theme.colors.border }]}>
-              <View style={styles.videoCardTop}>
-                <View style={styles.videoIconPlaceholder}>
+            <View
+              style={[
+                styles.attachedVideoCard,
+                { borderColor: attachedVideo.error ? theme.colors.error : theme.colors.border },
+              ]}
+            >
+              <View style={styles.attachedVideoTop}>
+                <View style={styles.attachedVideoIconCircle}>
                   <Typography variant="md" color="#FFFFFF">
                     ▶
                   </Typography>
                 </View>
 
-                <View style={styles.mediaDetails}>
-                  <Typography variant="xs" weight="bold" color={theme.colors.primary}>
-                    🎥 {isHindi ? 'वीडियो संलग्न है' : 'Video Attached'}
-                  </Typography>
-                  <Typography variant="xs" color={theme.colors.textPrimary} numberOfLines={1}>
+                <View style={styles.attachedVideoMeta}>
+                  <View style={styles.videoBadgeTag}>
+                    <Typography variant="xs" weight="bold" color={theme.colors.primaryDark} style={{ fontSize: 10 }}>
+                      🎥 {isHindi ? 'वीडियो संलग्न है' : 'Video Attached'}
+                    </Typography>
+                  </View>
+                  <Typography variant="xs" weight="bold" color={theme.colors.textPrimary} numberOfLines={1}>
                     {attachedVideo.name}
                   </Typography>
                   <Typography variant="xs" color={theme.colors.textMuted}>
                     {(attachedVideo.size / (1024 * 1024)).toFixed(1)} MB
-                    {attachedVideo.durationSeconds !== undefined && ` · ${Math.floor(attachedVideo.durationSeconds / 60)}:${String(attachedVideo.durationSeconds % 60).padStart(2, '0')}`}
+                    {attachedVideo.durationSeconds !== undefined &&
+                      ` · ${Math.floor(attachedVideo.durationSeconds / 60)}:${String(
+                        attachedVideo.durationSeconds % 60
+                      ).padStart(2, '0')}`}
                   </Typography>
                 </View>
 
                 <Pressable
                   onPress={handleRemoveVideo}
-                  style={styles.removeMediaBtn}
+                  style={styles.circularRemoveBtn}
                   accessibilityRole="button"
                   accessibilityLabel="Remove video"
+                  hitSlop={8}
                 >
                   <Typography variant="xs" weight="bold" color="#FFFFFF">
                     ✕
@@ -942,24 +1335,29 @@ export default function CreatePostScreen() {
 
               {/* Upload Progress Bar */}
               {attachedVideo.isUploading && (
-                <View style={styles.progressContainer}>
-                  <View style={styles.progressBarTrack}>
+                <View style={styles.uploadProgressBox}>
+                  <View style={styles.uploadProgressTrack}>
                     <View
                       style={[
-                        styles.progressBarFill,
+                        styles.uploadProgressBarFill,
                         { width: `${attachedVideo.uploadProgress}%`, backgroundColor: theme.colors.primary },
                       ]}
                     />
                   </View>
-                  <Typography variant="xs" color={theme.colors.textMuted} style={styles.progressLabel}>
-                    {isHindi ? `अपलोड हो रहा है: ${attachedVideo.uploadProgress}%` : `Uploading: ${attachedVideo.uploadProgress}%`}
-                  </Typography>
+                  <View style={styles.progressPercentRow}>
+                    <Typography variant="xs" color={theme.colors.textSecondary}>
+                      {isHindi ? 'वीडियो अपलोड जारी है...' : 'Uploading video...'}
+                    </Typography>
+                    <Typography variant="xs" weight="bold" color={theme.colors.primaryDark}>
+                      {attachedVideo.uploadProgress}%
+                    </Typography>
+                  </View>
                 </View>
               )}
 
               {/* Upload Error & Retry */}
               {attachedVideo.error && (
-                <View style={styles.errorRetryRow}>
+                <View style={styles.uploadErrorRow}>
                   <Typography variant="xs" color={theme.colors.error} style={{ flex: 1 }}>
                     {attachedVideo.error}
                   </Typography>
@@ -974,28 +1372,31 @@ export default function CreatePostScreen() {
             </View>
           )}
 
-          {/* 7. Attached Images Grid Preview (Up to 4 images) */}
+          {/* Attached Images Responsive Grid (Up to 4 images) */}
           {mediaList.length > 0 && (
-            <View style={styles.imageGridContainer}>
-              <Typography variant="xs" weight="semibold" color={theme.colors.textSecondary} style={{ marginBottom: 6 }}>
+            <View style={styles.imageGridSection}>
+              <Typography variant="xs" weight="bold" color={theme.colors.textSecondary} style={styles.gridSectionTitle}>
                 {isHindi ? `संलग्न फ़ोटो (${mediaList.length}/4)` : `Attached Photos (${mediaList.length}/4)`}
               </Typography>
-              <View style={styles.imageGrid}>
+              <View style={styles.imagesGrid}>
                 {mediaList.map((item) => (
-                  <View key={item.id} style={styles.imageGridItem}>
-                    <Image source={{ uri: item.uri }} style={styles.gridImage} resizeMode="cover" />
+                  <View key={item.id} style={styles.gridImageWrapper}>
+                    <Image source={{ uri: item.uri }} style={styles.imageTile} resizeMode="cover" />
 
-                    {/* Upload Spinner Overlay */}
+                    {/* Loading Spinner Overlay */}
                     {item.isUploading && (
-                      <View style={styles.imageUploadingOverlay}>
+                      <View style={styles.uploadingOverlay}>
                         <ActivityIndicator size="small" color="#FFFFFF" />
+                        <Typography variant="xs" weight="semibold" color="#FFFFFF" style={{ marginTop: 4, fontSize: 10 }}>
+                          {isHindi ? 'अपलोड...' : 'Uploading...'}
+                        </Typography>
                       </View>
                     )}
 
                     {/* Error Overlay with Retry */}
                     {item.error && (
                       <View style={styles.imageErrorOverlay}>
-                        <Pressable onPress={() => handleRetryImageUpload(item.id)} style={styles.retryImageBtn}>
+                        <Pressable onPress={() => handleRetryImageUpload(item.id)} style={styles.retryImagePill}>
                           <Typography variant="xs" weight="bold" color="#FFFFFF">
                             ↻ {isHindi ? 'पुनः' : 'Retry'}
                           </Typography>
@@ -1003,12 +1404,13 @@ export default function CreatePostScreen() {
                       </View>
                     )}
 
-                    {/* Remove Button */}
+                    {/* Circular Remove Button */}
                     <Pressable
                       onPress={() => handleRemoveImage(item.id)}
-                      style={styles.removeImagePill}
+                      style={styles.imageRemovePill}
                       accessibilityRole="button"
                       accessibilityLabel="Remove photo"
+                      hitSlop={8}
                     >
                       <Typography variant="xs" weight="bold" color="#FFFFFF">
                         ✕
@@ -1019,94 +1421,57 @@ export default function CreatePostScreen() {
               </View>
             </View>
           )}
+        </View>
+      </ScrollView>
 
-          {/* 8. Media Attachment Buttons Row */}
-          <View style={[styles.mediaToolbar, { borderTopColor: theme.colors.border }]}>
-            <View style={styles.toolbarButtons}>
-              {/* Photo Picker Button */}
-              <Pressable
-                onPress={handlePickImages}
-                disabled={isSubmitting || totalMediaCount >= MAX_TOTAL_MEDIA}
-                style={[
-                  styles.toolbarBtn,
-                  totalMediaCount >= MAX_TOTAL_MEDIA && styles.btnDisabled,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Attach photo"
-              >
-                <Typography variant="xs" weight="semibold" color={totalMediaCount >= MAX_TOTAL_MEDIA ? theme.colors.textMuted : theme.colors.primary}>
-                  📷 {isHindi ? `फ़ोटो (${mediaList.length}/4)` : `Photo (${mediaList.length}/4)`}
-                </Typography>
-              </Pressable>
-
-              {/* Video Picker Button */}
-              <Pressable
-                onPress={handlePickVideo}
-                disabled={isSubmitting || Boolean(attachedVideo) || Boolean(attachedYoutubeVideo) || totalMediaCount >= MAX_TOTAL_MEDIA}
-                style={[
-                  styles.toolbarBtn,
-                  (Boolean(attachedVideo) || Boolean(attachedYoutubeVideo) || totalMediaCount >= MAX_TOTAL_MEDIA) && styles.btnDisabled,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Attach video"
-              >
-                <Typography
-                  variant="xs"
-                  weight="semibold"
-                  color={
-                    Boolean(attachedVideo) || Boolean(attachedYoutubeVideo) || totalMediaCount >= MAX_TOTAL_MEDIA
-                      ? theme.colors.textMuted
-                      : theme.colors.primary
-                  }
-                >
-                  🎥 {isHindi ? 'वीडियो' : 'Video'}
-                </Typography>
-              </Pressable>
-
-              {/* YouTube Link Button */}
-              <Pressable
-                onPress={() => {
-                  if (!attachedYoutubeVideo && !attachedVideo) {
-                    setYoutubeInputOpen((prev) => !prev);
-                  }
-                }}
-                disabled={isSubmitting || Boolean(attachedVideo) || Boolean(attachedYoutubeVideo) || totalMediaCount >= MAX_TOTAL_MEDIA}
-                style={[
-                  styles.toolbarBtn,
-                  (Boolean(attachedVideo) || Boolean(attachedYoutubeVideo) || totalMediaCount >= MAX_TOTAL_MEDIA) && styles.btnDisabled,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Attach YouTube link"
-              >
-                <Typography
-                  variant="xs"
-                  weight="semibold"
-                  color={
-                    Boolean(attachedVideo) || Boolean(attachedYoutubeVideo) || totalMediaCount >= MAX_TOTAL_MEDIA
-                      ? theme.colors.textMuted
-                      : '#DC2626'
-                  }
-                >
-                  🔴 YouTube
-                </Typography>
-              </Pressable>
+      {/* 7. Modern Sticky Bottom Publish Bar */}
+      <View
+        style={[
+          styles.stickyBottomBar,
+          {
+            paddingBottom: Math.max(insets.bottom, 12),
+            backgroundColor: theme.colors.surface,
+            borderTopColor: theme.colors.border,
+          },
+        ]}
+      >
+        <View style={styles.bottomBarContent}>
+          <View style={styles.bottomSummaryCol}>
+            <View style={styles.summaryBadgePill}>
+              <Typography variant="xs" weight="bold" color={theme.colors.primaryDark}>
+                {totalMediaCount > 0
+                  ? `${isHindi ? 'मीडिया' : 'Media'}: ${totalMediaCount}/4`
+                  : (isHindi ? 'टेक्स्ट पोस्ट' : 'Text Post')}
+              </Typography>
             </View>
+            <Typography variant="xs" color={theme.colors.textMuted} numberOfLines={1}>
+              {selectedCategory === 'GENERAL'
+                ? isHindi ? 'सामान्य पोस्ट' : 'General Post'
+                : selectedCategory === 'ANNOUNCEMENT'
+                ? isHindi ? 'सूचना' : 'Announcement'
+                : selectedCategory === 'EVENT'
+                ? isHindi ? 'आयोजन' : 'Event'
+                : selectedCategory === 'EMPLOYMENT'
+                ? isHindi ? 'रोजगार' : 'Employment'
+                : selectedCategory === 'GOVERNMENT_SCHEME'
+                ? isHindi ? 'सरकारी योजना' : 'Govt Scheme'
+                : isHindi ? 'वैवाहिक' : 'Matrimonial'}
+            </Typography>
           </View>
 
-          {/* 9. Publish Button */}
           <Button
             title={
               isSubmitting
                 ? isHindi ? 'प्रकाशित हो रहा है...' : 'Publishing...'
-                : isHindi ? 'पोस्ट प्रकाशित करें' : 'Publish Post'
+                : isHindi ? 'पोस्ट प्रकाशित करें →' : 'Publish Post →'
             }
             onPress={handlePublish}
             disabled={!canPublish}
             loading={isSubmitting}
-            style={styles.publishBtn}
+            style={styles.bottomPublishButton}
           />
-        </Card>
-      </ScrollView>
+        </View>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -1115,228 +1480,422 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  topHeader: {
+  navHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E2E8F0',
+    zIndex: 10,
   },
-  backBtn: {
+  backButtonPill: {
     paddingVertical: 6,
-    paddingHorizontal: 8,
-    minWidth: 60,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
   },
-  clearBtn: {
+  headerCenter: {
+    alignItems: 'center',
+  },
+  communityScopeText: {
+    marginTop: 2,
+    fontSize: 11,
+  },
+  clearButtonPill: {
     paddingVertical: 6,
-    paddingHorizontal: 8,
-    alignItems: 'flex-end',
-    minWidth: 60,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
   },
-  formCard: {
+  clearButtonDisabled: {
+    backgroundColor: '#F1F5F9',
+    opacity: 0.5,
+  },
+  scrollContent: {
     padding: 16,
   },
   successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 14,
+    borderColor: '#86EFAC',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  successIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  successTextContainer: {
+    flex: 1,
   },
   successActionBtn: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
     backgroundColor: '#166534',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
+    marginLeft: 8,
   },
   errorBanner: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 14,
-  },
-  authorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  authorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
     marginBottom: 16,
   },
   avatarInitial: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
   authorMeta: {
     flex: 1,
+    marginLeft: 12,
   },
-  sectionLabel: {
-    marginBottom: 8,
-  },
-  categoryScroll: {
+  authorNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    paddingBottom: 4,
-    marginBottom: 14,
   },
-  typeChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    borderWidth: 1,
+  roleBadgeContainer: {
+    marginLeft: 4,
   },
-  infoBanner: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 14,
+  audienceRow: {
+    marginTop: 2,
   },
-  inputSection: {
-    marginBottom: 14,
-  },
-  labelRow: {
+  sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-  },
-  textInput: {
-    marginBottom: 0,
-  },
-  contentArea: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    minHeight: 110,
-  },
-  fieldError: {
+    marginBottom: 10,
     marginTop: 4,
   },
-  youtubeInputContainer: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 14,
+  categoryCardsScroll: {
+    gap: 10,
+    paddingBottom: 4,
+    marginBottom: 16,
   },
-  youtubeHeaderRow: {
+  categoryCard: {
+    width: 124,
+    padding: 12,
+    borderRadius: 14,
+    position: 'relative',
+    alignItems: 'flex-start',
+  },
+  categoryCheckBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  categoryCardTitle: {
+    marginBottom: 2,
+    fontSize: 13,
+  },
+  categoryCardSubtitle: {
+    fontSize: 10,
+  },
+  guidanceBanner: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    alignItems: 'flex-start',
+  },
+  guidanceIcon: {
+    marginRight: 10,
+    marginTop: 1,
+  },
+  guidanceTextCol: {
+    flex: 1,
+  },
+  guidanceDesc: {
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  cardSection: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  fieldHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
-  youtubeInputRow: {
+  fieldLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  requiredBadgePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  titleInputField: {
+    fontSize: 15,
+    paddingVertical: 6,
+    paddingHorizontal: 0,
+    lineHeight: 22,
+  },
+  contentInputField: {
+    fontSize: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 0,
+    minHeight: 120,
+    lineHeight: 22,
+  },
+  inlineErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  editorFooterHintRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#F1F5F9',
+  },
+  mediaCardContainer: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  mediaSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  mediaTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mediaCountBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  mediaTilesRow: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  youtubeField: {
+  mediaActionTile: {
     flex: 1,
-    marginBottom: 0,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
   },
-  addYtBtn: {
-    minHeight: 42,
+  tileDisabled: {
+    opacity: 0.45,
   },
-  mediaCard: {
+  tileIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  tileSubtext: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  youtubeCardBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  youtubeCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  ytHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  youtubeInputGroup: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  ytUrlInput: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  ytAddButton: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+  },
+  attachedYtCard: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 8,
-    marginBottom: 14,
+    marginBottom: 12,
     backgroundColor: '#FFFFFF',
     position: 'relative',
     gap: 10,
   },
-  ytThumb: {
-    width: 90,
-    height: 60,
+  attachedYtThumb: {
+    width: 80,
+    height: 54,
     borderRadius: 6,
     backgroundColor: '#000000',
   },
-  mediaDetails: {
+  attachedYtMeta: {
     flex: 1,
     gap: 2,
   },
-  removeMediaBtn: {
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  ytBadgeTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  circularRemoveBtn: {
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-start',
   },
-  videoPreviewCard: {
+  attachedVideoCard: {
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 14,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
     backgroundColor: '#FFFFFF',
   },
-  videoCardTop: {
+  attachedVideoTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  videoIconPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 6,
+  attachedVideoIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
     backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  progressContainer: {
+  attachedVideoMeta: {
+    flex: 1,
+    gap: 2,
+  },
+  videoBadgeTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  uploadProgressBox: {
     marginTop: 10,
   },
-  progressBarTrack: {
+  uploadProgressTrack: {
     height: 6,
     borderRadius: 3,
     backgroundColor: '#E2E8F0',
     overflow: 'hidden',
   },
-  progressBarFill: {
+  uploadProgressBarFill: {
     height: '100%',
   },
-  progressLabel: {
+  progressPercentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 4,
-    textAlign: 'right',
   },
-  errorRetryRow: {
+  uploadErrorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8,
     gap: 8,
   },
-  imageGridContainer: {
-    marginBottom: 14,
+  imageGridSection: {
+    marginTop: 4,
   },
-  imageGrid: {
+  gridSectionTitle: {
+    marginBottom: 8,
+  },
+  imagesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  imageGridItem: {
-    width: '48%',
+  gridImageWrapper: {
+    width: '48.5%',
     aspectRatio: 1,
-    borderRadius: 8,
+    borderRadius: 10,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#F1F5F9',
   },
-  gridImage: {
+  imageTile: {
     width: '100%',
     height: '100%',
   },
-  imageUploadingOverlay: {
+  uploadingOverlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1345,46 +1904,55 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(220,38,38,0.85)',
+    backgroundColor: 'rgba(220, 38, 38, 0.9)',
     paddingVertical: 4,
     alignItems: 'center',
   },
-  retryImageBtn: {
+  retryImagePill: {
     paddingHorizontal: 8,
   },
-  removeImagePill: {
+  imageRemovePill: {
     position: 'absolute',
     top: 6,
     right: 6,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     width: 24,
     height: 24,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  mediaToolbar: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 12,
-    marginBottom: 16,
+  stickyBottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    elevation: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
   },
-  toolbarButtons: {
+  bottomBarContent: {
     flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 12,
   },
-  toolbarBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  bottomSummaryCol: {
+    flex: 1,
   },
-  btnDisabled: {
-    opacity: 0.5,
+  summaryBadgePill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginBottom: 2,
   },
-  publishBtn: {
-    marginTop: 4,
+  bottomPublishButton: {
+    minWidth: 160,
   },
 });

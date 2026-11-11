@@ -118,9 +118,9 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   return (
     <Card style={styles.cardContainer}>
-      {/* 1. Header: Author, Avatar, Badges & Timestamp */}
+      {/* 1. Header: Author Avatar, Details, Badges & Timestamp */}
       <View style={styles.authorRow}>
-        {/* Avatar or Initial Circle */}
+        {/* Author Avatar */}
         {post.author?.avatarUrl ? (
           <Image
             source={{ uri: post.author.avatarUrl }}
@@ -128,8 +128,8 @@ export const PostCard: React.FC<PostCardProps> = ({
             resizeMode="cover"
           />
         ) : (
-          <View style={[styles.avatarInitial, { backgroundColor: theme.colors.primaryLight }]}>
-            <Typography variant="sm" weight="bold" color={theme.colors.primaryDark}>
+          <View style={[styles.avatarInitial, { backgroundColor: '#E0F2FE' }]}>
+            <Typography variant="sm" weight="bold" color="#0369A1">
               {post.author?.fullName ? post.author.fullName.charAt(0).toUpperCase() : 'स'}
             </Typography>
           </View>
@@ -140,7 +140,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           <View style={styles.authorNameRow}>
             <Typography
               variant="sm"
-              weight="semibold"
+              weight="bold"
               color={theme.colors.textPrimary}
               numberOfLines={1}
               style={styles.authorName}
@@ -160,30 +160,44 @@ export const PostCard: React.FC<PostCardProps> = ({
             <Typography variant="xs" color={theme.colors.textMuted}>
               {formatRelativeTime(post.createdAt, language)}
             </Typography>
+            <Typography variant="xs" color={theme.colors.textMuted} style={styles.metaDivider}>
+              •
+            </Typography>
+            <Typography variant="xs" color={theme.colors.textMuted} style={styles.privacyScope}>
+              🌐
+            </Typography>
             {post.author?.city && (
-              <Typography variant="xs" color={theme.colors.textMuted}>
-                {' · '}{post.author.city}
-              </Typography>
+              <>
+                <Typography variant="xs" color={theme.colors.textMuted} style={styles.metaDivider}>
+                  •
+                </Typography>
+                <Typography variant="xs" color={theme.colors.textMuted} numberOfLines={1}>
+                  {post.author.city}
+                </Typography>
+              </>
             )}
           </View>
         </View>
 
         {/* Post Type Badge */}
         {postTypeLabel && (
-          <Badge
-            label={postTypeLabel}
-            variant={postTypeVariant as any}
-            size="sm"
-          />
+          <View style={styles.categoryBadgeWrap}>
+            <Badge
+              label={postTypeLabel}
+              variant={postTypeVariant as any}
+              size="sm"
+            />
+          </View>
         )}
       </View>
 
-      {/* 2. Post Title (Optional from Batch 15D) */}
+      {/* 2. Post Title */}
       {post.title ? (
         <Pressable
           onPress={() => onPressPost && onPressPost(post.id)}
           accessibilityRole="button"
           accessibilityLabel={`Post title: ${post.title}`}
+          style={styles.titleTouchArea}
         >
           <Typography
             variant="md"
@@ -201,10 +215,11 @@ export const PostCard: React.FC<PostCardProps> = ({
         onPress={() => onPressPost && onPressPost(post.id)}
         accessibilityRole="button"
         accessibilityLabel="Read full post"
+        style={styles.contentTouchArea}
       >
         <Typography
           variant="sm"
-          color={theme.colors.textPrimary}
+          color="#334155"
           style={styles.postContent}
           numberOfLines={onPressPost ? 6 : undefined}
         >
@@ -228,14 +243,14 @@ export const PostCard: React.FC<PostCardProps> = ({
           {images.length > 1 && (
             <View style={styles.multiImagePill}>
               <Typography variant="xs" weight="bold" color="#FFFFFF">
-                +{images.length - 1}
+                +{images.length - 1} फ़ोटो
               </Typography>
             </View>
           )}
         </Pressable>
       )}
 
-      {/* 5. Attached Video (Inline Facebook-Style Player or Preview Thumbnail) */}
+      {/* 5. Attached Video (Inline Facebook-Style Player or Polished Fallback) */}
       {videos.length > 0 && (() => {
         const video = videos[0];
         const details = getVideoSourceDetails(video.url, video.thumbnail);
@@ -282,21 +297,26 @@ export const PostCard: React.FC<PostCardProps> = ({
                 onPressPost(post.id);
               }
             }}
-            style={[styles.videoContainer, { backgroundColor: '#1E293B' }]}
+            style={styles.videoContainer}
             accessibilityRole="button"
             accessibilityLabel={`Play video in post: ${post.title || 'Community post'}`}
           >
             {displayThumb ? (
-              <Image
-                source={{ uri: displayThumb }}
-                style={styles.videoThumbnailImage}
-                resizeMode="cover"
-              />
+              <>
+                <Image
+                  source={{ uri: displayThumb }}
+                  style={styles.videoThumbnailImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.thumbnailDarkOverlay} />
+              </>
             ) : (
-              <View style={styles.videoPlaceholder}>
-                <Typography variant="xs" color="#94A3B8">
-                  {language === 'hi' ? 'वीडियो पूर्वावलोकन' : 'Video Preview'}
-                </Typography>
+              <View style={styles.videoFallbackCanvas}>
+                <View style={styles.watermarkReelIcon}>
+                  <Typography variant="title" color="#334155" style={{ fontSize: 64, opacity: 0.15 }}>
+                    🎬
+                  </Typography>
+                </View>
               </View>
             )}
 
@@ -309,23 +329,54 @@ export const PostCard: React.FC<PostCardProps> = ({
               />
             </View>
 
-            {/* Centered Play Button Overlay */}
-            <View style={styles.videoPlayOverlay}>
+            {/* Centered Modern Play Button Overlay */}
+            <View style={styles.videoPlayOverlay} pointerEvents="none">
               <View style={styles.playIconCircle}>
                 <Typography variant="lg" color="#FFFFFF" weight="bold" style={styles.playIconText}>
                   ▶
                 </Typography>
               </View>
-              <Typography variant="xs" weight="semibold" color="#FFFFFF" style={styles.videoLabel}>
-                {language === 'hi' ? 'वीडियो देखें' : 'Watch Video'}
-              </Typography>
+              <View style={styles.videoLabelPill}>
+                <Typography variant="xs" weight="bold" color="#FFFFFF">
+                  {language === 'hi' ? 'वीडियो देखें' : 'Watch Video'}
+                </Typography>
+              </View>
             </View>
           </Pressable>
         );
       })()}
 
-      {/* 6. Interaction Action Bar (Like, Comment, Share) */}
-      <View style={[styles.actionBar, { borderTopColor: theme.colors.border }]}>
+      {/* 6. Interaction Metrics Row (Facebook-Style Likes & Comments Count) */}
+      {(likesCount > 0 || post.commentsCount > 0) && (
+        <View style={styles.metricsSummaryRow}>
+          {likesCount > 0 ? (
+            <View style={styles.metricsLeft}>
+              <View style={styles.miniLikeBadge}>
+                <Typography variant="xs" style={{ fontSize: 10 }}>
+                  ❤️
+                </Typography>
+              </View>
+              <Typography variant="xs" color={theme.colors.textSecondary} style={{ marginLeft: 6 }}>
+                {likesCount} {language === 'hi' ? 'लोगों ने पसंद किया' : (likesCount === 1 ? 'like' : 'likes')}
+              </Typography>
+            </View>
+          ) : <View />}
+
+          {post.commentsCount > 0 && (
+            <Pressable
+              onPress={() => onPressComments && onPressComments(post.id)}
+              hitSlop={6}
+            >
+              <Typography variant="xs" color={theme.colors.textSecondary}>
+                {post.commentsCount} {language === 'hi' ? 'टिप्पणियां' : (post.commentsCount === 1 ? 'comment' : 'comments')}
+              </Typography>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {/* 7. Action Bar (Like, Comment, Share) */}
+      <View style={[styles.actionBar, { borderTopColor: '#F1F5F9' }]}>
         {/* Like Button */}
         <Pressable
           onPress={handleLikePress}
@@ -343,10 +394,12 @@ export const PostCard: React.FC<PostCardProps> = ({
           </Typography>
           <Typography
             variant="xs"
-            weight={isLiked ? 'semibold' : 'regular'}
+            weight={isLiked ? 'bold' : 'medium'}
             color={isLiked ? theme.colors.error : theme.colors.textSecondary}
           >
-            {likesCount > 0 ? likesCount : (language === 'hi' ? 'लाइक' : 'Like')}
+            {isLiked
+              ? (language === 'hi' ? 'पसंद किया' : 'Liked')
+              : (language === 'hi' ? 'पसंद' : 'Like')}
           </Typography>
         </Pressable>
 
@@ -361,10 +414,8 @@ export const PostCard: React.FC<PostCardProps> = ({
           <Typography variant="md" color={theme.colors.textSecondary}>
             💬
           </Typography>
-          <Typography variant="xs" color={theme.colors.textSecondary}>
-            {post.commentsCount > 0
-              ? post.commentsCount
-              : (language === 'hi' ? 'कमेंट' : 'Comment')}
+          <Typography variant="xs" weight="medium" color={theme.colors.textSecondary}>
+            {language === 'hi' ? 'कमेंट' : 'Comment'}
           </Typography>
         </Pressable>
 
@@ -379,7 +430,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           <Typography variant="md" color={theme.colors.textSecondary}>
             ↗️
           </Typography>
-          <Typography variant="xs" color={theme.colors.textSecondary}>
+          <Typography variant="xs" weight="medium" color={theme.colors.textSecondary}>
             {language === 'hi' ? 'शेयर' : 'Share'}
           </Typography>
         </Pressable>
@@ -390,8 +441,17 @@ export const PostCard: React.FC<PostCardProps> = ({
 
 const styles = StyleSheet.create({
   cardContainer: {
-    marginBottom: 12,
+    marginBottom: 10,
     padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
   },
   authorRow: {
     flexDirection: 'row',
@@ -402,6 +462,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
+    backgroundColor: '#E2E8F0',
   },
   avatarInitial: {
     width: 42,
@@ -420,6 +481,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   authorName: {
+    fontSize: 14,
+    lineHeight: 18,
     flexShrink: 1,
   },
   metaRow: {
@@ -427,33 +490,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 2,
   },
+  metaDivider: {
+    marginHorizontal: 5,
+    fontSize: 10,
+  },
+  privacyScope: {
+    fontSize: 11,
+  },
+  categoryBadgeWrap: {
+    marginLeft: 6,
+  },
+  titleTouchArea: {
+    marginBottom: 4,
+  },
   postTitle: {
-    marginBottom: 6,
+    fontSize: 15.5,
     lineHeight: 22,
+    letterSpacing: -0.2,
+  },
+  contentTouchArea: {
+    marginBottom: 10,
   },
   postContent: {
-    lineHeight: 20,
-    marginBottom: 10,
+    fontSize: 14,
+    lineHeight: 21,
   },
   mediaContainer: {
     position: 'relative',
-    borderRadius: 8,
+    borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 10,
   },
   postImage: {
     width: '100%',
-    height: 200,
-    borderRadius: 8,
+    height: 220,
+    borderRadius: 10,
     backgroundColor: '#F1F5F9',
   },
   multiImagePill: {
     position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    bottom: 10,
+    right: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
   },
   videoContainer: {
@@ -461,18 +541,19 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 16 / 9,
     maxHeight: 450,
-    borderRadius: 8,
+    borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#0F172A',
   },
   inlinePlayerContainer: {
     position: 'relative',
     width: '100%',
     aspectRatio: 16 / 9,
     maxHeight: 450,
-    borderRadius: 8,
+    borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 10,
     backgroundColor: '#000000',
@@ -480,18 +561,25 @@ const styles = StyleSheet.create({
   videoThumbnailImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F172A',
   },
-  videoPlaceholder: {
-    width: '100%',
-    height: '100%',
+  thumbnailDarkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.3)',
+  },
+  videoFallbackCanvas: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
   },
+  watermarkReelIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   videoSourceBadgePill: {
     position: 'absolute',
-    top: 8,
-    left: 8,
+    top: 10,
+    left: 10,
     zIndex: 2,
   },
   videoPlayOverlay: {
@@ -500,37 +588,65 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playIconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(25, 118, 210, 0.9)',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: 'rgba(25, 118, 210, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 3,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   playIconText: {
     marginLeft: 3,
+    fontSize: 22,
   },
-  videoLabel: {
-    marginTop: 6,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+  videoLabelPill: {
+    marginTop: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  metricsSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+  },
+  metricsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  miniLikeBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actionBar: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 10,
-    marginTop: 4,
+    paddingTop: 8,
+    marginTop: 2,
   },
   actionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     minHeight: 36,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
   },
 });
-
