@@ -16,6 +16,7 @@ import {
   Card,
   Button,
   Badge,
+  AppHeader,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -23,13 +24,39 @@ import { useAuth } from '../../../src/hooks/useAuth';
 import { usersApi } from '../../../src/api/users.api';
 import { chatApi } from '../../../src/api/chat.api';
 
+const DetailRow: React.FC<{
+  icon: string;
+  label: string;
+  value?: string | null;
+}> = ({ icon, label, value }) => {
+  return (
+    <View style={styles.detailRow}>
+      <View style={styles.detailLabelBox}>
+        <Typography variant="xs" style={styles.rowIcon}>
+          {icon}
+        </Typography>
+        <Typography variant="xs" color="#64748B" weight="medium">
+          {label}
+        </Typography>
+      </View>
+      <Typography variant="sm" weight="semibold" color="#0F172A" style={styles.rowValue}>
+        {value || '—'}
+      </Typography>
+    </View>
+  );
+};
+
 export default function MemberProfileDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { language } = useLocalization();
+  const { language, setLanguage } = useLocalization();
   const { user, communitySlug } = useAuth();
+
+  const toggleLanguage = () => {
+    setLanguage(language === 'hi' ? 'en' : 'hi');
+  };
 
   const [member, setMember] = useState<PublicMemberProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -101,7 +128,6 @@ export default function MemberProfileDetailScreen() {
 
   const initial = member?.fullName ? member.fullName.trim().charAt(0).toUpperCase() : 'स';
 
-  // Format joined date
   const formatJoinedDate = (dateString?: string) => {
     if (!dateString) return '';
     try {
@@ -115,61 +141,45 @@ export default function MemberProfileDetailScreen() {
     }
   };
 
-  // Format gender label
   const formatGender = (gender?: string | null) => {
-    if (!gender) return language === 'hi' ? 'निर्दिष्ट नहीं' : 'Not specified';
+    if (!gender) return null;
     const upper = gender.toUpperCase();
-    if (upper === 'MALE') return language === 'hi' ? 'पुरुष' : 'Male';
-    if (upper === 'FEMALE') return language === 'hi' ? 'महिला' : 'Female';
-    return language === 'hi' ? 'अन्य' : 'Other';
+    if (upper === 'MALE') return language === 'hi' ? 'पुरुष (Male)' : 'Male';
+    if (upper === 'FEMALE') return language === 'hi' ? 'महिला (Female)' : 'Female';
+    return language === 'hi' ? 'अन्य (Other)' : 'Other';
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      {/* Top Header */}
-      <View
-        style={[
-          styles.headerBar,
-          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, paddingTop: Math.max(insets.top, 14) },
-        ]}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel={language === 'hi' ? 'वापस जाएं' : 'Back'}
-        >
-          <Typography variant="lg" weight="bold" color={theme.colors.primary}>
-            ←
-          </Typography>
-        </Pressable>
-
-        <Typography variant="md" weight="bold" color={theme.colors.textPrimary}>
-          {language === 'hi' ? 'सदस्य प्रोफ़ाइल' : 'Member Profile'}
-        </Typography>
-
-        <View style={styles.headerSpacer} />
-      </View>
+    <View style={styles.screen}>
+      {/* 1. Unified AppHeader (Detail Mode) */}
+      <AppHeader
+        mode="detail"
+        title={member?.fullName || (language === 'hi' ? 'सदस्य प्रोफ़ाइल' : 'Member Profile')}
+        communitySlug={communitySlug}
+        showBackButton={true}
+        showLanguageSwitcher={true}
+        language={language}
+        onLanguageToggle={toggleLanguage}
+      />
 
       {/* Main Content Area */}
       {isLoading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Typography variant="sm" color={theme.colors.textSecondary} style={styles.loadingText}>
+          <ActivityIndicator size="large" color="#1976D2" />
+          <Typography variant="sm" color="#64748B" style={styles.loadingText}>
             {language === 'hi' ? 'प्रोफ़ाइल लोड हो रही है...' : 'Loading profile...'}
           </Typography>
         </View>
       ) : error || !member ? (
         <View style={styles.errorPadding}>
-          <Card style={styles.stateCard}>
+          <Card style={styles.errorCard}>
             <Typography variant="lg" style={styles.errorIcon}>
               👤
             </Typography>
-            <Typography variant="md" weight="bold" color={theme.colors.error} align="center">
+            <Typography variant="md" weight="bold" color="#DC2626" align="center">
               {language === 'hi' ? 'प्रोफ़ाइल उपलब्ध नहीं है' : 'Profile Unavailable'}
             </Typography>
-            <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.errorDesc}>
+            <Typography variant="sm" color="#475569" align="center" style={styles.errorDesc}>
               {error ||
                 (language === 'hi'
                   ? 'यह सदस्य प्रोफ़ाइल नहीं मिली या वर्तमान में इस समुदाय में उपलब्ध नहीं है।'
@@ -179,12 +189,14 @@ export default function MemberProfileDetailScreen() {
               <Button
                 title={language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
                 variant="primary"
+                size="sm"
                 onPress={loadProfile}
                 style={styles.actionBtn}
               />
               <Button
                 title={language === 'hi' ? 'वापस जाएं' : 'Back'}
                 variant="outline"
+                size="sm"
                 onPress={() => router.back()}
                 style={styles.actionBtn}
               />
@@ -192,48 +204,62 @@ export default function MemberProfileDetailScreen() {
           </Card>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Profile Header Card */}
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom + 40, 60) },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* 2. Profile Header Card */}
           <Card style={styles.profileHeaderCard}>
             <View style={styles.avatarSection}>
               {member.avatarUrl && !imageError ? (
                 <Image
                   source={{ uri: member.avatarUrl }}
-                  style={[styles.largeAvatar, { borderColor: theme.colors.border }]}
+                  style={styles.largeAvatar}
                   onError={() => setImageError(true)}
                   resizeMode="cover"
                 />
               ) : (
-                <View
-                  style={[
-                    styles.largeAvatarFallback,
-                    {
-                      backgroundColor: theme.colors.primaryLight,
-                      borderColor: theme.colors.primary,
-                    },
-                  ]}
-                >
-                  <Typography variant="xl" weight="bold" color={theme.colors.primaryDark}>
+                <View style={styles.largeAvatarFallback}>
+                  <Typography variant="xl" weight="bold" color="#0369A1" style={styles.avatarInitial}>
                     {initial}
                   </Typography>
                 </View>
               )}
 
-              <Typography variant="lg" weight="bold" color={theme.colors.textPrimary} style={styles.profileName}>
+              <Typography variant="lg" weight="bold" color="#0F172A" style={styles.profileName}>
                 {member.fullName}
               </Typography>
 
               <View style={styles.badgesRow}>
-                <Badge
-                  label={member.role || 'MEMBER'}
-                  variant={member.role === 'COMMUNITY_ADMIN' ? 'warning' : 'info'}
-                  size="sm"
-                />
-                <Badge label={communitySlug} variant="default" size="sm" />
+                <View
+                  style={[
+                    styles.roleBadge,
+                    member.role === 'COMMUNITY_ADMIN' ? styles.adminBadge : styles.memberBadge,
+                  ]}
+                >
+                  <Typography
+                    variant="xs"
+                    weight="bold"
+                    color={member.role === 'COMMUNITY_ADMIN' ? '#B91C1C' : '#0369A1'}
+                  >
+                    {member.role || 'MEMBER'}
+                  </Typography>
+                </View>
+
+                {communitySlug ? (
+                  <View style={styles.communityBadge}>
+                    <Typography variant="xs" weight="medium" color="#475569">
+                      {communitySlug}
+                    </Typography>
+                  </View>
+                ) : null}
               </View>
 
               {member.joinedAt ? (
-                <Typography variant="xs" color={theme.colors.textMuted} style={styles.joinedText}>
+                <Typography variant="xs" color="#64748B" style={styles.joinedText}>
                   {language === 'hi'
                     ? `सदस्यता: ${formatJoinedDate(member.joinedAt)}`
                     : `Member since ${formatJoinedDate(member.joinedAt)}`}
@@ -256,83 +282,62 @@ export default function MemberProfileDetailScreen() {
             </View>
           </Card>
 
-          {/* About / Bio Card */}
+          {/* 3. About / Bio Card */}
           {member.bio ? (
             <Card style={styles.sectionCard}>
-              <Typography variant="sm" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
-                {language === 'hi' ? 'परिचय (About)' : 'About'}
+              <Typography variant="sm" weight="bold" color="#0F172A" style={styles.sectionTitle}>
+                📝 {language === 'hi' ? 'परिचय (About)' : 'About / Bio'}
               </Typography>
-              <Typography variant="sm" color={theme.colors.textSecondary} style={styles.bioText}>
-                {member.bio}
-              </Typography>
+              <View style={styles.bioBox}>
+                <Typography variant="sm" color="#334155" style={styles.bioText}>
+                  "{member.bio}"
+                </Typography>
+              </View>
             </Card>
           ) : null}
 
-          {/* Location & Roots Card */}
+          {/* 4. Location & Roots Card */}
           <Card style={styles.sectionCard}>
-            <Typography variant="sm" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
-              {language === 'hi' ? 'सामुदायिक एवं स्थान विवरण' : 'Community & Location Details'}
+            <Typography variant="sm" weight="bold" color="#0F172A" style={styles.sectionTitle}>
+              🏛️ {language === 'hi' ? 'सामुदायिक एवं स्थान विवरण' : 'Community & Location Details'}
             </Typography>
 
-            {/* City & State */}
-            <View style={styles.detailRow}>
-              <Typography variant="xs" color={theme.colors.textMuted} style={styles.detailLabel}>
-                {language === 'hi' ? 'स्थान' : 'Location'}:
-              </Typography>
-              <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary} style={styles.detailValue}>
-                {[member.city, member.state].filter(Boolean).join(', ') ||
-                  (language === 'hi' ? 'निर्दिष्ट नहीं' : 'Not specified')}
-              </Typography>
-            </View>
-
-            {/* Gotra */}
-            <View style={styles.detailRow}>
-              <Typography variant="xs" color={theme.colors.textMuted} style={styles.detailLabel}>
-                {language === 'hi' ? 'गोत्र' : 'Gotra'}:
-              </Typography>
-              <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary} style={styles.detailValue}>
-                {member.gotra || (language === 'hi' ? 'निर्दिष्ट नहीं' : 'Not specified')}
-              </Typography>
-            </View>
-
-            {/* Sub-Caste */}
-            <View style={styles.detailRow}>
-              <Typography variant="xs" color={theme.colors.textMuted} style={styles.detailLabel}>
-                {language === 'hi' ? 'उप-जाति' : 'Sub-Caste'}:
-              </Typography>
-              <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary} style={styles.detailValue}>
-                {member.subCaste || (language === 'hi' ? 'निर्दिष्ट नहीं' : 'Not specified')}
-              </Typography>
-            </View>
-
-            {/* Gender */}
-            <View style={styles.detailRow}>
-              <Typography variant="xs" color={theme.colors.textMuted} style={styles.detailLabel}>
-                {language === 'hi' ? 'लिंग' : 'Gender'}:
-              </Typography>
-              <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary} style={styles.detailValue}>
-                {formatGender(member.gender)}
-              </Typography>
+            <View style={styles.detailList}>
+              <DetailRow
+                icon="📍"
+                label={language === 'hi' ? 'स्थान' : 'Location'}
+                value={[member.city, member.state].filter(Boolean).join(', ') || null}
+              />
+              <DetailRow
+                icon="🌿"
+                label={language === 'hi' ? 'गोत्र' : 'Gotra'}
+                value={member.gotra}
+              />
+              <DetailRow
+                icon="👥"
+                label={language === 'hi' ? 'उप-जाति' : 'Sub-Caste'}
+                value={member.subCaste}
+              />
+              <DetailRow
+                icon="⚧️"
+                label={language === 'hi' ? 'लिंग' : 'Gender'}
+                value={formatGender(member.gender)}
+              />
             </View>
           </Card>
 
-          {/* Privacy & Safety Information Banner */}
-          <Card style={[styles.privacyCard, { backgroundColor: theme.colors.surfaceSubtle }]}>
-            <View style={styles.privacyRow}>
-              <Typography variant="md" style={styles.lockIcon}>
-                🔒
+          {/* 5. Privacy & Safety Information Banner */}
+          <Card style={styles.privacyCard}>
+            <View style={styles.privacyHeader}>
+              <Typography variant="xs" weight="bold" color="#475569">
+                🔒 {language === 'hi' ? 'निजता एवं सुरक्षा' : 'Privacy & Safety'}
               </Typography>
-              <View style={styles.privacyTextContainer}>
-                <Typography variant="xs" weight="bold" color={theme.colors.textPrimary}>
-                  {language === 'hi' ? 'गोपनीयता सुरक्षा' : 'Privacy Protection'}
-                </Typography>
-                <Typography variant="xs" color={theme.colors.textMuted} style={styles.privacyDesc}>
-                  {language === 'hi'
-                    ? 'समुदाय सुरक्षा एवं गोपनीयता नीति के तहत सदस्यों का मोबाइल नंबर व ईमेल सुरक्षित रखा गया है।'
-                    : 'Personal phone numbers and emails are safeguarded under community privacy policy.'}
-                </Typography>
-              </View>
             </View>
+            <Typography variant="xs" color="#64748B" style={styles.privacyDesc}>
+              {language === 'hi'
+                ? 'समाज के सदस्यों की गोपनीयता बनाए रखने के लिए संपर्क विवरण (फ़ोन/ईमेल) सीधे प्रदर्शित नहीं किए जाते हैं। आप "संदेश भेजें" बटन का उपयोग करके सुरक्षित संवाद कर सकते हैं।'
+                : 'To protect member privacy and safety, personal contact numbers and emails are not publicly disclosed. Use the "Send Message" button above for verified and secure communication.'}
+            </Typography>
           </Card>
         </ScrollView>
       )}
@@ -343,153 +348,189 @@ export default function MemberProfileDetailScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-  },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backButton: {
-    padding: 6,
-    marginRight: 8,
-  },
-  headerSpacer: {
-    width: 32,
+    backgroundColor: '#F8FAFC',
   },
   centerContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 24,
   },
   loadingText: {
     marginTop: 12,
   },
   errorPadding: {
-    flex: 1,
-    justifyContent: 'center',
     padding: 20,
+    justifyContent: 'center',
+    flex: 1,
   },
-  stateCard: {
+  errorCard: {
     padding: 24,
     alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   errorIcon: {
-    fontSize: 36,
+    fontSize: 40,
     marginBottom: 8,
   },
   errorDesc: {
     marginTop: 8,
     marginBottom: 20,
-    lineHeight: 20,
+    lineHeight: 18,
   },
   errorBtnRow: {
     flexDirection: 'row',
     gap: 12,
   },
   actionBtn: {
-    minWidth: 120,
+    minWidth: 100,
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
   },
   profileHeaderCard: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    padding: 20,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
   },
   avatarSection: {
     alignItems: 'center',
-    width: '100%',
   },
   largeAvatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     borderWidth: 2,
+    borderColor: '#1976D2',
+    backgroundColor: '#F1F5F9',
     marginBottom: 12,
   },
   largeAvatarFallback: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: '#E0F2FE',
     borderWidth: 2,
-    justifyContent: 'center',
+    borderColor: '#1976D2',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
+  avatarInitial: {
+    fontSize: 34,
+  },
   profileName: {
-    marginBottom: 6,
+    fontSize: 19,
+    marginBottom: 8,
     textAlign: 'center',
   },
   badgesRow: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 8,
   },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  adminBadge: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  memberBadge: {
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  communityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
   joinedText: {
-    marginTop: 2,
+    fontSize: 12,
+    marginBottom: 14,
   },
   messageActionContainer: {
     width: '100%',
-    marginTop: 16,
+    marginTop: 4,
   },
   messageButton: {
     width: '100%',
   },
   sectionCard: {
     padding: 16,
-    marginBottom: 16,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
   },
   sectionTitle: {
     marginBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
-    paddingBottom: 6,
+    fontSize: 14.5,
+  },
+  bioBox: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   bioText: {
     lineHeight: 20,
+    fontStyle: 'italic',
+  },
+  detailList: {
+    gap: 10,
   },
   detailRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#F1F5F9',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
   },
-  detailLabel: {
-    minWidth: 80,
+  detailLabelBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  detailValue: {
-    flex: 1,
-    textAlign: 'right',
+  rowIcon: {
+    fontSize: 13,
+  },
+  rowValue: {
+    fontSize: 13,
   },
   privacyCard: {
     padding: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#CBD5E1',
-    marginTop: 4,
-    marginBottom: 20,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  privacyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  lockIcon: {
-    fontSize: 20,
-  },
-  privacyTextContainer: {
-    flex: 1,
+  privacyHeader: {
+    marginBottom: 4,
   },
   privacyDesc: {
-    marginTop: 2,
-    lineHeight: 16,
+    lineHeight: 18,
   },
 });

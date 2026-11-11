@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Pressable, Image } from 'react-native';
-import { GroupListItem, GroupPrivacy } from '@apnasamaj/shared-types';
+import { GroupListItem } from '@apnasamaj/shared-types';
 import { Card } from './Card';
 import { Typography } from './Typography';
 import { Badge } from './Badge';
@@ -39,42 +39,35 @@ export const GroupCard: React.FC<GroupCardProps> = ({
       <Pressable
         onPress={() => onPress(group.slug)}
         style={styles.pressableArea}
-        android_ripple={{ color: theme.colors.primaryLight, borderless: false }}
+        android_ripple={{ color: '#E0F2FE', borderless: false }}
         accessibilityRole="button"
-        accessibilityLabel={`${group.name}, ${isPrivate ? 'निजी समूह' : 'सार्वजनिक समूह'}`}
+        accessibilityLabel={`${group.name}, ${isPrivate ? (language === 'hi' ? 'निजी समूह' : 'Private Group') : (language === 'hi' ? 'सार्वजनिक समूह' : 'Public Group')}`}
       >
         <View style={styles.contentRow}>
-          {/* Group Cover / Thumbnail or Initials Icon */}
+          {/* 1. Group Cover / Logo */}
           {group.coverUrl && !imageError ? (
             <Image
               source={{ uri: group.coverUrl }}
-              style={[styles.coverImage, { borderColor: theme.colors.border }]}
+              style={styles.coverImage}
               onError={() => setImageError(true)}
               resizeMode="cover"
             />
           ) : (
-            <View
-              style={[
-                styles.coverFallback,
-                {
-                  backgroundColor: theme.colors.primaryLight,
-                  borderColor: theme.colors.primary,
-                },
-              ]}
-            >
-              <Typography variant="lg" weight="bold" color={theme.colors.primaryDark}>
+            <View style={styles.coverFallback}>
+              <Typography variant="lg" weight="bold" color="#0369A1" style={styles.fallbackInitial}>
                 {initial}
               </Typography>
             </View>
           )}
 
-          {/* Group Details */}
+          {/* 2. Details Column */}
           <View style={styles.detailsContainer}>
+            {/* Header: Group Name + Privacy Badge */}
             <View style={styles.headerRow}>
               <Typography
                 variant="sm"
                 weight="bold"
-                color={theme.colors.textPrimary}
+                color="#0F172A"
                 numberOfLines={1}
                 style={styles.nameText}
               >
@@ -82,7 +75,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({
               </Typography>
 
               <Badge
-                label={isPrivate ? (language === 'hi' ? 'निजी' : 'Private') : (language === 'hi' ? 'सार्वजनिक' : 'Public')}
+                label={isPrivate ? (language === 'hi' ? '🔒 निजी' : '🔒 Private') : (language === 'hi' ? 'सार्वजनिक' : 'Public')}
                 variant={isPrivate ? 'warning' : 'info'}
                 size="sm"
               />
@@ -91,40 +84,48 @@ export const GroupCard: React.FC<GroupCardProps> = ({
             {/* Description Snippet */}
             <Typography
               variant="xs"
-              color={theme.colors.textSecondary}
+              color="#475569"
               numberOfLines={2}
               style={styles.descText}
             >
               {group.description || (language === 'hi' ? 'कोई विवरण उपलब्ध नहीं है।' : 'No description provided.')}
             </Typography>
 
-            {/* Meta & Stats Row */}
+            {/* Meta Stats & Role / Action Row */}
             <View style={styles.footerRow}>
               <View style={styles.statsRow}>
-                <Typography variant="xs" color={theme.colors.textMuted}>
+                <Typography variant="xs" color="#64748B" style={styles.statsText}>
                   👥 {group.membersCount} {language === 'hi' ? 'सदस्य' : 'members'}
                 </Typography>
-                <Typography variant="xs" color={theme.colors.textMuted}>
-                  • 💬 {group.postsCount} {language === 'hi' ? 'चर्चाएं' : 'posts'}
+                <Typography variant="xs" color="#CBD5E1">
+                  •
+                </Typography>
+                <Typography variant="xs" color="#64748B" style={styles.statsText}>
+                  💬 {group.postsCount} {language === 'hi' ? 'चर्चाएं' : 'posts'}
                 </Typography>
               </View>
 
-              {/* Membership Status or Action */}
+              {/* Membership Status Badge or Join Action */}
               {group.isMember ? (
-                <Badge
-                  label={
-                    group.myRole === 'ADMIN'
-                      ? (language === 'hi' ? 'प्रशासक' : 'Admin')
-                      : group.myRole === 'MODERATOR'
-                      ? (language === 'hi' ? 'मॉडरेटर' : 'Mod')
-                      : (language === 'hi' ? 'सदस्य' : 'Member')
-                  }
-                  variant="success"
-                  size="sm"
-                />
+                <View style={styles.memberStatusWrap}>
+                  <Badge
+                    label={
+                      group.myRole === 'ADMIN'
+                        ? (language === 'hi' ? 'प्रशासक' : 'Admin')
+                        : group.myRole === 'MODERATOR'
+                          ? (language === 'hi' ? 'मॉडरेटर' : 'Mod')
+                          : (language === 'hi' ? 'सदस्य' : 'Member')
+                    }
+                    variant="success"
+                    size="sm"
+                  />
+                  <Typography variant="sm" color="#94A3B8" style={styles.chevron}>
+                    ›
+                  </Typography>
+                </View>
               ) : !isPrivate && onJoin ? (
                 <Button
-                  title={language === 'hi' ? 'जुड़ें' : 'Join'}
+                  title={language === 'hi' ? '+ जुड़ें' : '+ Join'}
                   size="sm"
                   variant="outline"
                   loading={isJoining}
@@ -132,7 +133,11 @@ export const GroupCard: React.FC<GroupCardProps> = ({
                   onPress={handleJoinPress}
                   style={styles.joinBtn}
                 />
-              ) : null}
+              ) : (
+                <Typography variant="sm" color="#94A3B8" style={styles.chevron}>
+                  ›
+                </Typography>
+              )}
             </View>
           </View>
         </View>
@@ -143,34 +148,52 @@ export const GroupCard: React.FC<GroupCardProps> = ({
 
 const styles = StyleSheet.create({
   cardContainer: {
-    marginBottom: 8,
+    marginBottom: 10,
     padding: 0,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
   },
   pressableArea: {
     padding: 12,
   },
   contentRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 12,
   },
   coverImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
   },
   coverFallback: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
+    width: 56,
+    height: 56,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1.5,
+    borderColor: '#BAE6FD',
+  },
+  fallbackInitial: {
+    fontSize: 22,
+    lineHeight: 26,
   },
   detailsContainer: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
   headerRow: {
     flexDirection: 'row',
@@ -180,17 +203,21 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   nameText: {
+    fontSize: 15.5,
+    lineHeight: 20,
+    letterSpacing: -0.2,
     flex: 1,
   },
   descText: {
-    marginBottom: 6,
-    lineHeight: 16,
+    fontSize: 12.5,
+    lineHeight: 17,
+    marginBottom: 8,
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 6,
   },
   statsRow: {
     flexDirection: 'row',
@@ -198,9 +225,24 @@ const styles = StyleSheet.create({
     gap: 6,
     flexWrap: 'wrap',
   },
+  statsText: {
+    fontSize: 11.5,
+    lineHeight: 15,
+  },
+  memberStatusWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  chevron: {
+    fontSize: 18,
+    lineHeight: 18,
+    fontWeight: 'bold',
+    marginLeft: 2,
+  },
   joinBtn: {
     height: 32,
     paddingHorizontal: 10,
+    borderRadius: 16,
   },
 });
-

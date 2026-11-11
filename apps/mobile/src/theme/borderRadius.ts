@@ -11,6 +11,10 @@ export const borderRadius = {
   xl: 16,
   xxl: 24,
   full: 9999,
+  // Semantic Aliases
+  card: 12,
+  button: 10,
+  pill: 20,
 } as const;
 
 export type BorderRadiusToken = keyof typeof borderRadius;

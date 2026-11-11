@@ -14,7 +14,7 @@ export interface MatrimonialCardProps {
   isOwnProfile?: boolean;
 }
 
-export function formatHeightCm(cm: number): string {
+export function formatHeightCm(cm?: number | null): string {
   if (!cm || cm <= 0) return '';
   const totalInches = Math.round(cm / 2.54);
   const feet = Math.floor(totalInches / 12);
@@ -29,7 +29,7 @@ export const MatrimonialCard: React.FC<MatrimonialCardProps> = ({
   isOwnProfile = false,
 }) => {
   const theme = useTheme();
-  const { language, t } = useLocalization();
+  const { language } = useLocalization();
   const [imageError, setImageError] = useState(false);
 
   const initial = profile.fullName ? profile.fullName.trim().charAt(0).toUpperCase() : 'वि';
@@ -43,11 +43,11 @@ export const MatrimonialCard: React.FC<MatrimonialCardProps> = ({
   const genderLabel =
     profile.gender === 'FEMALE'
       ? language === 'hi'
-        ? 'वधू (Bride)'
+        ? '👰 वधू'
         : 'Bride'
       : profile.gender === 'MALE'
         ? language === 'hi'
-          ? 'वर (Groom)'
+          ? '🤵 वर'
           : 'Groom'
         : '';
 
@@ -75,13 +75,12 @@ export const MatrimonialCard: React.FC<MatrimonialCardProps> = ({
       case 'NON_MANGLIK':
         return language === 'hi' ? 'अमांगलिक' : 'Non-Manglik';
       case 'ANSHIK':
-        return language === 'hi' ? 'आंशिक मांगलिक' : 'Anshik Manglik';
+        return language === 'hi' ? 'आंशिक मांगलिक' : 'Anshik';
       default:
         return null;
     }
   })();
 
-  // Interest Status label and color
   const interestStatus = profile.interestStatus;
 
   return (
@@ -89,53 +88,46 @@ export const MatrimonialCard: React.FC<MatrimonialCardProps> = ({
       <Pressable
         onPress={() => onPress(profile.id)}
         style={styles.pressableArea}
-        android_ripple={{ color: theme.colors.primaryLight, borderless: false }}
+        android_ripple={{ color: '#E0F2FE', borderless: false }}
         accessibilityRole="button"
         accessibilityLabel={`${profile.fullName}, ${profile.age ? `${profile.age} years, ` : ''}${profile.occupation || ''}`}
       >
         <View style={styles.topRow}>
-          {/* Avatar / Photo */}
+          {/* 1. Candidate Photo / Initial Fallback */}
           <View style={styles.photoContainer}>
             {photoUrl && !imageError ? (
               <Image
                 source={{ uri: photoUrl }}
-                style={[styles.photo, { borderColor: theme.colors.border }]}
+                style={styles.photo}
                 onError={() => setImageError(true)}
                 resizeMode="cover"
               />
             ) : (
-              <View
-                style={[
-                  styles.photoFallback,
-                  {
-                    backgroundColor: theme.colors.primaryLight,
-                    borderColor: theme.colors.primary,
-                  },
-                ]}
-              >
-                <Typography variant="lg" weight="bold" color={theme.colors.primaryDark}>
+              <View style={styles.photoFallback}>
+                <Typography variant="xl" weight="bold" color="#0369A1">
                   {initial}
                 </Typography>
               </View>
             )}
 
+            {/* Photos Count Badge */}
             {profile.photosCount > 1 ? (
-              <View style={[styles.photoCountBadge, { backgroundColor: 'rgba(0, 0, 0, 0.65)' }]}>
-                <Typography variant="xs" color="#FFFFFF" weight="medium">
+              <View style={styles.photoCountBadge}>
+                <Typography variant="xs" color="#FFFFFF" weight="bold" style={styles.photoCountText}>
                   📷 {profile.photosCount}
                 </Typography>
               </View>
             ) : null}
           </View>
 
-          {/* Details Column */}
+          {/* 2. Candidate Summary Column */}
           <View style={styles.detailsContainer}>
-            {/* Header: Name & Verification */}
+            {/* Name + Verified Pill */}
             <View style={styles.headerRow}>
               <Typography
                 variant="md"
                 weight="bold"
-                color={theme.colors.textPrimary}
+                color="#0F172A"
                 numberOfLines={1}
                 style={styles.nameText}
               >
@@ -143,30 +135,44 @@ export const MatrimonialCard: React.FC<MatrimonialCardProps> = ({
               </Typography>
 
               {profile.isVerified ? (
-                <View style={[styles.verifiedBadge, { backgroundColor: '#E8F5E9' }]}>
-                  <Typography variant="xs" weight="bold" color="#2E7D32">
+                <View style={styles.verifiedBadge}>
+                  <Typography variant="xs" weight="bold" color="#16A34A" style={styles.verifiedText}>
                     ✓ {language === 'hi' ? 'सत्यापित' : 'Verified'}
                   </Typography>
                 </View>
               ) : null}
             </View>
 
-            {/* Sub-header: Gender & Marital Status */}
-            <View style={styles.metaRow}>
+            {/* Bride/Groom + Marital Status Badges */}
+            <View style={styles.badgeRow}>
               {genderLabel ? (
-                <Badge
-                  label={genderLabel}
-                  variant={profile.gender === 'FEMALE' ? 'warning' : 'info'}
-                  size="sm"
-                />
+                <View
+                  style={[
+                    styles.roleBadge,
+                    profile.gender === 'FEMALE' ? styles.brideBadge : styles.groomBadge,
+                  ]}
+                >
+                  <Typography
+                    variant="xs"
+                    weight="bold"
+                    color={profile.gender === 'FEMALE' ? '#BE185D' : '#0369A1'}
+                  >
+                    {genderLabel}
+                  </Typography>
+                </View>
               ) : null}
+
               {maritalLabel ? (
-                <Badge label={maritalLabel} variant="info" size="sm" />
+                <View style={styles.maritalBadge}>
+                  <Typography variant="xs" weight="medium" color="#475569">
+                    {maritalLabel}
+                  </Typography>
+                </View>
               ) : null}
             </View>
 
-            {/* Age, Height, Sub-caste */}
-            <Typography variant="xs" color={theme.colors.textSecondary} style={styles.statLine}>
+            {/* Age • Height • Sub-Caste */}
+            <Typography variant="xs" color="#64748B" style={styles.metricsLine} numberOfLines={1}>
               {[
                 profile.age ? `${profile.age} ${language === 'hi' ? 'वर्ष' : 'yrs'}` : null,
                 formatHeightCm(profile.heightCm),
@@ -176,24 +182,24 @@ export const MatrimonialCard: React.FC<MatrimonialCardProps> = ({
                 .join(' • ')}
             </Typography>
 
-            {/* Profession & Education */}
+            {/* Career & Education */}
             <Typography
               variant="xs"
-              weight="medium"
-              color={theme.colors.textPrimary}
+              weight="semibold"
+              color="#334155"
               numberOfLines={1}
               style={styles.careerLine}
             >
-              {[profile.occupation, profile.highestEducation].filter(Boolean).join(' • ')}
+              {[profile.occupation, profile.highestEducation].filter(Boolean).join(' • ') || (language === 'hi' ? 'विवरण उपलब्ध नहीं' : 'Details not specified')}
             </Typography>
 
             {/* Location */}
             {locationText ? (
               <View style={styles.locationRow}>
-                <Typography variant="xs" color={theme.colors.textMuted} style={styles.pinIcon}>
+                <Typography variant="xs" color="#94A3B8" style={styles.pinIcon}>
                   📍
                 </Typography>
-                <Typography variant="xs" color={theme.colors.textMuted} numberOfLines={1}>
+                <Typography variant="xs" color="#64748B" numberOfLines={1} style={styles.locationText}>
                   {locationText}
                 </Typography>
               </View>
@@ -201,63 +207,79 @@ export const MatrimonialCard: React.FC<MatrimonialCardProps> = ({
           </View>
         </View>
 
-        {/* Footer: Tags & Interest Action */}
-        <View style={[styles.footerRow, { borderTopColor: theme.colors.border }]}>
+        {/* 3. Footer: Gotra / Manglik Chips & Interest Action */}
+        <View style={styles.footerRow}>
           <View style={styles.chipsRow}>
             {profile.gotra ? (
-              <Badge label={`गोत्र: ${profile.gotra}`} variant="default" size="sm" />
+              <View style={styles.tagChip}>
+                <Typography variant="xs" color="#475569" weight="medium">
+                  {language === 'hi' ? `गोत्र: ${profile.gotra}` : `Gotra: ${profile.gotra}`}
+                </Typography>
+              </View>
             ) : null}
+
             {manglikLabel ? (
-              <Badge label={manglikLabel} variant="warning" size="sm" />
+              <View
+                style={[
+                  styles.tagChip,
+                  profile.manglik === 'MANGLIK' ? styles.manglikActiveChip : styles.tagChipDefault,
+                ]}
+              >
+                <Typography
+                  variant="xs"
+                  weight="medium"
+                  color={profile.manglik === 'MANGLIK' ? '#B45309' : '#475569'}
+                >
+                  {manglikLabel}
+                </Typography>
+              </View>
             ) : null}
+
             {profile.diet ? (
-              <Badge
-                label={profile.diet === 'VEGETARIAN' ? (language === 'hi' ? 'शाकाहारी' : 'Veg') : profile.diet}
-                variant="success"
-                size="sm"
-              />
+              <View style={[styles.tagChip, styles.dietChip]}>
+                <Typography variant="xs" weight="medium" color="#15803D">
+                  {profile.diet === 'VEGETARIAN' ? (language === 'hi' ? 'शाकाहारी' : 'Veg') : profile.diet}
+                </Typography>
+              </View>
             ) : null}
           </View>
 
-          {/* Interest Action / Status */}
+          {/* Interest Action / Status Indicator */}
           <View style={styles.actionContainer}>
             {isOwnProfile ? (
-              <Badge
-                label={language === 'hi' ? 'आपकी प्रोफ़ाइल' : 'Your Profile'}
-                variant="info"
-                size="sm"
-              />
+              <View style={styles.ownProfileBadge}>
+                <Typography variant="xs" weight="bold" color="#1976D2">
+                  👤 {language === 'hi' ? 'आपकी प्रोफ़ाइल' : 'Your Profile'}
+                </Typography>
+              </View>
             ) : interestStatus === 'PENDING' ? (
-              <View style={[styles.statusPill, { backgroundColor: '#FFF3E0', borderColor: '#FFE0B2' }]}>
-                <Typography variant="xs" weight="semibold" color="#E65100">
+              <View style={[styles.statusPill, styles.pendingPill]}>
+                <Typography variant="xs" weight="bold" color="#C2410C">
                   ⏳ {language === 'hi' ? 'रुचि भेजी गई' : 'Interest Sent'}
                 </Typography>
               </View>
             ) : interestStatus === 'ACCEPTED' ? (
-              <View style={[styles.statusPill, { backgroundColor: '#E8F5E9', borderColor: '#C8E6C9' }]}>
-                <Typography variant="xs" weight="semibold" color="#2E7D32">
+              <View style={[styles.statusPill, styles.acceptedPill]}>
+                <Typography variant="xs" weight="bold" color="#15803D">
                   💖 {language === 'hi' ? 'स्वीकृत' : 'Connected'}
                 </Typography>
               </View>
             ) : interestStatus === 'DECLINED' ? (
-              <View style={[styles.statusPill, { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2' }]}>
-                <Typography variant="xs" weight="semibold" color="#C62828">
+              <View style={[styles.statusPill, styles.declinedPill]}>
+                <Typography variant="xs" weight="bold" color="#B91C1C">
                   ✕ {language === 'hi' ? 'अस्वीकृत' : 'Declined'}
                 </Typography>
               </View>
             ) : onSendInterest ? (
               <Pressable
-                onPress={(e) => {
-                  e.stopPropagation?.();
-                  onSendInterest(profile);
-                }}
-                style={[styles.expressInterestBtn, { backgroundColor: theme.colors.primary }]}
-                android_ripple={{ color: theme.colors.primaryDark }}
+                onPress={() => onSendInterest(profile)}
+                style={styles.expressInterestBtn}
+                android_ripple={{ color: '#1565C0', borderless: false }}
                 accessibilityRole="button"
-                accessibilityLabel={language === 'hi' ? 'रुचि व्यक्त करें' : 'Express Interest'}
+                accessibilityLabel={language === 'hi' ? 'रुचि भेजें' : 'Express Interest'}
               >
                 <Typography variant="xs" weight="bold" color="#FFFFFF">
-                  💌 {language === 'hi' ? 'रुचि भेजें' : 'Express Interest'}
+                  💌 {language === 'hi' ? 'रुचि भेजें' : 'Interest'}
                 </Typography>
               </Pressable>
             ) : null}
@@ -273,7 +295,15 @@ const styles = StyleSheet.create({
     padding: 0,
     marginBottom: 12,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
   },
   pressableArea: {
     padding: 12,
@@ -286,26 +316,32 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   photo: {
-    width: 80,
-    height: 96,
+    width: 84,
+    height: 104,
     borderRadius: 10,
-    borderWidth: 1,
+    backgroundColor: '#F1F5F9',
   },
   photoFallback: {
-    width: 80,
-    height: 96,
+    width: 84,
+    height: 104,
     borderRadius: 10,
-    borderWidth: 1,
+    backgroundColor: '#E0F2FE',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
   },
   photoCountBadge: {
     position: 'absolute',
     bottom: 4,
     right: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+  },
+  photoCountText: {
+    fontSize: 10,
   },
   detailsContainer: {
     flex: 1,
@@ -319,23 +355,55 @@ const styles = StyleSheet.create({
   },
   nameText: {
     flex: 1,
+    fontSize: 15.5,
     marginRight: 6,
   },
   verifiedBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
   },
-  metaRow: {
+  verifiedText: {
+    fontSize: 10.5,
+  },
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 4,
+    marginBottom: 5,
   },
-  statLine: {
-    marginBottom: 2,
+  roleBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  brideBadge: {
+    backgroundColor: '#FCE7F3',
+    borderWidth: 1,
+    borderColor: '#FBCFE8',
+  },
+  groomBadge: {
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  maritalBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  metricsLine: {
+    fontSize: 12,
+    marginBottom: 3,
   },
   careerLine: {
+    fontSize: 12.5,
     marginBottom: 4,
   },
   locationRow: {
@@ -343,7 +411,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pinIcon: {
-    marginRight: 2,
+    fontSize: 11,
+    marginRight: 3,
+  },
+  locationText: {
+    fontSize: 12,
+    flex: 1,
   },
   footerRow: {
     flexDirection: 'row',
@@ -351,28 +424,75 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 10,
     paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
   chipsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     flexWrap: 'wrap',
     flex: 1,
     marginRight: 8,
   },
+  tagChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+  },
+  tagChipDefault: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  manglikActiveChip: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  dietChip: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
   actionContainer: {
     alignItems: 'flex-end',
   },
-  statusPill: {
+  ownProfileBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  statusPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
     borderWidth: 1,
   },
+  pendingPill: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FFEDD5',
+  },
+  acceptedPill: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#BBF7D0',
+  },
+  declinedPill: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
+  },
   expressInterestBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: '#1976D2',
+    paddingHorizontal: 12,
+    paddingVertical: 6.5,
     borderRadius: 8,
+    elevation: 1,
+    shadowColor: '#1976D2',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
 });

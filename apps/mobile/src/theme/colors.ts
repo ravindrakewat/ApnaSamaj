@@ -7,6 +7,8 @@ export const colors = {
   primary: '#1976D2',
   primaryDark: '#1565C0',
   primaryLight: '#E3F2FD',
+  primarySoft: '#E0F2FE',
+  primarySubtle: '#EFF6FF',
   primaryBorder: '#90CAF9',
 
   // Brand Secondary (Community Purple)
@@ -22,7 +24,9 @@ export const colors = {
   // Typography / Content
   textPrimary: '#0F172A',
   textSecondary: '#475569',
-  textMuted: '#94A3B8',
+  textBody: '#334155',
+  textMuted: '#64748B',
+  textSubtle: '#94A3B8',
   textInverse: '#FFFFFF',
 
   // Borders & Dividers

@@ -15,8 +15,9 @@ import {
   Typography,
   Card,
   Button,
-  Input,
   GroupCard,
+  AppHeader,
+  SearchBar,
   BottomNavigation,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
@@ -31,7 +32,7 @@ export default function GroupsDiscoveryScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { language, setLanguage } = useLocalization();
-  const { communitySlug } = useAuth();
+  const { user, communitySlug } = useAuth();
 
   // Search & Filter State
   const [searchInput, setSearchInput] = useState<string>('');
@@ -100,19 +101,25 @@ export default function GroupsDiscoveryScreen() {
           privacy: privacyQuery,
         });
 
+        // If 'MY' tab is active, filter client-side for member groups
+        let filteredGroups = result.groups;
+        if (selectedTab === 'MY') {
+          filteredGroups = filteredGroups.filter((g) => g.isMember);
+        }
+
         if (targetPage === 1) {
-          setGroups(result.groups);
+          setGroups(filteredGroups);
         } else {
           setGroups((prev) => {
             const existingIds = new Set(prev.map((g) => g.id));
-            const newGroups = result.groups.filter((g) => !existingIds.has(g.id));
+            const newGroups = filteredGroups.filter((g) => !existingIds.has(g.id));
             return [...prev, ...newGroups];
           });
         }
 
         setPage(targetPage);
         setTotalPages(result.pagination.totalPages);
-        setTotalGroups(result.pagination.totalGroups);
+        setTotalGroups(selectedTab === 'MY' ? filteredGroups.length : result.pagination.totalGroups);
       } catch (err: unknown) {
         const msg =
           err instanceof Error
@@ -181,93 +188,93 @@ export default function GroupsDiscoveryScreen() {
     setLanguage(language === 'hi' ? 'en' : 'hi');
   };
 
-  // Filter groups in memory if 'MY' tab is selected
-  const displayedGroups =
-    selectedTab === 'MY' ? groups.filter((g) => g.isMember) : groups;
+  const handleResetFilters = () => {
+    setSearchInput('');
+    setDebouncedSearch('');
+    setSelectedTab('ALL');
+  };
 
-  // Filter chips definitions
-  const filterTabs: Array<{ key: GroupFilterTab; labelHi: string; labelEn: string }> = [
-    { key: 'ALL', labelHi: 'सभी समूह', labelEn: 'All Groups' },
-    { key: 'MY', labelHi: 'मेरे समूह', labelEn: 'My Groups' },
-    { key: 'PUBLIC', labelHi: 'सार्वजनिक', labelEn: 'Public' },
-    { key: 'PRIVATE', labelHi: 'निजी', labelEn: 'Private' },
+  // Filter tabs definition
+  const filterTabs: Array<{ key: GroupFilterTab; hi: string; en: string; icon: string }> = [
+    { key: 'ALL', hi: 'सभी समूह', en: 'All Groups', icon: '🏛️' },
+    { key: 'MY', hi: 'मेरे समूह', en: 'My Groups', icon: '⭐' },
+    { key: 'PUBLIC', hi: 'सार्वजनिक', en: 'Public', icon: '🌐' },
+    { key: 'PRIVATE', hi: 'निजी', en: 'Private', icon: '🔒' },
   ];
 
   // Header Component for FlatList
   const renderListHeader = () => (
     <View style={styles.headerContainer}>
-      {/* Category Filter Chips */}
-      <View style={styles.filterRow}>
-        {filterTabs.map((tab) => {
-          const isSelected = selectedTab === tab.key;
-          return (
-            <Pressable
-              key={tab.key}
-              onPress={() => setSelectedTab(tab.key)}
-              style={[
-                styles.filterChip,
-                {
-                  borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                  backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
-                },
-              ]}
-              accessibilityRole="button"
-            >
-              <Typography
-                variant="xs"
-                weight="semibold"
-                color={isSelected ? theme.colors.textInverse : theme.colors.textPrimary}
-              >
-                {language === 'hi' ? tab.labelHi : tab.labelEn}
-              </Typography>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Search Input Bar */}
-      <View style={styles.searchRow}>
-        <Input
-          placeholder={
-            language === 'hi'
-              ? 'नाम या विवरण से समूह खोजें...'
-              : 'Search by group name or description...'
-          }
+      {/* 1. Reusable SearchBar */}
+      <View style={styles.searchSection}>
+        <SearchBar
           value={searchInput}
           onChangeText={setSearchInput}
-          containerStyle={styles.searchInput}
-          rightAccessory={
-            searchInput ? (
-              <Pressable
-                onPress={() => setSearchInput('')}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-              >
-                <Typography variant="xs" weight="bold" color={theme.colors.textMuted}>
-                  ✕
-                </Typography>
-              </Pressable>
-            ) : null
+          placeholder={
+            language === 'hi'
+              ? 'समूह का नाम या विवरण खोजें...'
+              : 'Search groups by name or topic...'
           }
+          loading={isLoading && !isRefreshing && page === 1}
         />
       </View>
 
-      {/* Results Count Banner */}
-      {!isLoading && !error && displayedGroups.length > 0 ? (
+      {/* 2. Horizontal Filter Tabs Carousel */}
+      <View style={styles.filterSection}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={filterTabs}
+          keyExtractor={(item) => item.key}
+          contentContainerStyle={styles.filterScroll}
+          renderItem={({ item }) => {
+            const isSelected = selectedTab === item.key;
+            return (
+              <Pressable
+                onPress={() => setSelectedTab(item.key)}
+                style={[
+                  styles.filterChip,
+                  isSelected ? styles.filterChipSelected : styles.filterChipUnselected,
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                hitSlop={4}
+              >
+                <Typography variant="xs" style={styles.filterChipIcon}>
+                  {item.icon}
+                </Typography>
+                <Typography
+                  variant="xs"
+                  weight={isSelected ? 'bold' : 'semibold'}
+                  color={isSelected ? '#FFFFFF' : '#334155'}
+                >
+                  {language === 'hi' ? item.hi : item.en}
+                </Typography>
+              </Pressable>
+            );
+          }}
+        />
+      </View>
+
+      {/* 3. Results Count Banner */}
+      {!isLoading && !error && groups.length > 0 ? (
         <View style={styles.countRow}>
-          <Typography variant="xs" color={theme.colors.textMuted}>
-            {language === 'hi'
-              ? `${displayedGroups.length} समूह दिखाए जा रहे हैं`
-              : `Showing ${displayedGroups.length} groups`}
-          </Typography>
-          {debouncedSearch ? (
-            <Pressable onPress={() => setSearchInput('')}>
-              <Typography variant="xs" color={theme.colors.primary} weight="semibold">
-                {language === 'hi' ? 'खोज साफ़ करें' : 'Clear search'}
+          <View style={styles.countLeft}>
+            <View style={styles.blueIndicatorDot} />
+            <Typography variant="xs" weight="semibold" color="#475569">
+              {language === 'hi'
+                ? `${totalGroups} समुदाय समूह मिले`
+                : `${totalGroups} community groups found`}
+            </Typography>
+          </View>
+
+          {(debouncedSearch || selectedTab !== 'ALL') && (
+            <Pressable onPress={handleResetFilters} hitSlop={6}>
+              <Typography variant="xs" color="#1976D2" weight="bold">
+                {language === 'hi' ? 'रीसेट करें' : 'Reset'}
               </Typography>
             </Pressable>
-          ) : null}
+          )}
         </View>
       ) : null}
     </View>
@@ -278,18 +285,18 @@ export default function GroupsDiscoveryScreen() {
     if (isFetchingMore) {
       return (
         <View style={styles.footerLoader}>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-          <Typography variant="xs" color={theme.colors.textMuted} style={styles.loadingMoreText}>
+          <ActivityIndicator size="small" color="#1976D2" />
+          <Typography variant="xs" color="#64748B" style={styles.loadingMoreText}>
             {language === 'hi' ? 'और समूह लोड हो रहे हैं...' : 'Loading more groups...'}
           </Typography>
         </View>
       );
     }
-    if (page >= totalPages && displayedGroups.length > 0) {
+    if (page >= totalPages && groups.length > 0) {
       return (
         <View style={styles.footerDone}>
-          <Typography variant="xs" color={theme.colors.textMuted}>
-            {language === 'hi' ? 'सभी समूह लोड हो चुके हैं' : 'All groups loaded'}
+          <Typography variant="xs" color="#94A3B8">
+            {language === 'hi' ? '• सभी समूह लोड हो चुके हैं •' : '• All groups loaded •'}
           </Typography>
         </View>
       );
@@ -302,8 +309,8 @@ export default function GroupsDiscoveryScreen() {
     if (isLoading) {
       return (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Typography variant="sm" color={theme.colors.textSecondary} style={styles.stateText}>
+          <ActivityIndicator size="large" color="#1976D2" />
+          <Typography variant="sm" color="#475569" style={styles.stateText}>
             {language === 'hi' ? 'समुदाय समूह लोड हो रहे हैं...' : 'Loading community groups...'}
           </Typography>
         </View>
@@ -313,17 +320,20 @@ export default function GroupsDiscoveryScreen() {
     if (error) {
       return (
         <Card style={styles.stateCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.error} align="center">
+          <View style={styles.stateIconCircle}>
+            <Typography variant="lg">⚠️</Typography>
+          </View>
+          <Typography variant="md" weight="bold" color="#DC2626" align="center" style={styles.stateTitle}>
             {language === 'hi' ? 'समूह लोड नहीं हो सके' : 'Unable to Load Groups'}
           </Typography>
-          <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.errorDesc}>
+          <Typography variant="sm" color="#64748B" align="center" style={styles.stateDesc}>
             {error}
           </Typography>
           <Button
             title={language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
             variant="outline"
             onPress={() => loadGroups(1)}
-            style={styles.retryBtn}
+            style={styles.stateActionBtn}
           />
         </Card>
       );
@@ -331,38 +341,38 @@ export default function GroupsDiscoveryScreen() {
 
     return (
       <Card style={styles.stateCard}>
-        <Typography variant="md" weight="bold" color={theme.colors.textPrimary} align="center">
+        <View style={styles.stateIconCircle}>
+          <Typography variant="lg">{debouncedSearch ? '🔍' : '🏛️'}</Typography>
+        </View>
+        <Typography variant="md" weight="bold" color="#0F172A" align="center" style={styles.stateTitle}>
           {language === 'hi' ? 'कोई समूह नहीं मिला' : 'No Groups Found'}
         </Typography>
-        <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.emptyDesc}>
-          {selectedTab === 'MY'
-            ? language === 'hi'
-              ? 'आप अभी तक किसी समूह से नहीं जुड़े हैं। सार्वजनिक समूहों में शामिल हों!'
-              : 'You have not joined any groups yet. Explore public groups to join!'
-            : debouncedSearch
+        <Typography variant="sm" color="#64748B" align="center" style={styles.stateDesc}>
+          {debouncedSearch
             ? language === 'hi'
               ? 'आपकी खोज से मेल खाने वाला कोई समूह नहीं मिला।'
-              : 'No groups match your search criteria.'
+              : 'No community groups match your search criteria.'
+            : selectedTab === 'MY'
+            ? language === 'hi'
+              ? 'आप अभी तक किसी समूह के सदस्य नहीं हैं। नीचे सार्वजनिक समूहों में शामिल हों।'
+              : "You haven't joined any groups yet. Explore public groups to join."
             : language === 'hi'
-            ? 'समुदाय में अभी कोई समूह पंजीकृत नहीं है।'
-            : 'No groups registered in this community yet.'}
+            ? 'इस श्रेणी में अभी कोई समूह उपलब्ध नहीं है।'
+            : 'No community groups available in this category.'}
         </Typography>
         {debouncedSearch || selectedTab !== 'ALL' ? (
           <Button
-            title={language === 'hi' ? 'फ़िल्टर हटाएं' : 'Reset Filters'}
+            title={language === 'hi' ? 'सभी समूह देखें' : 'View All Groups'}
             variant="outline"
-            onPress={() => {
-              setSearchInput('');
-              setSelectedTab('ALL');
-            }}
-            style={styles.retryBtn}
+            onPress={handleResetFilters}
+            style={styles.stateActionBtn}
           />
         ) : (
           <Button
             title={language === 'hi' ? 'रीफ़्रेश करें' : 'Refresh'}
             variant="outline"
             onPress={handleRefresh}
-            style={styles.retryBtn}
+            style={styles.stateActionBtn}
           />
         )}
       </Card>
@@ -370,46 +380,23 @@ export default function GroupsDiscoveryScreen() {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      {/* Top Navbar */}
-      <View
-        style={[
-          styles.topBar,
-          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, paddingTop: Math.max(insets.top, 12) },
-        ]}
-      >
-        <View style={styles.brandRow}>
-          <View style={[styles.brandIcon, { backgroundColor: theme.colors.primary }]}>
-            <Typography variant="sm" weight="bold" color={theme.colors.textInverse}>
-              🏛️
-            </Typography>
-          </View>
-          <View>
-            <Typography variant="md" weight="bold" color={theme.colors.primary}>
-              {language === 'hi' ? 'समाज समूह' : 'Community Groups'}
-            </Typography>
-            <Typography variant="xs" color={theme.colors.textMuted}>
-              {communitySlug}
-            </Typography>
-          </View>
-        </View>
+    <View style={[styles.screen, { backgroundColor: '#F8FAFC' }]}>
+      {/* 1. Unified AppHeader in Brand Mode */}
+      <AppHeader
+        mode="brand"
+        icon="🏛️"
+        title={language === 'hi' ? 'समाज समूह' : 'Community Groups'}
+        communitySlug={communitySlug}
+        showLanguageSwitcher={true}
+        language={language}
+        onLanguageToggle={toggleLanguage}
+        showProfileAvatar={true}
+        avatarInitial={user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'स'}
+      />
 
-        {/* Language Toggle Pill */}
-        <Pressable
-          onPress={toggleLanguage}
-          style={[styles.langPill, { borderColor: theme.colors.border }]}
-          accessibilityRole="button"
-          accessibilityLabel="Switch language"
-        >
-          <Typography variant="xs" weight="semibold" color={theme.colors.primary}>
-            {language === 'hi' ? 'English' : 'हिन्दी'}
-          </Typography>
-        </Pressable>
-      </View>
-
-      {/* Groups List */}
+      {/* 2. Groups FlatList */}
       <FlatList
-        data={displayedGroups}
+        data={groups}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <GroupCard
@@ -422,21 +409,27 @@ export default function GroupsDiscoveryScreen() {
         ListHeaderComponent={renderListHeader}
         ListFooterComponent={renderListFooter}
         ListEmptyComponent={renderEmptyComponent}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: Math.max(insets.bottom, 16) + 72 },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[theme.colors.primary]}
-            tintColor={theme.colors.primary}
+            colors={['#1976D2']}
+            tintColor="#1976D2"
           />
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.4}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
       />
 
-      {/* Bottom Navigation */}
+      {/* 3. Bottom Navigation */}
       <BottomNavigation activeTab="groups" />
     </View>
   );
@@ -446,65 +439,68 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    elevation: 2,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  brandIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  langPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
   headerContainer: {
-    paddingTop: 12,
-    marginBottom: 8,
+    paddingTop: 10,
+    marginBottom: 6,
   },
-  filterRow: {
-    flexDirection: 'row',
+  searchSection: {
+    marginBottom: 10,
+  },
+  filterSection: {
+    marginBottom: 10,
+  },
+  filterScroll: {
     gap: 8,
-    marginBottom: 12,
-    flexWrap: 'wrap',
+    paddingHorizontal: 2,
   },
   filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    minHeight: 36,
+  },
+  filterChipSelected: {
+    backgroundColor: '#1976D2',
+    borderWidth: 1.5,
+    borderColor: '#1976D2',
+    elevation: 2,
+    shadowColor: '#1976D2',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  filterChipUnselected: {
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  searchRow: {
-    marginBottom: 8,
-  },
-  searchInput: {
-    marginBottom: 0,
+  filterChipIcon: {
+    fontSize: 12,
+    marginRight: 6,
   },
   countRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 4,
-    marginBottom: 8,
+    paddingVertical: 2,
+    marginBottom: 4,
+  },
+  countLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  blueIndicatorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1976D2',
   },
   listContent: {
     paddingHorizontal: 12,
-    paddingBottom: 24,
   },
   footerLoader: {
     alignItems: 'center',
@@ -516,7 +512,7 @@ const styles = StyleSheet.create({
   },
   footerDone: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 18,
   },
   centerContainer: {
     alignItems: 'center',
@@ -530,17 +526,26 @@ const styles = StyleSheet.create({
     padding: 24,
     marginTop: 16,
     alignItems: 'center',
+    borderRadius: 16,
+    borderColor: '#E2E8F0',
   },
-  errorDesc: {
-    marginTop: 6,
+  stateIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  stateTitle: {
+    marginBottom: 6,
+  },
+  stateDesc: {
     marginBottom: 16,
+    lineHeight: 18,
   },
-  emptyDesc: {
-    marginTop: 6,
-    marginBottom: 16,
-  },
-  retryBtn: {
+  stateActionBtn: {
     minWidth: 140,
   },
 });
-

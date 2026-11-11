@@ -95,17 +95,25 @@ export default function LoginScreen() {
       style={[styles.screen, { backgroundColor: theme.colors.background }]}
     >
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 16) }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top + 8, 20),
+            paddingBottom: Math.max(insets.bottom + 24, 40),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Top Bar with Language Selector */}
+        {/* Top Header Bar */}
         <View style={styles.topBar}>
-          <Badge
-            label={slug.trim() ? `Tenant: ${slug.trim().toLowerCase()}` : 'Apna Samaj'}
-            variant="info"
-            size="sm"
-          />
+          <View style={styles.tenantPillContainer}>
+            <Badge
+              label={`Tenant: ${slug.trim().toLowerCase() || 'default'}`}
+              variant="info"
+              size="sm"
+            />
+          </View>
           <Pressable
             onPress={toggleLanguage}
             accessibilityRole="button"
@@ -119,22 +127,22 @@ export default function LoginScreen() {
             ]}
           >
             <Typography variant="xs" weight="semibold" color={theme.colors.primary}>
-              {language === 'hi' ? 'English' : 'हिन्दी'}
+              🌐 {language === 'hi' ? 'English' : 'हिन्दी'}
             </Typography>
           </Pressable>
         </View>
 
-        {/* Brand Banner */}
+        {/* Brand Hero Banner */}
         <View style={styles.brandContainer}>
           <View style={[styles.brandIcon, { backgroundColor: theme.colors.primary }]}>
-            <Typography variant="title" weight="bold" color={theme.colors.textInverse}>
+            <Typography variant="display" weight="bold" color="#FFFFFF">
               अ
             </Typography>
           </View>
           <Typography
             variant="title"
             weight="bold"
-            color={theme.colors.primary}
+            color={theme.colors.textPrimary}
             style={styles.appName}
           >
             {language === 'hi' ? 'अपना समाज' : 'Apna Samaj'}
@@ -146,18 +154,25 @@ export default function LoginScreen() {
             style={styles.tagline}
           >
             {language === 'hi'
-              ? 'समुदाय का सशक्त, सुरक्षित मंच'
-              : 'Connecting & Empowering Communities'}
+              ? 'समुदाय का सशक्त, सुरक्षित एवं एकीकृत डिजिटल मंच'
+              : 'Empowering Communities Through Digital Connection'}
           </Typography>
         </View>
 
-        {/* Login Form Card */}
+        {/* Modern Form Card */}
         <Card style={styles.formCard}>
-          <Typography variant="lg" weight="bold" style={styles.cardHeader}>
-            {t('auth:loginTitle')}
-          </Typography>
+          <View style={styles.formHeader}>
+            <Typography variant="lg" weight="bold" color={theme.colors.textPrimary}>
+              {t('auth:loginTitle')}
+            </Typography>
+            <Typography variant="xs" color={theme.colors.textSecondary} style={styles.formSubtitle}>
+              {language === 'hi'
+                ? 'अपने पंजीकृत मोबाइल नंबर से प्रवेश करें'
+                : 'Sign in with your registered phone number'}
+            </Typography>
+          </View>
 
-          {/* Server Error Alert */}
+          {/* Server Error Alert Banner */}
           {(serverError || authError) && (
             <View
               style={[
@@ -168,15 +183,15 @@ export default function LoginScreen() {
                 },
               ]}
             >
-              <Typography variant="xs" weight="medium" color={theme.colors.error}>
-                {serverError || authError}
+              <Typography variant="xs" weight="bold" color={theme.colors.error}>
+                ⚠️ {serverError || authError}
               </Typography>
             </View>
           )}
 
           {/* Community Slug Input */}
           <Input
-            label={language === 'hi' ? 'कम्युनिटी स्लग (Community)' : 'Community Slug'}
+            label={language === 'hi' ? 'कम्युनिटी स्लग (Community Slug)' : 'Community Slug'}
             value={slug}
             onChangeText={(val) => {
               setSlug(val);
@@ -188,12 +203,12 @@ export default function LoginScreen() {
             error={slugError}
             helperText={
               language === 'hi'
-                ? 'आपके समुदाय का अनूठा कोड (डिफ़ॉल्ट: kewat)'
-                : 'Unique community code (default: kewat)'
+                ? 'समुदाय का अनूठा कोड (मल्टी-टेनेंट सुरक्षा)'
+                : 'Unique community tenant identifier'
             }
           />
 
-          {/* Mobile Phone Input */}
+          {/* Mobile Phone Input with +91 Country Code Badge */}
           <Input
             label={t('auth:phone')}
             value={phone}
@@ -205,6 +220,19 @@ export default function LoginScreen() {
             keyboardType="phone-pad"
             maxLength={13}
             error={phoneError}
+            leftAccessory={
+              <View style={styles.phonePrefix}>
+                <Typography variant="sm" weight="bold" color={theme.colors.primary}>
+                  +91
+                </Typography>
+                <View style={[styles.prefixDivider, { backgroundColor: theme.colors.border }]} />
+              </View>
+            }
+            helperText={
+              language === 'hi'
+                ? '10 अंकों का भारतीय मोबाइल नंबर दर्ज करें'
+                : 'Enter 10-digit Indian mobile number'
+            }
           />
 
           {/* Password Input with Show/Hide Toggle */}
@@ -221,12 +249,12 @@ export default function LoginScreen() {
             rightAccessory={
               <Pressable
                 onPress={() => setShowPassword((prev) => !prev)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 style={styles.eyeBtn}
                 accessibilityRole="button"
                 accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
               >
-                <Typography variant="xs" weight="medium" color={theme.colors.primary}>
+                <Typography variant="xs" weight="semibold" color={theme.colors.primary}>
                   {showPassword
                     ? language === 'hi'
                       ? 'छुपाएँ'
@@ -244,27 +272,33 @@ export default function LoginScreen() {
             title={t('auth:loginButton')}
             onPress={handleLogin}
             loading={isSubmitting}
+            disabled={isSubmitting}
             fullWidth
             style={styles.submitBtn}
           />
         </Card>
 
-        {/* Footer Link to Register */}
+        {/* Footer Navigation Link to Register */}
         <View style={styles.footerContainer}>
           <Pressable
             onPress={() => router.push('/(auth)/register')}
             style={styles.linkPressable}
             accessibilityRole="link"
           >
-            <Typography
-              variant="sm"
-              weight="medium"
-              color={theme.colors.primary}
-              align="center"
-            >
-              {t('auth:needAccount')}
+            <Typography variant="sm" color={theme.colors.textSecondary} align="center">
+              {language === 'hi' ? 'खाता नहीं है? ' : "Don't have an account? "}
+              <Typography variant="sm" weight="bold" color={theme.colors.primary}>
+                {language === 'hi' ? 'नया सदस्य पंजीकरण' : 'Register Now'}
+              </Typography>
             </Typography>
           </Pressable>
+
+          {/* Trust & Security Badge */}
+          <View style={styles.securityNote}>
+            <Typography variant="xs" color={theme.colors.textMuted} align="center">
+              🔒 {language === 'hi' ? '256-बिट सुरक्षित एन्क्रिप्टेड समुदाय नेटवर्क' : '256-bit Encrypted Secure Community Platform'}
+            </Typography>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -277,8 +311,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
   },
   topBar: {
     flexDirection: 'row',
@@ -286,12 +318,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  tenantPillContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   langPill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    minHeight: 32,
+    minHeight: 34,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -300,54 +336,86 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   brandIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 60,
+    height: 60,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    marginBottom: 12,
+    elevation: 3,
+    shadowColor: '#1976D2',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
   appName: {
-    fontSize: 24,
+    fontSize: 26,
+    fontWeight: '800',
     marginBottom: 4,
+    letterSpacing: 0.3,
   },
   tagline: {
-    maxWidth: 280,
+    maxWidth: 300,
+    lineHeight: 20,
   },
   formCard: {
-    padding: 20,
-    marginBottom: 20,
-  },
-  cardHeader: {
+    padding: 22,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
     marginBottom: 16,
+  },
+  formHeader: {
+    marginBottom: 16,
+  },
+  formSubtitle: {
+    marginTop: 4,
   },
   errorBanner: {
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     marginBottom: 16,
   },
+  phonePrefix: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 6,
+  },
+  prefixDivider: {
+    width: 1,
+    height: 20,
+    marginLeft: 8,
+  },
   eyeBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
   submitBtn: {
     marginTop: 8,
+    height: 48,
+    borderRadius: 12,
   },
   footerContainer: {
     alignItems: 'center',
     marginTop: 8,
   },
   linkPressable: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     minHeight: 48,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  securityNote: {
+    marginTop: 8,
+    paddingHorizontal: 16,
   },
 });

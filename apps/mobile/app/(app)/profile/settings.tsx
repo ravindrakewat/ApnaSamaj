@@ -17,7 +17,8 @@ import {
   Button,
   Badge,
   Input,
-  BottomNavigation,
+  AppHeader,
+  ConfirmationDialog,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -37,6 +38,10 @@ export default function SettingsScreen() {
   const [communityError, setCommunityError] = useState<string | null>(null);
   const [isSwitchingCommunity, setIsSwitchingCommunity] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Confirmation Dialog States
+  const [isLogoutDialogVisible, setIsLogoutDialogVisible] = useState(false);
+  const [switchCommunityTarget, setSwitchCommunityTarget] = useState<string | null>(null);
 
   // Notification Preferences State
   const [preferences, setPreferences] = useState<NotificationPreferencesItem>({
@@ -132,440 +137,366 @@ export default function SettingsScreen() {
     }
 
     setCommunityError(null);
-
-    const title = language === 'hi' ? 'समुदाय बदलें?' : 'Switch Community?';
-    const message =
-      language === 'hi'
-        ? `समुदाय "${target}" में बदलने से आपका वर्तमान सत्र समाप्त हो जाएगा। क्या आप जारी रखना चाहते हैं?`
-        : `Switching to "${target}" will terminate your current session to maintain tenant isolation. Do you wish to continue?`;
-
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(message);
-      if (confirmed) {
-        executeCommunitySwitch(target);
-      }
-    } else {
-      Alert.alert(title, message, [
-        { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-        {
-          text: language === 'hi' ? 'हाँ, बदलें' : 'Switch',
-          style: 'destructive',
-          onPress: () => executeCommunitySwitch(target),
-        },
-      ]);
-    }
+    setSwitchCommunityTarget(target);
   };
 
-  const executeCommunitySwitch = async (slug: string) => {
+  const executeCommunitySwitch = async () => {
+    if (!switchCommunityTarget) return;
+    const target = switchCommunityTarget;
     setIsSwitchingCommunity(true);
     try {
-      await switchCommunity(slug);
-      // NavigationGate in root _layout will automatically route to login
+      await switchCommunity(target);
+      setSwitchCommunityTarget(null);
+      router.replace('/(auth)/login');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'समुदाय बदलने में असमर्थ।';
       setCommunityError(msg);
       setIsSwitchingCommunity(false);
+      setSwitchCommunityTarget(null);
     }
   };
 
   /**
-   * Confirm and Logout
+   * Logout Handler
    */
   const handleLogout = () => {
-    const title = language === 'hi' ? 'लॉगआउट' : 'Log Out';
-    const message =
-      language === 'hi'
-        ? 'क्या आप सचमुच अपने खाते से लॉगआउट करना चाहते हैं?'
-        : 'Are you sure you want to log out from your account?';
-
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(message);
-      if (confirmed) {
-        executeLogout();
-      }
-    } else {
-      Alert.alert(title, message, [
-        { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-        {
-          text: language === 'hi' ? 'लॉगआउट' : 'Log Out',
-          style: 'destructive',
-          onPress: executeLogout,
-        },
-      ]);
-    }
+    setIsLogoutDialogVisible(true);
   };
 
-  const executeLogout = async () => {
+  const performLogout = async () => {
     setIsLoggingOut(true);
     try {
       await logout();
-      // NavigationGate in root _layout will automatically route to login
+      setIsLogoutDialogVisible(false);
+      router.replace('/(auth)/login');
     } catch (err: unknown) {
-      console.warn('[Settings] Logout error:', err);
+      const msg = err instanceof Error ? err.message : 'लॉगआउट में त्रुटि हुई।';
+      Alert.alert(language === 'hi' ? 'त्रुटि' : 'Error', msg);
+    } finally {
       setIsLoggingOut(false);
+      setIsLogoutDialogVisible(false);
     }
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      {/* Top Header */}
-      <View
-        style={[
-          styles.headerBar,
-          {
-            paddingTop: Math.max(insets.top + 8, 16),
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.border,
-          },
+    <View style={styles.screen}>
+      {/* 1. Unified AppHeader (Detail Mode) */}
+      <AppHeader
+        mode="detail"
+        title={language === 'hi' ? 'सेटिंग्स एवं प्राथमिकताएं' : 'Settings & Preferences'}
+        communitySlug={communitySlug}
+        showBackButton={true}
+      />
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 40, 60) },
         ]}
+        showsVerticalScrollIndicator={false}
       >
-        <Pressable
-          onPress={() => router.back()}
-          style={[styles.backButton, { borderColor: theme.colors.border }]}
-          accessibilityRole="button"
-          accessibilityLabel={language === 'hi' ? 'वापस जाएं' : 'Go back'}
-        >
-          <Typography variant="md" weight="bold" color={theme.colors.textPrimary}>
-            ←
+        {/* 2. Language Preferences Section */}
+        <Card style={styles.sectionCard}>
+          <Typography variant="sm" weight="bold" color="#0F172A" style={styles.sectionTitle}>
+            🌐 {language === 'hi' ? 'भाषा प्राथमिकता (Language)' : 'Language Preferences'}
           </Typography>
-        </Pressable>
 
-        <Typography variant="lg" weight="bold" color={theme.colors.textPrimary} style={styles.headerTitle}>
-          {language === 'hi' ? 'सेटिंग्स' : 'Settings'}
-        </Typography>
+          <Typography variant="xs" color="#64748B" style={styles.sectionSubtitle}>
+            {language === 'hi'
+              ? 'ऐप इंटरफ़ेस के लिए पसंदीदा भाषा चुनें:'
+              : 'Select your preferred language for the application interface:'}
+          </Typography>
 
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Section 1: Language Preference */}
-        <Typography variant="sm" weight="bold" color={theme.colors.textMuted} style={styles.sectionHeader}>
-          {language === 'hi' ? 'भाषा प्राथमिकता (LANGUAGE)' : 'LANGUAGE PREFERENCE'}
-        </Typography>
-
-        <Card style={styles.sectionCard}>
-          {/* Hindi Option */}
-          <Pressable
-            onPress={() => handleSelectLanguage('hi')}
-            style={[
-              styles.optionRow,
-              {
-                borderColor: language === 'hi' ? theme.colors.primary : theme.colors.border,
-                backgroundColor: language === 'hi' ? theme.colors.primaryLight : theme.colors.surface,
-              },
-            ]}
-          >
-            <View style={styles.optionTextContainer}>
-              <Typography variant="md" weight="bold" color={theme.colors.textPrimary}>
-                हिन्दी (Hindi)
-              </Typography>
-              <Typography variant="xs" color={theme.colors.textSecondary}>
-                मातृभाषा एवं समाज संवाद हेतु
-              </Typography>
-            </View>
-            <View
+          <View style={styles.languageOptionsRow}>
+            {/* Hindi Card */}
+            <Pressable
+              onPress={() => handleSelectLanguage('hi')}
               style={[
-                styles.radioIndicator,
-                {
-                  borderColor: language === 'hi' ? theme.colors.primary : theme.colors.borderStrong,
-                  backgroundColor: language === 'hi' ? theme.colors.primary : 'transparent',
-                },
+                styles.languageCard,
+                language === 'hi' && styles.languageCardActive,
               ]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: language === 'hi' }}
             >
-              {language === 'hi' && <View style={styles.radioInner} />}
-            </View>
-          </Pressable>
+              <View style={styles.languageCardHeader}>
+                <Typography variant="md" weight="bold" color={language === 'hi' ? '#1976D2' : '#0F172A'}>
+                  हिंदी
+                </Typography>
+                {language === 'hi' && (
+                  <View style={styles.checkPill}>
+                    <Typography variant="xs" weight="bold" color="#FFFFFF">
+                      ✓
+                    </Typography>
+                  </View>
+                )}
+              </View>
+              <Typography variant="xs" color={language === 'hi' ? '#1976D2' : '#64748B'}>
+                Hindi (हिन्दी)
+              </Typography>
+            </Pressable>
 
-          {/* English Option */}
-          <Pressable
-            onPress={() => handleSelectLanguage('en')}
-            style={[
-              styles.optionRow,
-              styles.optionRowSpaced,
-              {
-                borderColor: language === 'en' ? theme.colors.primary : theme.colors.border,
-                backgroundColor: language === 'en' ? theme.colors.primaryLight : theme.colors.surface,
-              },
-            ]}
-          >
-            <View style={styles.optionTextContainer}>
-              <Typography variant="md" weight="bold" color={theme.colors.textPrimary}>
-                English (अंग्रेजी)
-              </Typography>
-              <Typography variant="xs" color={theme.colors.textSecondary}>
-                Standard interface in English
-              </Typography>
-            </View>
-            <View
+            {/* English Card */}
+            <Pressable
+              onPress={() => handleSelectLanguage('en')}
               style={[
-                styles.radioIndicator,
-                {
-                  borderColor: language === 'en' ? theme.colors.primary : theme.colors.borderStrong,
-                  backgroundColor: language === 'en' ? theme.colors.primary : 'transparent',
-                },
+                styles.languageCard,
+                language === 'en' && styles.languageCardActive,
               ]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: language === 'en' }}
             >
-              {language === 'en' && <View style={styles.radioInner} />}
-            </View>
-          </Pressable>
-        </Card>
-
-        {/* Section 2: Community Context & Multi-Tenant Switcher */}
-        <Typography variant="sm" weight="bold" color={theme.colors.textMuted} style={styles.sectionHeader}>
-          {language === 'hi' ? 'समाज समुदाय (COMMUNITY CONTEXT)' : 'COMMUNITY CONTEXT'}
-        </Typography>
-
-        <Card style={styles.sectionCard}>
-          <View style={styles.detailRow}>
-            <Typography variant="sm" color={theme.colors.textSecondary}>
-              {language === 'hi' ? 'वर्तमान समुदाय:' : 'Active Community:'}
-            </Typography>
-            <Badge label={communitySlug.toUpperCase()} variant="info" size="sm" />
-          </View>
-
-          <View style={[styles.warningBox, { backgroundColor: theme.colors.warningLight, borderColor: theme.colors.warning }]}>
-            <Typography variant="xs" color={theme.colors.textPrimary}>
-              {language === 'hi'
-                ? '⚠️ सुरक्षा सूचना: अपना समाज बहु-समुदाय (Multi-Tenant) सुरक्षित प्रणाली है। समुदाय बदलने पर पुराना सत्र समाप्त हो जाएगा ताकि कोई डेटा लीक न हो।'
-                : '⚠️ Tenant Isolation: Apna Samaj preserves physical database isolation. Switching communities terminates the active session to prevent cross-tenant data leakage.'}
-            </Typography>
-          </View>
-
-          <View style={styles.switchForm}>
-            <Input
-              label={language === 'hi' ? 'नया समुदाय कोड (Slug)' : 'New Community Slug'}
-              placeholder="e.g. demo, kewat, maheshwari"
-              value={newCommunitySlug}
-              onChangeText={(text) => {
-                setNewCommunitySlug(text);
-                setCommunityError(null);
-              }}
-              autoCapitalize="none"
-              error={communityError || undefined}
-            />
-
-            <Button
-              title={
-                isSwitchingCommunity
-                  ? language === 'hi'
-                    ? 'बदला जा रहा है...'
-                    : 'Switching...'
-                  : language === 'hi'
-                    ? 'समुदाय बदलें'
-                    : 'Switch Community'
-              }
-              onPress={handleSwitchCommunity}
-              disabled={isSwitchingCommunity || !newCommunitySlug.trim()}
-              loading={isSwitchingCommunity}
-              variant="outline"
-              size="md"
-              style={styles.switchBtn}
-            />
+              <View style={styles.languageCardHeader}>
+                <Typography variant="md" weight="bold" color={language === 'en' ? '#1976D2' : '#0F172A'}>
+                  English
+                </Typography>
+                {language === 'en' && (
+                  <View style={styles.checkPill}>
+                    <Typography variant="xs" weight="bold" color="#FFFFFF">
+                      ✓
+                    </Typography>
+                  </View>
+                )}
+              </View>
+              <Typography variant="xs" color={language === 'en' ? '#1976D2' : '#64748B'}>
+                English
+              </Typography>
+            </Pressable>
           </View>
         </Card>
 
-        {/* Section 3: Notification Preferences (FCM) */}
-        <Typography variant="sm" weight="bold" color={theme.colors.textMuted} style={styles.sectionHeader}>
-          {language === 'hi' ? 'सूचनाएं व अलर्ट (NOTIFICATION PREFERENCES)' : 'NOTIFICATION PREFERENCES'}
-        </Typography>
-
+        {/* 3. Community Context & Multi-Tenant Switching */}
         <Card style={styles.sectionCard}>
+          <Typography variant="sm" weight="bold" color="#0F172A" style={styles.sectionTitle}>
+            🏛️ {language === 'hi' ? 'समुदाय स्विच करें (Community)' : 'Switch Community'}
+          </Typography>
+
+          <View style={styles.currentCommunityRow}>
+            <Typography variant="xs" color="#64748B" weight="medium">
+              {language === 'hi' ? 'वर्तमान समुदाय:' : 'Current Community:'}
+            </Typography>
+            <View style={styles.currentSlugBadge}>
+              <Typography variant="xs" weight="bold" color="#0369A1">
+                {communitySlug}
+              </Typography>
+            </View>
+          </View>
+
+          {/* Tenant Isolation Security Warning */}
+          <View style={styles.warningBox}>
+            <Typography variant="xs" color="#92400E" style={styles.warningText}>
+              ⚠️ {language === 'hi'
+                ? 'अपना समाज का प्रत्येक समुदाय एक अलग, सुरक्षित डेटाबेस में संग्रहीत है। समुदाय बदलने से वर्तमान सत्र समाप्त हो जाएगा।'
+                : 'Each Apna Samaj community is isolated in a separate, secure database. Switching communities terminates your active session.'}
+            </Typography>
+          </View>
+
+          <Input
+            label={language === 'hi' ? 'नया समुदाय कोड (Slug)' : 'New Community Slug'}
+            value={newCommunitySlug}
+            onChangeText={(txt) => {
+              setNewCommunitySlug(txt);
+              setCommunityError(null);
+            }}
+            placeholder="उदा. kewat, gupta, rathore"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          {communityError ? (
+            <View style={styles.errorBox}>
+              <Typography variant="xs" color="#DC2626">
+                {communityError}
+              </Typography>
+            </View>
+          ) : null}
+
+          <Button
+            title={language === 'hi' ? 'समुदाय बदलें' : 'Switch Community'}
+            onPress={handleSwitchCommunity}
+            loading={isSwitchingCommunity}
+            disabled={isSwitchingCommunity || !newCommunitySlug.trim()}
+            variant="outline"
+            size="md"
+            style={styles.switchBtn}
+          />
+        </Card>
+
+        {/* 4. Notification Preferences */}
+        <Card style={styles.sectionCard}>
+          <Typography variant="sm" weight="bold" color="#0F172A" style={styles.sectionTitle}>
+            🔔 {language === 'hi' ? 'सूचना प्राथमिकताएं' : 'Notification Preferences'}
+          </Typography>
+
+          <Typography variant="xs" color="#64748B" style={styles.sectionSubtitle}>
+            {language === 'hi'
+              ? 'चुनें कि आप किन गतिविधियों के लिए पुश सूचनाएं प्राप्त करना चाहते हैं:'
+              : 'Choose which activities you receive push notifications for:'}
+          </Typography>
+
           {isLoadingPreferences ? (
-            <View style={{ padding: 16, alignItems: 'center' }}>
-              <ActivityIndicator color={theme.colors.primary} size="small" />
+            <View style={styles.preferencesLoading}>
+              <ActivityIndicator size="small" color="#1976D2" />
+              <Typography variant="xs" color="#64748B" style={styles.loadingPrefText}>
+                {language === 'hi' ? 'प्राथमिकताएं लोड हो रही हैं...' : 'Loading preferences...'}
+              </Typography>
             </View>
           ) : (
-            <>
-              {/* Personal Messages */}
-              <View style={styles.preferenceRow}>
-                <View style={styles.preferenceText}>
-                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
-                    {language === 'hi' ? 'व्यक्तिगत संदेश (Direct Messages)' : 'Personal Messages'}
-                  </Typography>
-                  <Typography variant="xs" color={theme.colors.textSecondary}>
-                    {language === 'hi' ? 'निजी बातचीत के नए संदेश' : 'Direct one-to-one chat messages'}
-                  </Typography>
-                </View>
-                <Switch
-                  value={preferences.personalMessages}
-                  onValueChange={() => handleTogglePreference('personalMessages')}
-                  disabled={updatingKey === 'personalMessages'}
-                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
-                  thumbColor={preferences.personalMessages ? theme.colors.primary : theme.colors.borderStrong}
-                />
-              </View>
-
-              {/* Group Messages */}
-              <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
-                <View style={styles.preferenceText}>
-                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
-                    {language === 'hi' ? 'समूह संदेश (Group Chat)' : 'Group Messages'}
-                  </Typography>
-                  <Typography variant="xs" color={theme.colors.textSecondary}>
-                    {language === 'hi' ? 'समाज समूहों के संदेश' : 'Community group chat notifications'}
-                  </Typography>
-                </View>
-                <Switch
-                  value={preferences.groupMessages}
-                  onValueChange={() => handleTogglePreference('groupMessages')}
-                  disabled={updatingKey === 'groupMessages'}
-                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
-                  thumbColor={preferences.groupMessages ? theme.colors.primary : theme.colors.borderStrong}
-                />
-              </View>
-
-              {/* Matrimonial */}
-              <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
-                <View style={styles.preferenceText}>
-                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
-                    {language === 'hi' ? 'वैवाहिक रिश्ते व रुचि (Matrimonial)' : 'Matrimonial'}
-                  </Typography>
-                  <Typography variant="xs" color={theme.colors.textSecondary}>
-                    {language === 'hi' ? 'नई रुचि और स्वीकृत प्रस्ताव' : 'Interest requests & match updates'}
-                  </Typography>
-                </View>
-                <Switch
-                  value={preferences.matrimonial}
-                  onValueChange={() => handleTogglePreference('matrimonial')}
-                  disabled={updatingKey === 'matrimonial'}
-                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
-                  thumbColor={preferences.matrimonial ? theme.colors.primary : theme.colors.borderStrong}
-                />
-              </View>
-
-              {/* Likes & Comments */}
-              <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
-                <View style={styles.preferenceText}>
-                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
-                    {language === 'hi' ? 'पसंद व टिप्पणियाँ (Social Activity)' : 'Likes & Comments'}
-                  </Typography>
-                  <Typography variant="xs" color={theme.colors.textSecondary}>
-                    {language === 'hi' ? 'आपकी पोस्ट पर प्रतिक्रियाएं' : 'Reactions and comments on your posts'}
-                  </Typography>
-                </View>
-                <Switch
-                  value={preferences.likes && preferences.comments}
-                  onValueChange={() => {
-                    handleTogglePreference('likes');
-                    handleTogglePreference('comments');
-                  }}
-                  disabled={updatingKey === 'likes' || updatingKey === 'comments'}
-                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
-                  thumbColor={preferences.likes ? theme.colors.primary : theme.colors.borderStrong}
-                />
-              </View>
-
-              {/* Announcements & Community Updates */}
-              <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
-                <View style={styles.preferenceText}>
-                  <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
-                    {language === 'hi' ? 'घोषणाएं व समाज सूचनाएं' : 'Announcements & Updates'}
-                  </Typography>
-                  <Typography variant="xs" color={theme.colors.textSecondary}>
-                    {language === 'hi' ? 'महत्वपूर्ण सामाजिक सूचनाएं' : 'Important community announcements'}
-                  </Typography>
-                </View>
-                <Switch
-                  value={preferences.announcements}
-                  onValueChange={() => handleTogglePreference('announcements')}
-                  disabled={updatingKey === 'announcements'}
-                  trackColor={{ false: theme.colors.border, true: theme.colors.primaryLight }}
-                  thumbColor={preferences.announcements ? theme.colors.primary : theme.colors.borderStrong}
-                />
-              </View>
-            </>
+            <View style={styles.preferenceRows}>
+              {[
+                {
+                  key: 'personalMessages' as const,
+                  labelHi: 'व्यक्तिगत संदेश (Private Messages)',
+                  labelEn: 'Direct Messages',
+                  descHi: 'जब कोई सदस्य आपको व्यक्तिगत संदेश भेजे',
+                  descEn: 'When another member sends you a direct message',
+                },
+                {
+                  key: 'groupMessages' as const,
+                  labelHi: 'समूह संदेश (Group Chat)',
+                  labelEn: 'Group Messages',
+                  descHi: 'आपके जुड़े समूहों में नए संदेश',
+                  descEn: 'New messages in your joined groups',
+                },
+                {
+                  key: 'matrimonial' as const,
+                  labelHi: 'विवाह संबंध रुचियाँ (Matrimonial)',
+                  labelEn: 'Matrimonial Interests',
+                  descHi: 'जब कोई सदस्य विवाह संबंध में रुचि व्यक्त करे',
+                  descEn: 'When someone expresses matrimonial interest',
+                },
+                {
+                  key: 'announcements' as const,
+                  labelHi: 'घोषणाएं एवं नोटिस (Announcements)',
+                  labelEn: 'Announcements',
+                  descHi: 'समाज प्रशासक द्वारा प्रकाशित आधिकारिक घोषणाएं',
+                  descEn: 'Official notices posted by community administrators',
+                },
+                {
+                  key: 'communityUpdates' as const,
+                  labelHi: 'सामुदायिक कार्यक्रम (Events & Updates)',
+                  labelEn: 'Community Updates',
+                  descHi: 'आगामी सामाजिक कार्यक्रम और सूचनाएं',
+                  descEn: 'Upcoming community programs and activities',
+                },
+                {
+                  key: 'comments' as const,
+                  labelHi: 'पोस्ट टिप्पणियाँ (Comments)',
+                  labelEn: 'Post Comments',
+                  descHi: 'आपकी पोस्ट पर नई टिप्पणियों की सूचना',
+                  descEn: 'When members comment on your posts',
+                },
+              ].map((item) => {
+                const isEnabled = preferences[item.key];
+                const isUpdating = updatingKey === item.key;
+                return (
+                  <View key={item.key} style={styles.prefRow}>
+                    <View style={styles.prefLabelBox}>
+                      <Typography variant="sm" weight="semibold" color="#0F172A">
+                        {language === 'hi' ? item.labelHi : item.labelEn}
+                      </Typography>
+                      <Typography variant="xs" color="#64748B" style={styles.prefDesc}>
+                        {language === 'hi' ? item.descHi : item.descEn}
+                      </Typography>
+                    </View>
+                    {isUpdating ? (
+                      <ActivityIndicator size="small" color="#1976D2" style={styles.prefLoader} />
+                    ) : (
+                      <Switch
+                        value={isEnabled}
+                        onValueChange={() => handleTogglePreference(item.key)}
+                        trackColor={{ false: '#CBD5E1', true: '#90CAF9' }}
+                        thumbColor={isEnabled ? '#1976D2' : '#F1F5F9'}
+                      />
+                    )}
+                  </View>
+                );
+              })}
+            </View>
           )}
         </Card>
 
-        {/* Section 4: Account & Security */}
-        <Typography variant="sm" weight="bold" color={theme.colors.textMuted} style={styles.sectionHeader}>
-          {language === 'hi' ? 'खाता एवं सुरक्षा (ACCOUNT & SECURITY)' : 'ACCOUNT & SECURITY'}
-        </Typography>
-
+        {/* 5. Account Security & Verification */}
         <Card style={styles.sectionCard}>
-          <View style={styles.detailRow}>
-            <Typography variant="sm" color={theme.colors.textSecondary}>
-              {language === 'hi' ? 'मोबाइल नंबर:' : 'Registered Phone:'}
-            </Typography>
-            <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
-              {user?.phone ? `+91 ${user.phone}` : '—'}
-            </Typography>
-          </View>
+          <Typography variant="sm" weight="bold" color="#0F172A" style={styles.sectionTitle}>
+            🔒 {language === 'hi' ? 'सुरक्षा एवं सत्यापन' : 'Account Security'}
+          </Typography>
 
-          <View style={styles.detailRow}>
-            <Typography variant="sm" color={theme.colors.textSecondary}>
-              {language === 'hi' ? 'भूमिका (Role):' : 'Role:'}
-            </Typography>
-            <Badge label={user?.role || 'MEMBER'} variant="info" size="sm" />
-          </View>
-
-          <View style={styles.detailRow}>
-            <Typography variant="sm" color={theme.colors.textSecondary}>
-              {language === 'hi' ? 'खाता स्थिति:' : 'Status:'}
-            </Typography>
-            <Badge label={user?.status || 'ACTIVE'} variant="success" size="sm" />
-          </View>
-
-          <View style={styles.logoutContainer}>
-            <Button
-              title={
-                isLoggingOut || isLoading
-                  ? language === 'hi'
-                    ? 'लॉगआउट हो रहा है...'
-                    : 'Logging out...'
-                  : language === 'hi'
-                    ? '🚪 लॉगआउट करें (Log Out)'
-                    : '🚪 Log Out'
-              }
-              onPress={handleLogout}
-              disabled={isLoggingOut || isLoading}
-              loading={isLoggingOut}
-              variant="outline"
-              size="md"
-              style={{ ...styles.logoutBtn, borderColor: theme.colors.error }}
-              textStyle={{ color: theme.colors.error }}
-            />
+          <View style={styles.securityRow}>
+            <View>
+              <Typography variant="xs" color="#64748B" weight="medium">
+                {language === 'hi' ? 'फ़ोन सत्यापन स्थिति' : 'Phone Verification'}
+              </Typography>
+              <Typography variant="sm" weight="bold" color="#0F172A">
+                {user?.phone ? `+91 ${user.phone}` : '—'}
+              </Typography>
+            </View>
+            <View style={styles.verifiedStatusPill}>
+              <Typography variant="xs" weight="bold" color="#15803D">
+                ✓ {language === 'hi' ? 'सत्यापित' : 'Verified'}
+              </Typography>
+            </View>
           </View>
         </Card>
 
-        {/* Section 4: App Information */}
-        <Typography variant="sm" weight="bold" color={theme.colors.textMuted} style={styles.sectionHeader}>
-          {language === 'hi' ? 'ऐप विवरण (APP INFORMATION)' : 'APP INFORMATION'}
-        </Typography>
+        {/* 6. Logout Section */}
+        <Card style={styles.logoutCard}>
+          <Typography variant="sm" weight="bold" color="#DC2626" style={styles.sectionTitle}>
+            🚪 {language === 'hi' ? 'सत्र समाप्त करें (Logout)' : 'End Session (Logout)'}
+          </Typography>
 
-        <Card style={styles.sectionCard}>
-          <View style={styles.detailRow}>
-            <Typography variant="sm" color={theme.colors.textSecondary}>
-              {language === 'hi' ? 'ऐप का नाम:' : 'App Name:'}
-            </Typography>
-            <Typography variant="sm" weight="semibold" color={theme.colors.textPrimary}>
-              अपना समाज (Apna Samaj)
-            </Typography>
-          </View>
+          <Typography variant="xs" color="#64748B" style={styles.logoutDesc}>
+            {language === 'hi'
+              ? 'लॉगआउट करने से आपके डिवाइस से सक्रिय क्रेडेंशियल सुरक्षित रूप से हटा दिए जाएंगे।'
+              : 'Logging out terminates your current active session and securely clears device auth tokens.'}
+          </Typography>
 
-          <View style={styles.detailRow}>
-            <Typography variant="sm" color={theme.colors.textSecondary}>
-              {language === 'hi' ? 'संस्करण (Version):' : 'Version:'}
-            </Typography>
-            <Badge label="v1.0.0 (Batch 7)" variant="default" size="sm" />
-          </View>
-
-          <View style={styles.detailRow}>
-            <Typography variant="sm" color={theme.colors.textSecondary}>
-              {language === 'hi' ? 'सुरक्षा मानक:' : 'Security:'}
-            </Typography>
-            <Typography variant="xs" weight="medium" color={theme.colors.success}>
-              ✓ Tenant-Isolated Multi-Community
-            </Typography>
-          </View>
+          <Button
+            title={language === 'hi' ? 'लॉगआउट करें' : 'Logout of Account'}
+            onPress={handleLogout}
+            loading={isLoggingOut}
+            disabled={isLoggingOut}
+            variant="outline"
+            size="md"
+            style={styles.logoutBtn}
+          />
         </Card>
-
-        {/* Bottom Spacer */}
-        <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Persistent Bottom Tab Bar */}
-      <BottomNavigation activeTab="profile" />
+      {/* Switch Community Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={Boolean(switchCommunityTarget)}
+        title={language === 'hi' ? 'समुदाय बदलें?' : 'Switch Community?'}
+        message={
+          language === 'hi'
+            ? `समुदाय "${switchCommunityTarget || ''}" में बदलने से आपका वर्तमान सत्र समाप्त हो जाएगा ताकि समुदाय डेटा अलग और सुरक्षित रहे।`
+            : `Switching to "${switchCommunityTarget || ''}" will terminate your current session to maintain physical tenant isolation.`
+        }
+        confirmLabel={language === 'hi' ? 'हाँ, बदलें' : 'Switch'}
+        cancelLabel={language === 'hi' ? 'रद्द करें' : 'Cancel'}
+        variant="warning"
+        icon="🔄"
+        loading={isSwitchingCommunity}
+        onConfirm={executeCommunitySwitch}
+        onCancel={() => setSwitchCommunityTarget(null)}
+      />
+
+      {/* Logout Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={isLogoutDialogVisible}
+        title={language === 'hi' ? 'लॉगआउट की पुष्टि' : 'Confirm Logout'}
+        message={
+          language === 'hi'
+            ? 'क्या आप निश्चित रूप से अपना सत्र समाप्त करना चाहते हैं? सुरक्षित क्रेडेंशियल डिवाइस से हटा दिए जाएंगे।'
+            : 'Are you sure you want to log out? Your secure credentials will be removed from this device.'
+        }
+        confirmLabel={language === 'hi' ? 'लॉगआउट' : 'Logout'}
+        cancelLabel={language === 'hi' ? 'रद्द करें' : 'Cancel'}
+        variant="danger"
+        icon="🚪"
+        loading={isLoggingOut}
+        onConfirm={performLogout}
+        onCancel={() => setIsLogoutDialogVisible(false)}
+      />
     </View>
   );
 }
@@ -573,113 +504,155 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-  },
-  headerBar: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    marginLeft: -10, // balance spacer
-  },
-  headerSpacer: {
-    width: 28,
+    backgroundColor: '#F8FAFC',
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 20,
-  },
-  sectionHeader: {
-    marginTop: 16,
-    marginBottom: 8,
-    marginLeft: 4,
-    letterSpacing: 0.5,
   },
   sectionCard: {
     padding: 16,
-    marginBottom: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+    elevation: 1,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
   },
-  optionRow: {
+  sectionTitle: {
+    marginBottom: 4,
+    fontSize: 14.5,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  languageOptionsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1.5,
+    gap: 12,
   },
-  optionRowSpaced: {
-    marginTop: 10,
-  },
-  optionTextContainer: {
+  languageCard: {
     flex: 1,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
   },
-  radioIndicator: {
+  languageCardActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#1976D2',
+  },
+  languageCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  checkPill: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    borderWidth: 2,
+    backgroundColor: '#1976D2',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
   },
-  radioInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFFFFF',
-  },
-  detailRow: {
+  currentCommunityRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
+    gap: 8,
+    marginBottom: 10,
+  },
+  currentSlugBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
   },
   warningBox: {
     padding: 10,
     borderRadius: 8,
+    backgroundColor: '#FEF3C7',
     borderWidth: 1,
-    marginVertical: 12,
+    borderColor: '#FDE68A',
+    marginBottom: 12,
   },
-  switchForm: {
-    marginTop: 8,
+  warningText: {
+    lineHeight: 17,
+  },
+  errorBox: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#FEE2E2',
+    marginBottom: 10,
   },
   switchBtn: {
+    marginTop: 4,
+  },
+  preferencesLoading: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  loadingPrefText: {
     marginTop: 8,
   },
-  logoutContainer: {
-    marginTop: 16,
-    paddingTop: 8,
+  preferenceRows: {
+    gap: 14,
   },
-  logoutBtn: {
-    borderWidth: 1.5,
-  },
-  preferenceRow: {
+  prefRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
   },
-  preferenceRowBorder: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E2E8F0',
-  },
-  preferenceText: {
+  prefLabelBox: {
     flex: 1,
-    paddingRight: 16,
+    marginRight: 12,
+  },
+  prefDesc: {
+    marginTop: 2,
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
+  prefLoader: {
+    paddingHorizontal: 12,
+  },
+  securityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  verifiedStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  logoutCard: {
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginBottom: 12,
+  },
+  logoutDesc: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 14,
+  },
+  logoutBtn: {
+    borderColor: '#DC2626',
   },
 });

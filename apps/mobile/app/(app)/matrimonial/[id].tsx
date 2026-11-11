@@ -22,6 +22,7 @@ import {
   Button,
   Badge,
   Input,
+  AppHeader,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -29,13 +30,34 @@ import { useAuth } from '../../../src/hooks/useAuth';
 import { matrimonialApi } from '../../../src/api/matrimonial.api';
 import { formatHeightCm } from '../../../src/components/MatrimonialCard';
 
+const DetailRow: React.FC<{ label: string; value?: string | number | null }> = ({
+  label,
+  value,
+}) => {
+  if (value === undefined || value === null || value === '') return null;
+  return (
+    <View style={styles.detailRow}>
+      <Typography variant="xs" color="#64748B" style={styles.detailLabel}>
+        {label}
+      </Typography>
+      <Typography variant="sm" weight="semibold" color="#0F172A" style={styles.detailValue}>
+        {String(value)}
+      </Typography>
+    </View>
+  );
+};
+
 export default function MatrimonialProfileDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { language } = useLocalization();
+  const { language, setLanguage } = useLocalization();
   const { user, communitySlug } = useAuth();
+
+  const toggleLanguage = () => {
+    setLanguage(language === 'hi' ? 'en' : 'hi');
+  };
 
   const [profile, setProfile] = useState<PublicMatrimonialProfileDetail | null>(null);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
@@ -202,23 +224,23 @@ export default function MatrimonialProfileDetailScreen() {
     if (!gender) return '';
     return gender === 'FEMALE'
       ? language === 'hi'
-        ? 'वधू (Bride)'
+        ? '👰 वधू'
         : 'Bride'
       : language === 'hi'
-      ? 'वर (Groom)'
+      ? '🤵 वर'
       : 'Groom';
   };
 
   const formatMaritalStatus = (status?: string | null) => {
     switch (status) {
       case 'NEVER_MARRIED':
-        return language === 'hi' ? 'अविवाहित (Never Married)' : 'Never Married';
+        return language === 'hi' ? 'अविवाहित' : 'Never Married';
       case 'DIVORCED':
-        return language === 'hi' ? 'तलाकशुदा (Divorced)' : 'Divorced';
+        return language === 'hi' ? 'तलाकशुदा' : 'Divorced';
       case 'WIDOWED':
-        return language === 'hi' ? 'विधवा/विधुर (Widowed)' : 'Widowed';
+        return language === 'hi' ? 'विधवा/विधुर' : 'Widowed';
       case 'AWAITING_DIVORCE':
-        return language === 'hi' ? 'तलाक प्रक्रियाधीन (Awaiting Divorce)' : 'Awaiting Divorce';
+        return language === 'hi' ? 'तलाक प्रक्रियाधीन' : 'Awaiting Divorce';
       default:
         return status || '';
     }
@@ -227,13 +249,13 @@ export default function MatrimonialProfileDetailScreen() {
   const formatDiet = (diet?: string | null) => {
     switch (diet) {
       case 'VEGETARIAN':
-        return language === 'hi' ? 'शाकाहारी (Vegetarian)' : 'Vegetarian';
+        return language === 'hi' ? 'शाकाहारी' : 'Vegetarian';
       case 'NON_VEGETARIAN':
-        return language === 'hi' ? 'मांसाहारी (Non-Vegetarian)' : 'Non-Vegetarian';
+        return language === 'hi' ? 'मांसाहारी' : 'Non-Vegetarian';
       case 'EGGETARIAN':
-        return language === 'hi' ? 'अंडा युक्त (Eggetarian)' : 'Eggetarian';
+        return language === 'hi' ? 'अंडा युक्त' : 'Eggetarian';
       case 'JAIN':
-        return language === 'hi' ? 'जैन (Jain)' : 'Jain';
+        return language === 'hi' ? 'जैन' : 'Jain';
       default:
         return diet || '';
     }
@@ -242,11 +264,11 @@ export default function MatrimonialProfileDetailScreen() {
   const formatManglik = (manglik?: string | null) => {
     switch (manglik) {
       case 'MANGLIK':
-        return language === 'hi' ? 'मांगलिक (Manglik)' : 'Manglik';
+        return language === 'hi' ? 'मांगलिक' : 'Manglik';
       case 'NON_MANGLIK':
-        return language === 'hi' ? 'अमांगलिक (Non-Manglik)' : 'Non-Manglik';
+        return language === 'hi' ? 'अमांगलिक' : 'Non-Manglik';
       case 'ANSHIK':
-        return language === 'hi' ? 'आंशिक मांगलिक (Anshik)' : 'Anshik Manglik';
+        return language === 'hi' ? 'आंशिक मांगलिक' : 'Anshik Manglik';
       case 'DONT_KNOW':
         return language === 'hi' ? 'ज्ञात नहीं' : "Don't Know";
       default:
@@ -256,9 +278,9 @@ export default function MatrimonialProfileDetailScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Typography variant="sm" color={theme.colors.textMuted} style={styles.loadingText}>
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color="#1976D2" />
+        <Typography variant="sm" color="#64748B" style={styles.loadingText}>
           {language === 'hi' ? 'विवाह प्रोफ़ाइल लोड हो रही है...' : 'Loading matrimonial profile...'}
         </Typography>
       </View>
@@ -267,12 +289,12 @@ export default function MatrimonialProfileDetailScreen() {
 
   if (error || !profile) {
     return (
-      <View style={[styles.errorContainer, { backgroundColor: theme.colors.background }]}>
+      <View style={styles.errorScreen}>
         <Card style={styles.errorCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.error} align="center">
+          <Typography variant="md" weight="bold" color="#DC2626" align="center">
             ⚠️ {language === 'hi' ? 'त्रुटि' : 'Error'}
           </Typography>
-          <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.errorText}>
+          <Typography variant="sm" color="#475569" align="center" style={styles.errorText}>
             {error || (language === 'hi' ? 'प्रोफ़ाइल नहीं मिली।' : 'Profile not found.')}
           </Typography>
           <Button
@@ -288,58 +310,38 @@ export default function MatrimonialProfileDetailScreen() {
   }
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      {/* Header Bar */}
-      <View
-        style={[
-          styles.headerBar,
-          {
-            paddingTop: Math.max(insets.top + 8, 16),
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.border,
-          },
+    <View style={styles.screen}>
+      {/* 1. Unified AppHeader (Detail Mode) */}
+      <AppHeader
+        mode="detail"
+        title={profile.fullName}
+        communitySlug={communitySlug}
+        showBackButton={true}
+        showLanguageSwitcher={true}
+        language={language}
+        onLanguageToggle={toggleLanguage}
+      />
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 40, 60) },
         ]}
+        showsVerticalScrollIndicator={false}
       >
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <Typography variant="md" color={theme.colors.primary}>
-            ← {language === 'hi' ? 'वापस' : 'Back'}
-          </Typography>
-        </Pressable>
-
-        <Typography variant="md" weight="bold" color={theme.colors.textPrimary} numberOfLines={1}>
-          {profile.fullName}
-        </Typography>
-
-        <View style={styles.headerRightPlaceholder} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Main Photo Gallery */}
-        <Card style={styles.galleryCard}>
+        {/* 2. Main Photo Gallery & Candidate Hero Card */}
+        <Card style={styles.heroCard}>
           <View style={styles.mainPhotoWrapper}>
             {activePhotoUrl && !imageError ? (
               <Image
                 source={{ uri: activePhotoUrl }}
-                style={[styles.mainPhoto, { borderColor: theme.colors.border }]}
+                style={styles.mainPhoto}
                 onError={() => setImageError(true)}
                 resizeMode="cover"
               />
             ) : (
-              <View
-                style={[
-                  styles.mainPhotoFallback,
-                  {
-                    backgroundColor: theme.colors.primaryLight,
-                    borderColor: theme.colors.primary,
-                  },
-                ]}
-              >
-                <Typography variant="xl" weight="bold" color={theme.colors.primaryDark}>
+              <View style={styles.mainPhotoFallback}>
+                <Typography variant="xl" weight="bold" color="#0369A1" style={styles.fallbackInitialText}>
                   {initial}
                 </Typography>
               </View>
@@ -347,7 +349,7 @@ export default function MatrimonialProfileDetailScreen() {
 
             {/* Verification Badge Overlay */}
             {profile.isVerified ? (
-              <View style={[styles.verifiedBadgeOverlay, { backgroundColor: '#2E7D32' }]}>
+              <View style={styles.verifiedOverlay}>
                 <Typography variant="xs" weight="bold" color="#FFFFFF">
                   ✓ {language === 'hi' ? 'सत्यापित प्रोफ़ाइल' : 'Verified Profile'}
                 </Typography>
@@ -355,7 +357,7 @@ export default function MatrimonialProfileDetailScreen() {
             ) : null}
           </View>
 
-          {/* Photo Thumbnails (if multiple) */}
+          {/* Photo Thumbnails Strip (if multiple photos) */}
           {photos.length > 1 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbnailsRow}>
               {photos.map((item, index) => {
@@ -369,10 +371,7 @@ export default function MatrimonialProfileDetailScreen() {
                     }}
                     style={[
                       styles.thumbnailWrapper,
-                      {
-                        borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                        borderWidth: isSelected ? 2 : 1,
-                      },
+                      isSelected && styles.thumbnailWrapperSelected,
                     ]}
                   >
                     <Image source={{ uri: item.url }} style={styles.thumbnail} resizeMode="cover" />
@@ -382,28 +381,48 @@ export default function MatrimonialProfileDetailScreen() {
             </ScrollView>
           ) : null}
 
-          {/* Name & Quick Summary */}
-          <View style={styles.quickSummaryBox}>
-            <Typography variant="lg" weight="bold" color={theme.colors.textPrimary} align="center">
+          {/* Candidate Name & Badges */}
+          <View style={styles.candidateIntroBox}>
+            <Typography variant="lg" weight="bold" color="#0F172A" align="center" style={styles.candidateName}>
               {profile.fullName}
             </Typography>
 
             <View style={styles.badgesRow}>
               {profile.gender ? (
-                <Badge
-                  label={formatGender(profile.gender)}
-                  variant={profile.gender === 'FEMALE' ? 'warning' : 'info'}
-                />
+                <View
+                  style={[
+                    styles.roleBadge,
+                    profile.gender === 'FEMALE' ? styles.brideBadge : styles.groomBadge,
+                  ]}
+                >
+                  <Typography
+                    variant="xs"
+                    weight="bold"
+                    color={profile.gender === 'FEMALE' ? '#BE185D' : '#0369A1'}
+                  >
+                    {formatGender(profile.gender)}
+                  </Typography>
+                </View>
               ) : null}
+
               {profile.maritalStatus ? (
-                <Badge label={formatMaritalStatus(profile.maritalStatus)} variant="info" />
+                <View style={styles.metaBadge}>
+                  <Typography variant="xs" weight="medium" color="#475569">
+                    {formatMaritalStatus(profile.maritalStatus)}
+                  </Typography>
+                </View>
               ) : null}
+
               {profile.manglik ? (
-                <Badge label={formatManglik(profile.manglik)} variant="default" />
+                <View style={styles.metaBadge}>
+                  <Typography variant="xs" weight="medium" color="#475569">
+                    {formatManglik(profile.manglik)}
+                  </Typography>
+                </View>
               ) : null}
             </View>
 
-            <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.subTitleText}>
+            <Typography variant="sm" color="#64748B" align="center" style={styles.subTitleText}>
               {[
                 profile.age ? `${profile.age} ${language === 'hi' ? 'वर्ष' : 'yrs'}` : null,
                 formatHeightCm(profile.heightCm),
@@ -415,19 +434,19 @@ export default function MatrimonialProfileDetailScreen() {
           </View>
         </Card>
 
-        {/* Contact Information (Privacy-Guarded) */}
-        <Card style={styles.contactCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
+        {/* 3. Contact Information (Privacy-Guarded) */}
+        <Card style={styles.sectionCard}>
+          <Typography variant="md" weight="bold" color="#0F172A" style={styles.sectionTitle}>
             📞 {language === 'hi' ? 'संपर्क जानकारी' : 'Contact Information'}
           </Typography>
 
           {profile.unlockedContact?.phone ? (
             /* Unlocked Contact state: Mutual Acceptance confirmed */
-            <View style={[styles.contactUnlockedBox, { backgroundColor: '#E8F5E9', borderColor: '#A5D6A7' }]}>
-              <Typography variant="xs" weight="bold" color="#2E7D32" style={styles.unlockedTitle}>
+            <View style={styles.contactUnlockedBox}>
+              <Typography variant="xs" weight="bold" color="#15803D" style={styles.unlockedTitle}>
                 💖 {language === 'hi' ? 'संपर्क खुला है (आपसी रुचि स्वीकृत)' : 'Contact Unlocked (Mutually Accepted Interest)'}
               </Typography>
-              <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.phoneText}>
+              <Typography variant="md" weight="bold" color="#0F172A" style={styles.phoneText}>
                 {profile.unlockedContact.phone}
               </Typography>
               <Button
@@ -440,11 +459,11 @@ export default function MatrimonialProfileDetailScreen() {
             </View>
           ) : (
             /* Locked Contact state: Server-side privacy protection */
-            <View style={[styles.contactLockedBox, { backgroundColor: '#F5F5F5', borderColor: '#E0E0E0' }]}>
-              <Typography variant="xs" weight="bold" color="#616161">
+            <View style={styles.contactLockedBox}>
+              <Typography variant="xs" weight="bold" color="#475569" style={styles.lockedHeader}>
                 🔒 {language === 'hi' ? 'संपर्क जानकारी सुरक्षित है' : 'Contact Details Protected'}
               </Typography>
-              <Typography variant="xs" color={theme.colors.textMuted} style={styles.lockedDesc}>
+              <Typography variant="xs" color="#64748B" style={styles.lockedDesc}>
                 {language === 'hi'
                   ? 'निजता और सुरक्षा के लिए सदस्य का फ़ोन नंबर केवल तभी प्रदर्शित होता है जब दोनों पक्ष रुचि अनुरोध स्वीकार कर लेते हैं।'
                   : 'For member privacy and safety, phone numbers are only disclosed when mutual interest is accepted.'}
@@ -453,9 +472,9 @@ export default function MatrimonialProfileDetailScreen() {
           )}
         </Card>
 
-        {/* Section 1: Personal & Physical Details */}
+        {/* 4. Section: Personal & Physical Details */}
         <Card style={styles.sectionCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
+          <Typography variant="md" weight="bold" color="#0F172A" style={styles.sectionTitle}>
             👤 {language === 'hi' ? 'व्यक्तिगत एवं शारीरिक विवरण' : 'Personal & Physical Details'}
           </Typography>
 
@@ -472,10 +491,10 @@ export default function MatrimonialProfileDetailScreen() {
           </View>
         </Card>
 
-        {/* Section 2: Astrological / Horoscope (if provided) */}
+        {/* 5. Section: Astrological / Horoscope (if provided) */}
         {profile.rashi || profile.nakshatra || profile.birthTime || profile.birthCity ? (
           <Card style={styles.sectionCard}>
-            <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
+            <Typography variant="md" weight="bold" color="#0F172A" style={styles.sectionTitle}>
               ✨ {language === 'hi' ? 'कुंडली एवं ज्योतिष विवरण' : 'Horoscope & Astrological Details'}
             </Typography>
 
@@ -488,9 +507,9 @@ export default function MatrimonialProfileDetailScreen() {
           </Card>
         ) : null}
 
-        {/* Section 3: Education & Career */}
+        {/* 6. Section: Education & Career */}
         <Card style={styles.sectionCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
+          <Typography variant="md" weight="bold" color="#0F172A" style={styles.sectionTitle}>
             🎓 {language === 'hi' ? 'शिक्षा एवं व्यवसाय' : 'Education & Profession'}
           </Typography>
 
@@ -507,9 +526,9 @@ export default function MatrimonialProfileDetailScreen() {
           </View>
         </Card>
 
-        {/* Section 4: Family Background */}
+        {/* 7. Section: Family Background */}
         <Card style={styles.sectionCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
+          <Typography variant="md" weight="bold" color="#0F172A" style={styles.sectionTitle}>
             👨‍👩‍👧‍👦 {language === 'hi' ? 'पारिवारिक पृष्ठभूमि' : 'Family Background'}
           </Typography>
 
@@ -535,9 +554,9 @@ export default function MatrimonialProfileDetailScreen() {
           </View>
         </Card>
 
-        {/* Section 5: Lifestyle */}
+        {/* 8. Section: Lifestyle */}
         <Card style={styles.sectionCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
+          <Typography variant="md" weight="bold" color="#0F172A" style={styles.sectionTitle}>
             🌿 {language === 'hi' ? 'खान-पान एवं जीवनशैली' : 'Lifestyle & Habits'}
           </Typography>
 
@@ -548,19 +567,19 @@ export default function MatrimonialProfileDetailScreen() {
           </View>
         </Card>
 
-        {/* Section 6: About Me & Expectations */}
+        {/* 9. Section: About Me & Expectations */}
         {profile.aboutMe || profile.partnerExpectations ? (
           <Card style={styles.sectionCard}>
-            <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
+            <Typography variant="md" weight="bold" color="#0F172A" style={styles.sectionTitle}>
               📝 {language === 'hi' ? 'मेरे बारे में एवं जीवनसाथी से अपेक्षाएँ' : 'About Me & Expectations'}
             </Typography>
 
             {profile.aboutMe ? (
               <View style={styles.narrativeSection}>
-                <Typography variant="xs" weight="bold" color={theme.colors.textSecondary}>
+                <Typography variant="xs" weight="bold" color="#64748B" style={styles.narrativeLabel}>
                   {language === 'hi' ? 'मेरे बारे में:' : 'About Me:'}
                 </Typography>
-                <Typography variant="sm" color={theme.colors.textPrimary} style={styles.narrativeText}>
+                <Typography variant="sm" color="#334155" style={styles.narrativeText}>
                   {profile.aboutMe}
                 </Typography>
               </View>
@@ -568,10 +587,10 @@ export default function MatrimonialProfileDetailScreen() {
 
             {profile.partnerExpectations ? (
               <View style={styles.narrativeSection}>
-                <Typography variant="xs" weight="bold" color={theme.colors.textSecondary}>
+                <Typography variant="xs" weight="bold" color="#64748B" style={styles.narrativeLabel}>
                   {language === 'hi' ? 'जीवनसाथी से अपेक्षाएँ:' : 'Partner Expectations:'}
                 </Typography>
-                <Typography variant="sm" color={theme.colors.textPrimary} style={styles.narrativeText}>
+                <Typography variant="sm" color="#334155" style={styles.narrativeText}>
                   {profile.partnerExpectations}
                 </Typography>
               </View>
@@ -579,10 +598,10 @@ export default function MatrimonialProfileDetailScreen() {
           </Card>
         ) : null}
 
-        {/* Section 7: Partner Preferences */}
+        {/* 10. Section: Partner Preferences */}
         {profile.partnerPreference ? (
           <Card style={styles.sectionCard}>
-            <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.sectionTitle}>
+            <Typography variant="md" weight="bold" color="#0F172A" style={styles.sectionTitle}>
               🎯 {language === 'hi' ? 'पार्टनर प्राथमिकताएँ' : 'Partner Preferences'}
             </Typography>
 
@@ -608,31 +627,31 @@ export default function MatrimonialProfileDetailScreen() {
           </Card>
         ) : null}
 
-        {/* Security & Action Buttons */}
+        {/* 11. Security & Action Buttons */}
         <View style={styles.actionsContainer}>
           {isOwnProfile ? (
             <Card style={styles.ownProfileNoticeCard}>
-              <Typography variant="sm" weight="semibold" color={theme.colors.primary} align="center">
+              <Typography variant="sm" weight="semibold" color="#1976D2" align="center">
                 ℹ️ {language === 'hi' ? 'यह आपकी अपनी विवाह प्रोफ़ाइल है।' : 'This is your own matrimonial profile.'}
               </Typography>
             </Card>
           ) : (
             <View style={styles.interestActionWrapper}>
               {profile.interestStatus === 'PENDING' ? (
-                <View style={[styles.statusBox, { backgroundColor: '#FFF3E0', borderColor: '#FFE0B2' }]}>
-                  <Typography variant="sm" weight="bold" color="#E65100" align="center">
+                <View style={[styles.statusBox, styles.pendingBox]}>
+                  <Typography variant="sm" weight="bold" color="#C2410C" align="center">
                     ⏳ {language === 'hi' ? 'रुचि अनुरोध भेजा जा चुका है (प्रतीक्षारत)' : 'Interest Request Sent (Pending)'}
                   </Typography>
                 </View>
               ) : profile.interestStatus === 'ACCEPTED' ? (
-                <View style={[styles.statusBox, { backgroundColor: '#E8F5E9', borderColor: '#C8E6C9' }]}>
-                  <Typography variant="sm" weight="bold" color="#2E7D32" align="center">
+                <View style={[styles.statusBox, styles.acceptedBox]}>
+                  <Typography variant="sm" weight="bold" color="#15803D" align="center">
                     💖 {language === 'hi' ? 'आपसी संबंध स्वीकृत! ऊपर संपर्क नंबर देखें।' : 'Connected! Mutual interest accepted.'}
                   </Typography>
                 </View>
               ) : profile.interestStatus === 'DECLINED' ? (
-                <View style={[styles.statusBox, { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2' }]}>
-                  <Typography variant="sm" weight="bold" color="#C62828" align="center">
+                <View style={[styles.statusBox, styles.declinedBox]}>
+                  <Typography variant="sm" weight="bold" color="#B91C1C" align="center">
                     ✕ {language === 'hi' ? 'रुचि अनुरोध अस्वीकृत' : 'Interest Request Declined'}
                   </Typography>
                 </View>
@@ -651,8 +670,8 @@ export default function MatrimonialProfileDetailScreen() {
           {/* Report & Block actions */}
           {!isOwnProfile ? (
             <View style={styles.safetyActionsRow}>
-              <Pressable onPress={() => setIsReportModalOpen(true)} style={styles.safetyBtn}>
-                <Typography variant="xs" color={theme.colors.textMuted}>
+              <Pressable onPress={() => setIsReportModalOpen(true)} style={styles.safetyBtn} hitSlop={6}>
+                <Typography variant="xs" color="#64748B" weight="medium">
                   🚩 {language === 'hi' ? 'रिपोर्ट करें' : 'Report'}
                 </Typography>
               </Pressable>
@@ -660,8 +679,9 @@ export default function MatrimonialProfileDetailScreen() {
                 onPress={handleBlockCandidate}
                 disabled={isSubmittingBlock}
                 style={styles.safetyBtn}
+                hitSlop={6}
               >
-                <Typography variant="xs" color={theme.colors.error}>
+                <Typography variant="xs" color="#DC2626" weight="medium">
                   🚫 {language === 'hi' ? 'ब्लॉक करें' : 'Block'}
                 </Typography>
               </Pressable>
@@ -679,17 +699,27 @@ export default function MatrimonialProfileDetailScreen() {
           if (!isSubmittingInterest) setIsInterestModalOpen(false);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
-            <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.modalTitle}>
+        <Pressable
+          style={styles.sheetOverlay}
+          onPress={() => {
+            if (!isSubmittingInterest) setIsInterestModalOpen(false);
+          }}
+        >
+          <Pressable
+            style={[styles.sheetContent, { paddingBottom: Math.max(insets.bottom + 20, 30) }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.dragHandle} />
+
+            <Typography variant="md" weight="bold" color="#0F172A" style={styles.modalTitle}>
               💌 {language === 'hi' ? 'विवाह संबंध रुचि भेजें' : 'Express Matrimonial Interest'}
             </Typography>
 
-            <View style={[styles.targetInfoBox, { backgroundColor: theme.colors.background }]}>
-              <Typography variant="sm" weight="bold" color={theme.colors.textPrimary}>
+            <View style={styles.targetInfoBox}>
+              <Typography variant="sm" weight="bold" color="#0F172A">
                 {profile.fullName}
               </Typography>
-              <Typography variant="xs" color={theme.colors.textSecondary}>
+              <Typography variant="xs" color="#64748B">
                 {[profile.age ? `${profile.age} yrs` : null, profile.occupation, profile.city].filter(Boolean).join(' • ')}
               </Typography>
             </View>
@@ -710,16 +740,16 @@ export default function MatrimonialProfileDetailScreen() {
             />
 
             {interestError ? (
-              <View style={[styles.errorBox, { backgroundColor: '#FFEBEE' }]}>
-                <Typography variant="xs" color="#C62828">
+              <View style={styles.errorBox}>
+                <Typography variant="xs" color="#DC2626">
                   {interestError}
                 </Typography>
               </View>
             ) : null}
 
             {interestSuccess ? (
-              <View style={[styles.successBox, { backgroundColor: '#E8F5E9' }]}>
-                <Typography variant="xs" weight="bold" color="#2E7D32">
+              <View style={styles.successBox}>
+                <Typography variant="xs" weight="bold" color="#16A34A">
                   ✓ {interestSuccess}
                 </Typography>
               </View>
@@ -730,7 +760,7 @@ export default function MatrimonialProfileDetailScreen() {
                 title={language === 'hi' ? 'रद्द करें' : 'Cancel'}
                 onPress={() => setIsInterestModalOpen(false)}
                 variant="outline"
-                size="sm"
+                size="md"
                 disabled={isSubmittingInterest}
                 style={styles.modalActionBtn}
               />
@@ -738,16 +768,17 @@ export default function MatrimonialProfileDetailScreen() {
                 title={language === 'hi' ? 'रुचि भेजें' : 'Send Interest'}
                 onPress={handleConfirmSendInterest}
                 loading={isSubmittingInterest}
-                size="sm"
+                disabled={isSubmittingInterest}
+                size="md"
                 variant="primary"
                 style={styles.modalActionBtn}
               />
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
-      {/* Report Modal */}
+      {/* Report Candidate Modal */}
       <Modal
         visible={isReportModalOpen}
         transparent
@@ -756,44 +787,51 @@ export default function MatrimonialProfileDetailScreen() {
           if (!isSubmittingReport) setIsReportModalOpen(false);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
-            <Typography variant="md" weight="bold" color={theme.colors.error} style={styles.modalTitle}>
-              🚩 {language === 'hi' ? 'प्रोफ़ाइल रिपोर्ट करें' : 'Report Matrimonial Profile'}
+        <Pressable
+          style={styles.sheetOverlay}
+          onPress={() => {
+            if (!isSubmittingReport) setIsReportModalOpen(false);
+          }}
+        >
+          <Pressable
+            style={[styles.sheetContent, { paddingBottom: Math.max(insets.bottom + 20, 30) }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.dragHandle} />
+
+            <Typography variant="md" weight="bold" color="#0F172A" style={styles.modalTitle}>
+              🚩 {language === 'hi' ? 'प्रोफ़ाइल रिपोर्ट करें' : 'Report Profile'}
             </Typography>
 
-            <Typography variant="xs" color={theme.colors.textMuted} style={styles.reportNotice}>
+            <Typography variant="xs" color="#64748B" style={styles.reportSubtitle}>
               {language === 'hi'
-                ? 'यदि यह प्रोफ़ाइल गलत या आपत्तिजनक है तो कारण चुनें:'
-                : 'Select reason for reporting this profile:'}
+                ? 'यदि यह प्रोफ़ाइल नियमों का उल्लंघन करती है या भ्रामक है, तो कारण चुनें:'
+                : 'Select reason if this profile violates community guidelines or is misleading:'}
             </Typography>
 
-            <View style={styles.reasonRow}>
+            <View style={styles.reasonsList}>
               {[
-                { key: 'FAKE_PROFILE', hi: 'फ़र्ज़ी प्रोफ़ाइल', en: 'Fake Profile' },
-                { key: 'INCORRECT_INFORMATION', hi: 'गलत जानकारी', en: 'Incorrect Info' },
-                { key: 'MISLEADING_PHOTOS', hi: 'भ्रामक फ़ोटो', en: 'Misleading Photos' },
-                { key: 'HARASSMENT', hi: 'दुर्व्यवहार', en: 'Harassment' },
-              ].map((item) => {
-                const isSelected = reportReason === item.key;
+                { key: 'FAKE_PROFILE', hi: 'फ़र्ज़ी प्रोफ़ाइल (Fake Profile)', en: 'Fake Profile' },
+                { key: 'INAPPROPRIATE_CONTENT', hi: 'अनुचित सामग्री (Inappropriate)', en: 'Inappropriate Content' },
+                { key: 'MISLEADING_INFO', hi: 'भ्रामक विवरण (Misleading Info)', en: 'Misleading Info' },
+                { key: 'HARASSMENT', hi: 'उत्पीड़न / दुर्व्यवहार (Harassment)', en: 'Harassment' },
+              ].map((reason) => {
+                const isSelected = reportReason === reason.key;
                 return (
                   <Pressable
-                    key={item.key}
-                    onPress={() => setReportReason(item.key)}
+                    key={reason.key}
+                    onPress={() => setReportReason(reason.key)}
                     style={[
-                      styles.reasonChip,
-                      {
-                        backgroundColor: isSelected ? theme.colors.error : theme.colors.background,
-                        borderColor: isSelected ? theme.colors.error : theme.colors.border,
-                      },
+                      styles.reasonOption,
+                      isSelected && styles.reasonOptionSelected,
                     ]}
                   >
                     <Typography
                       variant="xs"
-                      weight={isSelected ? 'bold' : 'regular'}
-                      color={isSelected ? '#FFFFFF' : theme.colors.textSecondary}
+                      weight={isSelected ? 'bold' : 'medium'}
+                      color={isSelected ? '#1976D2' : '#334155'}
                     >
-                      {language === 'hi' ? item.hi : item.en}
+                      {language === 'hi' ? reason.hi : reason.en}
                     </Typography>
                   </Pressable>
                 );
@@ -801,13 +839,12 @@ export default function MatrimonialProfileDetailScreen() {
             </View>
 
             <Input
-              label={language === 'hi' ? 'विवरण (वैकल्पिक)' : 'Explanation (Optional)'}
+              label={language === 'hi' ? 'अतिरिक्त विवरण (वैकल्पिक)' : 'Explanation (Optional)'}
               value={reportExplanation}
               onChangeText={setReportExplanation}
-              placeholder={language === 'hi' ? 'अतिरिक्त विवरण लिखें...' : 'Provide additional details...'}
-              maxLength={500}
+              placeholder="विवरण दर्ज करें..."
               multiline
-              numberOfLines={3}
+              numberOfLines={2}
             />
 
             <View style={styles.modalActionsRow}>
@@ -815,7 +852,7 @@ export default function MatrimonialProfileDetailScreen() {
                 title={language === 'hi' ? 'रद्द करें' : 'Cancel'}
                 onPress={() => setIsReportModalOpen(false)}
                 variant="outline"
-                size="sm"
+                size="md"
                 disabled={isSubmittingReport}
                 style={styles.modalActionBtn}
               />
@@ -823,97 +860,78 @@ export default function MatrimonialProfileDetailScreen() {
                 title={language === 'hi' ? 'रिपोर्ट भेजें' : 'Submit Report'}
                 onPress={handleConfirmReport}
                 loading={isSubmittingReport}
-                size="sm"
+                disabled={isSubmittingReport}
+                size="md"
                 variant="primary"
                 style={styles.modalActionBtn}
               />
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
 }
 
-// Reusable Detail Row
-const DetailRow: React.FC<{ label: string; value?: string | number | null }> = ({ label, value }) => {
-  const theme = useTheme();
-  if (!value) return null;
-
-  return (
-    <View style={styles.detailRow}>
-      <Typography variant="xs" color={theme.colors.textMuted} style={styles.detailLabel}>
-        {label}:
-      </Typography>
-      <Typography variant="xs" weight="medium" color={theme.colors.textPrimary} style={styles.detailValue}>
-        {value}
-      </Typography>
-    </View>
-  );
-};
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    backgroundColor: '#F8FAFC',
   },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backButton: {
-    paddingVertical: 4,
-    paddingRight: 12,
-  },
-  headerRightPlaceholder: {
-    width: 48,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 40,
-  },
-  loadingContainer: {
+  loadingScreen: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    backgroundColor: '#F8FAFC',
   },
   loadingText: {
     marginTop: 12,
   },
-  errorContainer: {
+  errorScreen: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: 20,
+    backgroundColor: '#F8FAFC',
   },
   errorCard: {
     padding: 24,
     alignItems: 'center',
-    maxWidth: 340,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    width: '100%',
   },
   errorText: {
-    marginVertical: 12,
+    marginTop: 8,
+    marginBottom: 16,
   },
   backBtn: {
-    marginTop: 8,
+    minWidth: 120,
   },
-  galleryCard: {
+  scrollContent: {
     padding: 16,
-    marginBottom: 12,
-    alignItems: 'center',
+  },
+  heroCard: {
+    padding: 0,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
   },
   mainPhotoWrapper: {
     position: 'relative',
     width: '100%',
-    height: 260,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 12,
+    height: 280,
+    backgroundColor: '#F1F5F9',
   },
   mainPhoto: {
     width: '100%',
@@ -922,141 +940,230 @@ const styles = StyleSheet.create({
   mainPhotoFallback: {
     width: '100%',
     height: '100%',
+    backgroundColor: '#E0F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  verifiedBadgeOverlay: {
+  fallbackInitialText: {
+    fontSize: 48,
+  },
+  verifiedOverlay: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: 12,
+    right: 12,
+    backgroundColor: '#16A34A',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   thumbnailsRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    maxHeight: 64,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   thumbnailWrapper: {
-    width: 56,
-    height: 56,
+    width: 54,
+    height: 54,
     borderRadius: 8,
-    overflow: 'hidden',
     marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  thumbnailWrapperSelected: {
+    borderColor: '#1976D2',
+    borderWidth: 2,
   },
   thumbnail: {
     width: '100%',
     height: '100%',
   },
-  quickSummaryBox: {
+  candidateIntroBox: {
+    padding: 16,
     alignItems: 'center',
-    width: '100%',
+  },
+  candidateName: {
+    fontSize: 19,
+    marginBottom: 6,
   },
   badgesRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
     gap: 6,
-    marginVertical: 8,
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  brideBadge: {
+    backgroundColor: '#FCE7F3',
+    borderWidth: 1,
+    borderColor: '#FBCFE8',
+  },
+  groomBadge: {
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  metaBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   subTitleText: {
     marginTop: 2,
   },
-  contactCard: {
+  sectionCard: {
     padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
     marginBottom: 12,
+    elevation: 1,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
   },
   sectionTitle: {
     marginBottom: 12,
+    fontSize: 15,
+  },
+  gridContainer: {
+    gap: 10,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  detailLabel: {
+    flex: 1,
+    marginRight: 8,
+  },
+  detailValue: {
+    flex: 1.5,
+    textAlign: 'right',
   },
   contactUnlockedBox: {
     padding: 14,
     borderRadius: 10,
+    backgroundColor: '#F0FDF4',
     borderWidth: 1,
+    borderColor: '#BBF7D0',
     alignItems: 'center',
   },
   unlockedTitle: {
     marginBottom: 6,
   },
   phoneText: {
-    letterSpacing: 1,
+    fontSize: 18,
     marginBottom: 10,
   },
   callBtn: {
-    minWidth: 140,
+    minWidth: 130,
   },
   contactLockedBox: {
     padding: 14,
     borderRadius: 10,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+  },
+  lockedHeader: {
+    marginBottom: 4,
   },
   lockedDesc: {
-    marginTop: 4,
+    textAlign: 'center',
     lineHeight: 18,
   },
-  sectionCard: {
-    padding: 16,
-    marginBottom: 12,
-  },
-  gridContainer: {
-    gap: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 3,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#F0F0F0',
-  },
-  detailLabel: {
-    flex: 1,
-  },
-  detailValue: {
-    flex: 1.5,
-    textAlign: 'right',
-  },
   narrativeSection: {
-    marginBottom: 12,
+    marginBottom: 10,
+    padding: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  narrativeLabel: {
+    marginBottom: 4,
   },
   narrativeText: {
-    marginTop: 4,
     lineHeight: 20,
   },
   actionsContainer: {
     marginTop: 8,
-    marginBottom: 20,
   },
   ownProfileNoticeCard: {
     padding: 14,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
   },
   interestActionWrapper: {
     marginBottom: 12,
   },
   statusBox: {
-    padding: 14,
+    padding: 12,
     borderRadius: 10,
     borderWidth: 1,
+  },
+  pendingBox: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FFEDD5',
+  },
+  acceptedBox: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#BBF7D0',
+  },
+  declinedBox: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
   },
   safetyActionsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
-    marginTop: 8,
+    gap: 24,
+    paddingVertical: 10,
   },
   safetyBtn: {
-    padding: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
-  modalOverlay: {
+  sheetOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'flex-end',
   },
-  modalContent: {
-    borderRadius: 16,
-    padding: 20,
-    elevation: 8,
+  sheetContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 12,
   },
   modalTitle: {
     marginBottom: 12,
@@ -1064,39 +1171,49 @@ const styles = StyleSheet.create({
   targetInfoBox: {
     padding: 10,
     borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     marginBottom: 12,
   },
   errorBox: {
     padding: 8,
     borderRadius: 6,
-    marginVertical: 6,
+    backgroundColor: '#FEE2E2',
+    marginTop: 8,
   },
   successBox: {
     padding: 8,
     borderRadius: 6,
-    marginVertical: 6,
+    backgroundColor: '#DCFCE7',
+    marginTop: 8,
   },
   modalActionsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 12,
+    marginTop: 16,
   },
   modalActionBtn: {
     flex: 1,
   },
-  reportNotice: {
-    marginBottom: 8,
-  },
-  reasonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+  reportSubtitle: {
     marginBottom: 12,
+    lineHeight: 18,
   },
-  reasonChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+  reasonsList: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  reasonOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  reasonOptionSelected: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#1976D2',
   },
 });

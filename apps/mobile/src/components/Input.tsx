@@ -16,6 +16,7 @@ export interface InputProps extends TextInputProps {
   helperText?: string;
   containerStyle?: ViewStyle;
   inputStyle?: TextStyle;
+  leftAccessory?: React.ReactNode;
   rightAccessory?: React.ReactNode;
 }
 
@@ -25,6 +26,7 @@ export const Input: React.FC<InputProps> = ({
   helperText,
   containerStyle,
   inputStyle,
+  leftAccessory,
   rightAccessory,
   value,
   onChangeText,
@@ -63,6 +65,7 @@ export const Input: React.FC<InputProps> = ({
           },
         ]}
       >
+        {leftAccessory && <View style={styles.leftAccessory}>{leftAccessory}</View>}
         <TextInput
           value={value}
           onChangeText={onChangeText}
@@ -118,6 +121,11 @@ const styles = StyleSheet.create({
   },
   accessory: {
     marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  leftAccessory: {
+    marginRight: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },

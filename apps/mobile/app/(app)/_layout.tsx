@@ -32,7 +32,7 @@ export default function AppLayout() {
         name="post/[id]"
         options={{
           title: 'पोस्ट विवरण',
-          headerShown: true,
+          headerShown: false,
         }}
       />
       <Stack.Screen

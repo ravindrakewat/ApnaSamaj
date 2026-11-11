@@ -17,6 +17,7 @@ import {
   Button,
   PostCard,
   CommentItem,
+  AppHeader,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -161,31 +162,47 @@ export default function PostDetailScreen() {
 
   if (isLoadingPost) {
     return (
-      <View style={[styles.centerScreen, { backgroundColor: theme.colors.background }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Typography variant="sm" color={theme.colors.textSecondary} style={styles.loadingText}>
-          {language === 'hi' ? 'पोस्ट लोड हो रही है...' : 'Loading post...'}
-        </Typography>
+      <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+        <AppHeader
+          mode="detail"
+          title={language === 'hi' ? 'पोस्ट विवरण' : 'Post Details'}
+          communitySlug={communitySlug}
+          showBackButton={true}
+        />
+        <View style={styles.centerScreen}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Typography variant="sm" color={theme.colors.textSecondary} style={styles.loadingText}>
+            {language === 'hi' ? 'पोस्ट लोड हो रही है...' : 'Loading post...'}
+          </Typography>
+        </View>
       </View>
     );
   }
 
   if (error || !post) {
     return (
-      <View style={[styles.centerScreen, { backgroundColor: theme.colors.background }]}>
-        <Card style={styles.errorCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.error} align="center">
-            {language === 'hi' ? 'त्रुटि' : 'Error'}
-          </Typography>
-          <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.errorText}>
-            {error || (language === 'hi' ? 'पोस्ट नहीं मिली।' : 'Post not found.')}
-          </Typography>
-          <Button
-            title={language === 'hi' ? 'वापस जाएं' : 'Go Back'}
-            variant="outline"
-            onPress={() => router.back()}
-          />
-        </Card>
+      <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+        <AppHeader
+          mode="detail"
+          title={language === 'hi' ? 'पोस्ट विवरण' : 'Post Details'}
+          communitySlug={communitySlug}
+          showBackButton={true}
+        />
+        <View style={styles.centerScreen}>
+          <Card style={styles.errorCard}>
+            <Typography variant="md" weight="bold" color={theme.colors.error} align="center">
+              {language === 'hi' ? 'त्रुटि' : 'Error'}
+            </Typography>
+            <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.errorText}>
+              {error || (language === 'hi' ? 'पोस्ट नहीं मिली।' : 'Post not found.')}
+            </Typography>
+            <Button
+              title={language === 'hi' ? 'वापस जाएं' : 'Go Back'}
+              variant="outline"
+              onPress={() => router.back()}
+            />
+          </Card>
+        </View>
       </View>
     );
   }
@@ -195,6 +212,12 @@ export default function PostDetailScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={[styles.screen, { backgroundColor: theme.colors.background }]}
     >
+      <AppHeader
+        mode="detail"
+        title={language === 'hi' ? 'पोस्ट विवरण' : 'Post Details'}
+        communitySlug={communitySlug}
+        showBackButton={true}
+      />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"

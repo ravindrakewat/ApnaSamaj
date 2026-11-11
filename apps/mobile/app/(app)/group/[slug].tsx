@@ -16,7 +16,6 @@ import {
   GroupPrivacy,
   GroupMemberRole,
   PostItem,
-  PostMediaItem,
 } from '@apnasamaj/shared-types';
 import {
   Typography,
@@ -24,7 +23,8 @@ import {
   Button,
   Badge,
   PostCard,
-  VideoModal,
+  AppHeader,
+  ConfirmationDialog,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -46,6 +46,7 @@ export default function GroupDetailsScreen() {
   const [groupError, setGroupError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState<boolean>(false);
   const [isLeaving, setIsLeaving] = useState<boolean>(false);
+  const [isLeaveDialogVisible, setIsLeaveDialogVisible] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
 
   // Discussions State
@@ -57,8 +58,27 @@ export default function GroupDetailsScreen() {
   const [fetchingMorePosts, setFetchingMorePosts] = useState<boolean>(false);
   const [postsError, setPostsError] = useState<string | null>(null);
 
-  // Media Modal
-  const [activeVideo, setActiveVideo] = useState<PostMediaItem | null>(null);
+  // Facebook-Style Inline Video Playback State (Only 1 active video)
+  const [activePlayingPostId, setActivePlayingPostId] = useState<string | null>(null);
+  const activePlayingPostIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activePlayingPostIdRef.current = activePlayingPostId;
+  }, [activePlayingPostId]);
+
+  // Pause & release decoder resources when the playing post scrolls out of visible viewport
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ item: PostItem }> }) => {
+    if (activePlayingPostIdRef.current) {
+      const isStillVisible = viewableItems.some((v) => v.item?.id === activePlayingPostIdRef.current);
+      if (!isStillVisible) {
+        setActivePlayingPostId(null);
+      }
+    }
+  }).current;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 40,
+  }).current;
 
   const isFetchingPostsRef = useRef<boolean>(false);
 
@@ -85,8 +105,8 @@ export default function GroupDetailsScreen() {
         err instanceof Error
           ? err.message
           : language === 'hi'
-          ? 'समूह विवरण लोड करने में असमर्थ।'
-          : 'Failed to load group details.';
+            ? 'समूह विवरण लोड करने में असमर्थ।'
+            : 'Failed to load group details.';
       setGroupError(msg);
     } finally {
       setLoadingGroup(false);
@@ -129,8 +149,8 @@ export default function GroupDetailsScreen() {
           err instanceof Error
             ? err.message
             : language === 'hi'
-            ? 'समूह चर्चाएं लोड करने में समस्या हुई।'
-            : 'Failed to load group discussions.';
+              ? 'समूह चर्चाएं लोड करने में समस्या हुई।'
+              : 'Failed to load group discussions.';
         setPostsError(msg);
       } finally {
         isFetchingPostsRef.current = false;
@@ -165,11 +185,11 @@ export default function GroupDetailsScreen() {
       setGroup((prev) =>
         prev
           ? {
-              ...prev,
-              isMember: true,
-              myRole: res.role,
-              membersCount: prev.membersCount + 1,
-            }
+            ...prev,
+            isMember: true,
+            myRole: res.role,
+            membersCount: prev.membersCount + 1,
+          }
           : null
       );
       Alert.alert(
@@ -186,44 +206,6 @@ export default function GroupDetailsScreen() {
     }
   };
 
-  const handleLeave = () => {
-    if (!group || isLeaving) return;
-
-    // Check last administrator protection
-    if (group.myRole === 'ADMIN') {
-      // Backend validates that sole admins cannot leave without assigning another admin
-      Alert.alert(
-        language === 'hi' ? 'समूह छोड़ें' : 'Leave Group',
-        language === 'hi'
-          ? 'यदि आप एकमात्र व्यवस्थापक हैं, तो समूह छोड़ने से पहले किसी अन्य सदस्य को व्यवस्थापक नियुक्त करना आवश्यक है। क्या आप जारी रखना चाहते हैं?'
-          : 'As an administrator, you cannot leave the group if you are the sole admin without assigning another admin first. Do you want to proceed?',
-        [
-          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-          {
-            text: language === 'hi' ? 'छोड़ें' : 'Leave',
-            style: 'destructive',
-            onPress: executeLeave,
-          },
-        ]
-      );
-    } else {
-      Alert.alert(
-        language === 'hi' ? 'समूह छोड़ें' : 'Leave Group',
-        language === 'hi'
-          ? 'क्या आप सचमुच इस समूह से बाहर होना चाहते हैं?'
-          : 'Are you sure you want to leave this group?',
-        [
-          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-          {
-            text: language === 'hi' ? 'छोड़ें' : 'Leave',
-            style: 'destructive',
-            onPress: executeLeave,
-          },
-        ]
-      );
-    }
-  };
-
   const executeLeave = async () => {
     if (!group) return;
     setIsLeaving(true);
@@ -233,11 +215,11 @@ export default function GroupDetailsScreen() {
       setGroup((prev) =>
         prev
           ? {
-              ...prev,
-              isMember: false,
-              myRole: null,
-              membersCount: Math.max(0, prev.membersCount - 1),
-            }
+            ...prev,
+            isMember: false,
+            myRole: null,
+            membersCount: Math.max(0, prev.membersCount - 1),
+          }
           : null
       );
       Alert.alert(
@@ -249,12 +231,19 @@ export default function GroupDetailsScreen() {
       if (group.privacy === 'PRIVATE') {
         setPosts([]);
       }
+      setIsLeaveDialogVisible(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to leave group.';
       Alert.alert(language === 'hi' ? 'त्रुटि' : 'Error', msg);
     } finally {
       setIsLeaving(false);
+      setIsLeaveDialogVisible(false);
     }
+  };
+
+  const handleLeave = () => {
+    if (!group || isLeaving) return;
+    setIsLeaveDialogVisible(true);
   };
 
   const handleToggleLike = async (postId: string) => {
@@ -289,34 +278,26 @@ export default function GroupDetailsScreen() {
 
     return (
       <View style={styles.groupInfoContainer}>
-        {/* Group Hero Card */}
+        {/* 1. Group Hero Card */}
         <Card style={styles.heroCard}>
           <View style={styles.heroRow}>
             {group.coverUrl && !imageError ? (
               <Image
                 source={{ uri: group.coverUrl }}
-                style={[styles.heroCover, { borderColor: theme.colors.border }]}
+                style={styles.heroCover}
                 onError={() => setImageError(true)}
                 resizeMode="cover"
               />
             ) : (
-              <View
-                style={[
-                  styles.heroFallback,
-                  {
-                    backgroundColor: theme.colors.primaryLight,
-                    borderColor: theme.colors.primary,
-                  },
-                ]}
-              >
-                <Typography variant="xl" weight="bold" color={theme.colors.primaryDark}>
+              <View style={styles.heroFallback}>
+                <Typography variant="xl" weight="bold" color="#0369A1" style={styles.fallbackText}>
                   {initial}
                 </Typography>
               </View>
             )}
 
             <View style={styles.heroText}>
-              <Typography variant="lg" weight="bold" color={theme.colors.textPrimary}>
+              <Typography variant="lg" weight="bold" color="#0F172A" style={styles.heroTitle}>
                 {group.name}
               </Typography>
 
@@ -324,16 +305,33 @@ export default function GroupDetailsScreen() {
                 <Badge
                   label={
                     isPrivate
-                      ? (language === 'hi' ? 'निजी समूह' : 'Private')
-                      : (language === 'hi' ? 'सार्वजनिक मंडल' : 'Public')
+                      ? (language === 'hi' ? '🔒 निजी समूह' : '🔒 Private Group')
+                      : (language === 'hi' ? 'सार्वजनिक मंडल' : 'Public Group')
                   }
                   variant={isPrivate ? 'warning' : 'info'}
                   size="sm"
                 />
-                <Badge label={communitySlug} variant="default" size="sm" />
+                <View style={styles.slugBadgePill}>
+                  <Typography variant="xs" weight="bold" color="#0369A1" style={styles.slugBadgeText}>
+                    {communitySlug}
+                  </Typography>
+                </View>
+                {isMember && group.myRole && (
+                  <Badge
+                    label={
+                      group.myRole === 'ADMIN'
+                        ? (language === 'hi' ? 'प्रशासक' : 'Admin')
+                        : group.myRole === 'MODERATOR'
+                          ? (language === 'hi' ? 'मॉडरेटर' : 'Moderator')
+                          : (language === 'hi' ? 'सदस्य' : 'Member')
+                    }
+                    variant="success"
+                    size="sm"
+                  />
+                )}
               </View>
 
-              <Typography variant="xs" color={theme.colors.textMuted}>
+              <Typography variant="xs" color="#64748B" style={styles.statsSubtitle}>
                 👥 {group.membersCount} {language === 'hi' ? 'सदस्य' : 'members'} • 💬 {group.postsCount} {language === 'hi' ? 'चर्चाएं' : 'posts'}
               </Typography>
             </View>
@@ -341,7 +339,7 @@ export default function GroupDetailsScreen() {
 
           {/* Description */}
           {group.description ? (
-            <Typography variant="sm" color={theme.colors.textSecondary} style={styles.descText}>
+            <Typography variant="sm" color="#334155" style={styles.descText}>
               {group.description}
             </Typography>
           ) : null}
@@ -349,32 +347,20 @@ export default function GroupDetailsScreen() {
           {/* Membership Actions Row */}
           <View style={styles.actionRow}>
             {isMember ? (
-              <View style={styles.memberActionGroup}>
-                <Badge
-                  label={
-                    group.myRole === 'ADMIN'
-                      ? (language === 'hi' ? 'प्रशासक' : 'Admin')
-                      : group.myRole === 'MODERATOR'
-                      ? (language === 'hi' ? 'मॉडरेटर' : 'Moderator')
-                      : (language === 'hi' ? 'सदस्य' : 'Member')
-                  }
-                  variant="success"
-                  size="md"
-                />
-                <Button
-                  title={language === 'hi' ? 'समूह छोड़ें' : 'Leave'}
-                  variant="outline"
-                  size="sm"
-                  loading={isLeaving}
-                  disabled={isLeaving}
-                  onPress={handleLeave}
-                />
-              </View>
+              <Button
+                title={language === 'hi' ? 'समूह छोड़ें' : 'Leave Group'}
+                variant="outline"
+                size="sm"
+                loading={isLeaving}
+                disabled={isLeaving}
+                onPress={handleLeave}
+                style={styles.leaveBtn}
+              />
             ) : !isPrivate ? (
               <Button
                 title={language === 'hi' ? 'समूह से जुड़ें' : 'Join Group'}
                 variant="primary"
-                size="sm"
+                size="md"
                 loading={isJoining}
                 disabled={isJoining}
                 onPress={handleJoin}
@@ -382,77 +368,71 @@ export default function GroupDetailsScreen() {
               />
             ) : (
               <View style={styles.privateNotice}>
-                <Typography variant="xs" color={theme.colors.textMuted}>
+                <Typography variant="xs" color="#64748B">
                   🔒 {language === 'hi' ? 'निजी समूह — केवल आमंत्रण या व्यवस्थापक स्वीकृति द्वारा' : 'Private group — Invitation only'}
                 </Typography>
               </View>
             )}
           </View>
-        
 
-          {/* Real-time Group Chat CTA Button */}
+          {/* 2. Real-time Group Live Chat Banner CTA */}
           <Pressable
             onPress={() => router.push(`/(app)/group/${slug}/chat` as any)}
-            style={[
-              styles.chatCtaButton,
-              {
-                backgroundColor: theme.colors.surfaceSubtle,
-                borderColor: theme.colors.border,
-              },
-            ]}
+            style={styles.chatCtaBanner}
             accessibilityRole="button"
             accessibilityLabel={language === 'hi' ? 'समूह चैट खोलें' : 'Open group chat'}
           >
             <View style={styles.chatCtaLeft}>
-              <View style={[styles.chatCtaIconBox, { backgroundColor: '#DCFCE7' }]}>
+              <View style={styles.chatCtaIconBox}>
                 <Typography variant="md">💬</Typography>
               </View>
               <View style={styles.chatCtaText}>
-                <Typography variant="sm" weight="bold" color={theme.colors.textPrimary}>
-                  {language === 'hi' ? 'समूह लाइव चैट (Live Chat)' : 'Live Group Chat'}
+                <Typography variant="sm" weight="bold" color="#15803D">
+                  {language === 'hi' ? 'लाइव समूह चैट (Live Group Chat)' : 'Live Group Chat'}
                 </Typography>
-                <Typography variant="xs" color={theme.colors.textSecondary}>
+                <Typography variant="xs" color="#166534">
                   {language === 'hi'
                     ? 'सदस्यों के साथ तुरंत बातचीत करें'
                     : 'Chat in real-time with group members'}
                 </Typography>
               </View>
             </View>
-            <Typography variant="md" color={theme.colors.textMuted}>
+            <Typography variant="md" weight="bold" color="#16A34A" style={styles.chatCtaArrow}>
               →
             </Typography>
           </Pressable>
-</Card>
+        </Card>
 
-        {/* Section Heading */}
+        {/* 3. Section Heading */}
         <View style={styles.discussionsHeaderRow}>
-          <Typography variant="md" weight="bold" color={theme.colors.textPrimary}>
+          <Typography variant="md" weight="bold" color="#0F172A">
             {language === 'hi' ? 'समूह चर्चाएं' : 'Group Discussions'}
           </Typography>
 
           {isMember ? (
             <Pressable
               onPress={() => router.push('/(app)/post/create')}
-              style={[styles.createPostPill, { backgroundColor: theme.colors.primaryLight }]}
+              style={styles.createPostPill}
               accessibilityRole="button"
+              hitSlop={6}
             >
-              <Typography variant="xs" weight="bold" color={theme.colors.primaryDark}>
+              <Typography variant="xs" weight="bold" color="#1976D2">
                 + {language === 'hi' ? 'नई चर्चा' : 'New Post'}
               </Typography>
             </Pressable>
           ) : null}
         </View>
 
-        {/* Private Group Locked Access Guard */}
+        {/* 4. Private Group Locked Access Guard */}
         {!isAuthorized ? (
           <Card style={styles.lockCard}>
-            <Typography variant="xl" style={styles.lockIcon}>
-              🔒
-            </Typography>
-            <Typography variant="md" weight="bold" color={theme.colors.textPrimary} align="center">
+            <View style={styles.lockIconCircle}>
+              <Typography variant="xl">🔒</Typography>
+            </View>
+            <Typography variant="md" weight="bold" color="#0F172A" align="center" style={styles.lockTitle}>
               {language === 'hi' ? 'निजी समूह सामग्री' : 'Private Group Content'}
             </Typography>
-            <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.lockDesc}>
+            <Typography variant="sm" color="#64748B" align="center" style={styles.lockDesc}>
               {language === 'hi'
                 ? 'इस समूह की चर्चाएं निजी हैं और केवल अधिकृत सदस्यों को दिखाई देती हैं।'
                 : 'Discussions in this group are private and only visible to authorized members.'}
@@ -468,8 +448,8 @@ export default function GroupDetailsScreen() {
     if (fetchingMorePosts) {
       return (
         <View style={styles.footerLoader}>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-          <Typography variant="xs" color={theme.colors.textMuted}>
+          <ActivityIndicator size="small" color="#1976D2" />
+          <Typography variant="xs" color="#64748B">
             {language === 'hi' ? 'और चर्चाएं लोड हो रही हैं...' : 'Loading more discussions...'}
           </Typography>
         </View>
@@ -478,8 +458,8 @@ export default function GroupDetailsScreen() {
     if (page >= totalPages && posts.length > 0) {
       return (
         <View style={styles.footerDone}>
-          <Typography variant="xs" color={theme.colors.textMuted}>
-            {language === 'hi' ? 'सभी चर्चाएं लोड हो चुकी हैं' : 'All discussions loaded'}
+          <Typography variant="xs" color="#94A3B8">
+            {language === 'hi' ? '• सभी चर्चाएं लोड हो चुकी हैं •' : '• All discussions loaded •'}
           </Typography>
         </View>
       );
@@ -494,8 +474,8 @@ export default function GroupDetailsScreen() {
     if (loadingPosts) {
       return (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Typography variant="sm" color={theme.colors.textSecondary} style={styles.loadingText}>
+          <ActivityIndicator size="large" color="#1976D2" />
+          <Typography variant="sm" color="#64748B" style={styles.loadingText}>
             {language === 'hi' ? 'चर्चाएं लोड हो रही हैं...' : 'Loading discussions...'}
           </Typography>
         </View>
@@ -505,16 +485,15 @@ export default function GroupDetailsScreen() {
     if (postsError) {
       return (
         <Card style={styles.stateCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.error} align="center">
-            {language === 'hi' ? 'चर्चाएं लोड नहीं हो सकीं' : 'Unable to Load Discussions'}
-          </Typography>
-          <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.errorDesc}>
+          <Typography variant="md" weight="bold" color="#DC2626" align="center">
             {postsError}
           </Typography>
           <Button
             title={language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
             variant="outline"
+            size="sm"
             onPress={() => loadGroupDiscussions(1)}
+            style={styles.retryBtn}
           />
         </Card>
       );
@@ -522,19 +501,24 @@ export default function GroupDetailsScreen() {
 
     return (
       <Card style={styles.stateCard}>
-        <Typography variant="md" weight="bold" color={theme.colors.textPrimary} align="center">
+        <View style={styles.stateIconCircle}>
+          <Typography variant="lg">💬</Typography>
+        </View>
+        <Typography variant="md" weight="bold" color="#0F172A" align="center" style={styles.emptyTitle}>
           {language === 'hi' ? 'अभी कोई चर्चा नहीं है' : 'No Discussions Yet'}
         </Typography>
-        <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.emptyDesc}>
+        <Typography variant="sm" color="#64748B" align="center" style={styles.emptyDesc}>
           {language === 'hi'
-            ? 'इस समूह में बातचीत शुरू करने वाले पहले व्यक्ति बनें!'
-            : 'Be the first to start a conversation in this group!'}
+            ? 'इस समूह में पहली चर्चा शुरू करें और सदस्यों के साथ विचार साझा करें।'
+            : 'Start the first discussion in this group and connect with members.'}
         </Typography>
         {isMember ? (
           <Button
-            title={language === 'hi' ? 'चर्चा शुरू करें' : 'Start Discussion'}
+            title={language === 'hi' ? 'नई चर्चा शुरू करें' : 'Start Discussion'}
             variant="primary"
+            size="sm"
             onPress={() => router.push('/(app)/post/create')}
+            style={styles.createDiscussionBtn}
           />
         ) : null}
       </Card>
@@ -542,51 +526,34 @@ export default function GroupDetailsScreen() {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      {/* Top Header */}
-      <View
-        style={[
-          styles.headerBar,
-          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, paddingTop: Math.max(insets.top, 14) },
-        ]}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel={language === 'hi' ? 'वापस जाएं' : 'Back'}
-        >
-          <Typography variant="lg" weight="bold" color={theme.colors.primary}>
-            ←
-          </Typography>
-        </Pressable>
+    <View style={[styles.screen, { backgroundColor: '#F8FAFC' }]}>
+      {/* 1. Unified AppHeader in Detail Mode */}
+      <AppHeader
+        mode="detail"
+        title={group?.name || (language === 'hi' ? 'समूह विवरण' : 'Group Details')}
+        communitySlug={communitySlug}
+        showBackButton={true}
+        onBackPress={() => router.back()}
+      />
 
-        <Typography variant="md" weight="bold" color={theme.colors.textPrimary} numberOfLines={1} style={styles.headerTitle}>
-          {group?.name || (language === 'hi' ? 'समूह विवरण' : 'Group Details')}
-        </Typography>
-
-        <View style={styles.headerSpacer} />
-      </View>
-
-      {/* Main Content Area */}
+      {/* 2. Main Content Area */}
       {loadingGroup ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Typography variant="sm" color={theme.colors.textSecondary} style={styles.loadingText}>
+          <ActivityIndicator size="large" color="#1976D2" />
+          <Typography variant="sm" color="#64748B" style={styles.loadingText}>
             {language === 'hi' ? 'समूह लोड हो रहा है...' : 'Loading group...'}
           </Typography>
         </View>
       ) : groupError || !group ? (
         <View style={styles.errorPadding}>
           <Card style={styles.stateCard}>
-            <Typography variant="lg" style={styles.errorIcon}>
-              🏛️
-            </Typography>
-            <Typography variant="md" weight="bold" color={theme.colors.error} align="center">
+            <View style={styles.stateIconCircle}>
+              <Typography variant="lg">🏛️</Typography>
+            </View>
+            <Typography variant="md" weight="bold" color="#DC2626" align="center">
               {language === 'hi' ? 'समूह उपलब्ध नहीं है' : 'Group Unavailable'}
             </Typography>
-            <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.errorDesc}>
+            <Typography variant="sm" color="#64748B" align="center" style={styles.errorDesc}>
               {groupError ||
                 (language === 'hi'
                   ? 'यह समूह नहीं मिला या वर्तमान में इस समुदाय में उपलब्ध नहीं है।'
@@ -600,6 +567,7 @@ export default function GroupDetailsScreen() {
           </Card>
         </View>
       ) : (
+        /* 3. Group Discussions FlatList */
         <FlatList
           data={isAuthorized ? posts : []}
           keyExtractor={(item) => item.id}
@@ -607,6 +575,9 @@ export default function GroupDetailsScreen() {
             <PostCard
               post={item}
               communitySlug={communitySlug}
+              isPlayingInline={activePlayingPostId === item.id}
+              onPlayInline={(postId) => setActivePlayingPostId(postId)}
+              onPauseInline={() => setActivePlayingPostId(null)}
               onPressPost={(postId) =>
                 router.push({
                   pathname: '/(app)/post/[id]',
@@ -620,13 +591,15 @@ export default function GroupDetailsScreen() {
                 })
               }
               onToggleLike={handleToggleLike}
-              onPlayVideo={(media) => setActiveVideo(media)}
             />
           )}
           ListHeaderComponent={renderListHeader}
           ListFooterComponent={renderListFooter}
           ListEmptyComponent={renderEmptyDiscussions}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: Math.max(insets.bottom, 16) + 32 },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={refreshingPosts}
@@ -636,10 +609,12 @@ export default function GroupDetailsScreen() {
                   loadGroupDiscussions(1, true);
                 }
               }}
-              colors={[theme.colors.primary]}
-              tintColor={theme.colors.primary}
+              colors={['#1976D2']}
+              tintColor="#1976D2"
             />
           }
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
           onEndReached={() => {
             if (isAuthorized && page < totalPages && !fetchingMorePosts && !loadingPosts) {
               loadGroupDiscussions(page + 1);
@@ -650,11 +625,26 @@ export default function GroupDetailsScreen() {
         />
       )}
 
-      {/* Video Modal Player */}
-      <VideoModal
-        visible={Boolean(activeVideo)}
-        media={activeVideo}
-        onClose={() => setActiveVideo(null)}
+      {/* Leave Group Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={isLeaveDialogVisible}
+        title={language === 'hi' ? 'समूह छोड़ें' : 'Leave Group'}
+        message={
+          group?.myRole === 'ADMIN'
+            ? language === 'hi'
+              ? 'यदि आप एकमात्र व्यवस्थापक हैं, तो समूह छोड़ने से पहले किसी अन्य सदस्य को व्यवस्थापक नियुक्त करना आवश्यक है। क्या आप जारी रखना चाहते हैं?'
+              : 'As an administrator, you cannot leave the group if you are the sole admin without assigning another admin first. Do you want to proceed?'
+            : language === 'hi'
+              ? 'क्या आप सचमुच इस समूह से बाहर होना चाहते हैं?'
+              : 'Are you sure you want to leave this group?'
+        }
+        confirmLabel={language === 'hi' ? 'समूह छोड़ें' : 'Leave Group'}
+        cancelLabel={language === 'hi' ? 'रद्द करें' : 'Cancel'}
+        variant="danger"
+        icon="🚪"
+        loading={isLeaving}
+        onConfirm={executeLeave}
+        onCancel={() => setIsLeaveDialogVisible(false)}
       />
     </View>
   );
@@ -664,31 +654,181 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  headerBar: {
+  listContent: {
+    paddingHorizontal: 12,
+  },
+  groupInfoContainer: {
+    paddingTop: 10,
+    marginBottom: 4,
+  },
+  heroCard: {
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    marginBottom: 10,
+  },
+  heroCover: {
+    width: 60,
+    height: 60,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
+  },
+  heroFallback: {
+    width: 60,
+    height: 60,
+    borderRadius: 14,
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1.5,
+    borderColor: '#BAE6FD',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fallbackText: {
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  heroText: {
+    flex: 1,
+  },
+  heroTitle: {
+    fontSize: 18,
+    lineHeight: 23,
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  heroBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 6,
+  },
+  slugBadgePill: {
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  slugBadgeText: {
+    fontSize: 10.5,
+  },
+  statsSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  descText: {
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 12,
+  },
+  actionRow: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  leaveBtn: {
+    alignSelf: 'flex-start',
+  },
+  fullWidthBtn: {
+    width: '100%',
+  },
+  privateNotice: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chatCtaBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    elevation: 2,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
   },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
+  chatCtaLeft: {
     flex: 1,
-    textAlign: 'center',
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
-  headerSpacer: {
-    width: 24,
-  },
-  centerContainer: {
-    flex: 1,
+  chatCtaIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#DCFCE7',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  chatCtaText: {
+    flex: 1,
+  },
+  chatCtaArrow: {
+    fontSize: 18,
+    marginLeft: 8,
+  },
+  discussionsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  createPostPill: {
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  lockCard: {
     padding: 24,
+    borderRadius: 14,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 4,
+  },
+  lockIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FEF3C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  lockTitle: {
+    marginBottom: 6,
+  },
+  lockDesc: {
+    lineHeight: 19,
+  },
+  centerContainer: {
+    alignItems: 'center',
+    paddingVertical: 48,
     gap: 12,
   },
   loadingText: {
@@ -696,134 +836,39 @@ const styles = StyleSheet.create({
   },
   errorPadding: {
     padding: 16,
-    marginTop: 24,
   },
   stateCard: {
     padding: 24,
     alignItems: 'center',
+    borderRadius: 14,
+    borderColor: '#E2E8F0',
   },
-  errorIcon: {
-    fontSize: 40,
-    marginBottom: 8,
+  stateIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  emptyTitle: {
+    marginBottom: 6,
+  },
+  emptyDesc: {
+    marginBottom: 16,
+    lineHeight: 18,
   },
   errorDesc: {
     marginTop: 6,
-    marginBottom: 20,
-  },
-  emptyDesc: {
-    marginTop: 6,
     marginBottom: 16,
-  },
-  listContent: {
-    paddingHorizontal: 12,
-    paddingBottom: 24,
-  },
-  groupInfoContainer: {
-    paddingTop: 12,
-    marginBottom: 8,
-  },
-  heroCard: {
-    padding: 16,
-    marginBottom: 16,
-  },
-  heroRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  heroCover: {
-    width: 72,
-    height: 72,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  heroFallback: {
-    width: 72,
-    height: 72,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  heroText: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: 4,
-  },
-  heroBadges: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  descText: {
-    marginBottom: 14,
     lineHeight: 18,
   },
-  actionRow: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E2E8F0',
-    paddingTop: 12,
+  retryBtn: {
+    marginTop: 12,
   },
-  memberActionGroup: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  fullWidthBtn: {
-    width: '100%',
-  },
-  chatCtaButton: {
-    marginTop: 14,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  chatCtaLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  chatCtaIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  chatCtaText: {
-    flex: 1,
-  },
-  privateNotice: {
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  discussionsHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-    marginBottom: 12,
-  },
-  createPostPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-  },
-  lockCard: {
-    padding: 24,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  lockIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  lockDesc: {
-    marginTop: 6,
-    lineHeight: 18,
+  createDiscussionBtn: {
+    minWidth: 150,
   },
   footerLoader: {
     alignItems: 'center',
@@ -832,7 +877,6 @@ const styles = StyleSheet.create({
   },
   footerDone: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 18,
   },
 });
-

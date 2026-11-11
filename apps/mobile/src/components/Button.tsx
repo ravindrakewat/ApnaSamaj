@@ -5,6 +5,7 @@ import {
   ViewStyle,
   TextStyle,
   Platform,
+  StyleProp,
 } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import { Typography } from './Typography';
@@ -18,8 +19,8 @@ export interface ButtonProps {
   disabled?: boolean;
   loading?: boolean;
   fullWidth?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }
 
 export const Button: React.FC<ButtonProps> = ({

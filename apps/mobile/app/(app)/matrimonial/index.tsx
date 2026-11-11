@@ -22,8 +22,11 @@ import {
   Button,
   Input,
   Badge,
-  BottomNavigation,
   MatrimonialCard,
+  AppHeader,
+  SearchBar,
+  ProfileAvatar,
+  BottomSheet,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -37,19 +40,33 @@ export default function MatrimonialDiscoveryScreen() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { language } = useLocalization();
+  const { language, setLanguage } = useLocalization();
   const { user, communitySlug } = useAuth();
+
+  const toggleLanguage = () => {
+    setLanguage(language === 'hi' ? 'en' : 'hi');
+  };
 
   // Primary Tab state: 'profiles' | 'interests'
   const [activeTab, setActiveTab] = useState<MatrimonialViewTab>('profiles');
 
-  // Filter States
+  // Search keyword state (local filter / subCaste / city / name)
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Supported API Filter States
   const [genderFilter, setGenderFilter] = useState<'MALE' | 'FEMALE' | undefined>(undefined);
   const [maritalStatusFilter, setMaritalStatusFilter] = useState<string | undefined>(undefined);
   const [manglikFilter, setManglikFilter] = useState<string | undefined>(undefined);
   const [subCasteFilter, setSubCasteFilter] = useState<string>('');
   const [cityFilter, setCityFilter] = useState<string>('');
-  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(false);
+  const [isFilterSheetVisible, setIsFilterSheetVisible] = useState<boolean>(false);
+
+  // Draft filters inside bottom sheet
+  const [draftGender, setDraftGender] = useState<'MALE' | 'FEMALE' | undefined>(undefined);
+  const [draftMaritalStatus, setDraftMaritalStatus] = useState<string | undefined>(undefined);
+  const [draftManglik, setDraftManglik] = useState<string | undefined>(undefined);
+  const [draftSubCaste, setDraftSubCaste] = useState<string>('');
+  const [draftCity, setDraftCity] = useState<string>('');
 
   // Profiles Discovery State
   const [profiles, setProfiles] = useState<PublicMatrimonialProfileListItem[]>([]);
@@ -85,12 +102,35 @@ export default function MatrimonialDiscoveryScreen() {
     cityFilter.trim(),
   ].filter(Boolean).length;
 
+  const handleOpenFilterSheet = () => {
+    setDraftGender(genderFilter);
+    setDraftMaritalStatus(maritalStatusFilter);
+    setDraftManglik(manglikFilter);
+    setDraftSubCaste(subCasteFilter);
+    setDraftCity(cityFilter);
+    setIsFilterSheetVisible(true);
+  };
+
+  const handleApplyFilters = () => {
+    setGenderFilter(draftGender);
+    setMaritalStatusFilter(draftMaritalStatus);
+    setManglikFilter(draftManglik);
+    setSubCasteFilter(draftSubCaste);
+    setCityFilter(draftCity);
+    setIsFilterSheetVisible(false);
+  };
+
   const handleClearFilters = () => {
     setGenderFilter(undefined);
     setMaritalStatusFilter(undefined);
     setManglikFilter(undefined);
     setSubCasteFilter('');
     setCityFilter('');
+    setDraftGender(undefined);
+    setDraftMaritalStatus(undefined);
+    setDraftManglik(undefined);
+    setDraftSubCaste('');
+    setDraftCity('');
   };
 
   /**
@@ -146,7 +186,6 @@ export default function MatrimonialDiscoveryScreen() {
     [genderFilter, maritalStatusFilter, manglikFilter, subCasteFilter, cityFilter]
   );
 
-  // Load profiles when filters change
   useEffect(() => {
     if (activeTab === 'profiles') {
       loadProfiles(1, false);
@@ -252,7 +291,6 @@ export default function MatrimonialDiscoveryScreen() {
     setIsRespondingId(interestId);
     try {
       await matrimonialApi.respondInterest(interestId, status);
-      // Update local list
       setInterestsList((prev) =>
         prev.map((item) => (item.id === interestId ? { ...item, status } : item))
       );
@@ -264,81 +302,52 @@ export default function MatrimonialDiscoveryScreen() {
     }
   };
 
+  // Filter client-side by searchQuery across name, subCaste, city, occupation
+  const displayedProfiles = profiles.filter((p) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase().trim();
+    return (
+      p.fullName?.toLowerCase().includes(query) ||
+      p.subCaste?.toLowerCase().includes(query) ||
+      p.city?.toLowerCase().includes(query) ||
+      p.occupation?.toLowerCase().includes(query) ||
+      p.gotra?.toLowerCase().includes(query)
+    );
+  });
+
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      {/* Top Header */}
-      <View
-        style={[
-          styles.headerContainer,
-          {
-            paddingTop: Math.max(insets.top + 8, 16),
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.border,
-          },
-        ]}
-      >
-        <View style={styles.headerTopRow}>
-          <View style={styles.titleColumn}>
-            <View style={styles.titleBadgeRow}>
-              <Typography variant="lg" weight="bold" color={theme.colors.textPrimary}>
-                {language === 'hi' ? 'विवाह परिचय' : 'Matrimonial Profiles'}
-              </Typography>
-              {communitySlug ? (
-                <Badge label={communitySlug} variant="info" size="sm" />
-              ) : null}
-            </View>
-            <Typography variant="xs" color={theme.colors.textMuted}>
-              {language === 'hi'
-                ? 'सत्यापित समाज सदस्य प्रोफ़ाइल खोजें'
-                : 'Discover verified community matrimonial profiles'}
-            </Typography>
-          </View>
+    <View style={styles.screen}>
+      {/* 1. Unified Brand AppHeader */}
+      <AppHeader
+        mode="brand"
+        icon="💍"
+        title={language === 'hi' ? 'विवाह परिचय' : 'Matrimonial Profiles'}
+        communitySlug={communitySlug}
+        showLanguageSwitcher={true}
+        language={language}
+        onLanguageToggle={toggleLanguage}
+        showProfileAvatar={true}
+        avatarInitial={user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'वि'}
+      />
 
-          {/* Filter toggle button */}
-          {activeTab === 'profiles' ? (
-            <Pressable
-              onPress={() => setIsFilterExpanded((prev) => !prev)}
-              style={[
-                styles.filterToggleBtn,
-                {
-                  backgroundColor:
-                    activeFilterCount > 0 ? theme.colors.primaryLight : theme.colors.background,
-                  borderColor:
-                    activeFilterCount > 0 ? theme.colors.primary : theme.colors.border,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Toggle filters"
-            >
-              <Typography variant="sm">
-                🔍 {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
-              </Typography>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {/* Primary Segmented Tabs: Profiles | Interests */}
-        <View style={[styles.segmentedControl, { backgroundColor: theme.colors.background }]}>
+      {/* 2. Primary View Switcher: Profiles vs Interests */}
+      <View style={styles.segmentedContainer}>
+        <View style={styles.segmentedControl}>
           <Pressable
             onPress={() => setActiveTab('profiles')}
             style={[
               styles.segmentBtn,
-              activeTab === 'profiles' && {
-                backgroundColor: theme.colors.surface,
-                shadowColor: '#000',
-                shadowOpacity: 0.08,
-                shadowRadius: 2,
-                elevation: 2,
-              },
+              activeTab === 'profiles' && styles.segmentBtnActive,
             ]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'profiles' }}
           >
             <Typography
               variant="xs"
               weight={activeTab === 'profiles' ? 'bold' : 'medium'}
-              color={activeTab === 'profiles' ? theme.colors.primary : theme.colors.textMuted}
+              color={activeTab === 'profiles' ? '#1976D2' : '#64748B'}
             >
-              💍 {language === 'hi' ? 'प्रोफ़ाइलें' : 'Profiles'}{' '}
-              {totalCount > 0 ? `(${totalCount})` : ''}
+              💍 {language === 'hi' ? 'प्रोफ़ाइलें' : 'Profiles'} {totalCount > 0 ? `(${totalCount})` : ''}
             </Typography>
           </Pressable>
 
@@ -346,284 +355,264 @@ export default function MatrimonialDiscoveryScreen() {
             onPress={() => setActiveTab('interests')}
             style={[
               styles.segmentBtn,
-              activeTab === 'interests' && {
-                backgroundColor: theme.colors.surface,
-                shadowColor: '#000',
-                shadowOpacity: 0.08,
-                shadowRadius: 2,
-                elevation: 2,
-              },
+              activeTab === 'interests' && styles.segmentBtnActive,
             ]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'interests' }}
           >
             <Typography
               variant="xs"
               weight={activeTab === 'interests' ? 'bold' : 'medium'}
-              color={activeTab === 'interests' ? theme.colors.primary : theme.colors.textMuted}
+              color={activeTab === 'interests' ? '#1976D2' : '#64748B'}
             >
               💌 {language === 'hi' ? 'रुचियाँ' : 'Interests'}
             </Typography>
           </Pressable>
         </View>
-
-        {/* Collapsible Filter Panel (Profiles Mode) */}
-        {activeTab === 'profiles' && isFilterExpanded ? (
-          <View style={[styles.filterPanel, { borderTopColor: theme.colors.border }]}>
-            {/* Gender Filter Chips */}
-            <View style={styles.filterSection}>
-              <Typography variant="xs" weight="bold" color={theme.colors.textPrimary} style={styles.filterLabel}>
-                {language === 'hi' ? 'लिंग (Gender):' : 'Looking For:'}
-              </Typography>
-              <View style={styles.chipRow}>
-                {[
-                  { key: undefined, hi: 'सभी', en: 'All' },
-                  { key: 'FEMALE', hi: 'वधू (Brides)', en: 'Brides' },
-                  { key: 'MALE', hi: 'वर (Grooms)', en: 'Grooms' },
-                ].map((item) => {
-                  const isSelected = genderFilter === item.key;
-                  return (
-                    <Pressable
-                      key={item.en}
-                      onPress={() => setGenderFilter(item.key as any)}
-                      style={[
-                        styles.filterChip,
-                        {
-                          backgroundColor: isSelected ? theme.colors.primary : theme.colors.background,
-                          borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Typography
-                        variant="xs"
-                        weight={isSelected ? 'bold' : 'regular'}
-                        color={isSelected ? '#FFFFFF' : theme.colors.textSecondary}
-                      >
-                        {language === 'hi' ? item.hi : item.en}
-                      </Typography>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Marital Status Chips */}
-            <View style={styles.filterSection}>
-              <Typography variant="xs" weight="bold" color={theme.colors.textPrimary} style={styles.filterLabel}>
-                {language === 'hi' ? 'वैवाहिक स्थिति:' : 'Marital Status:'}
-              </Typography>
-              <View style={styles.chipRow}>
-                {[
-                  { key: undefined, hi: 'सभी', en: 'All' },
-                  { key: 'NEVER_MARRIED', hi: 'अविवाहित', en: 'Never Married' },
-                  { key: 'DIVORCED', hi: 'तलाकशुदा', en: 'Divorced' },
-                  { key: 'WIDOWED', hi: 'विधवा/विधुर', en: 'Widowed' },
-                ].map((item) => {
-                  const isSelected = maritalStatusFilter === item.key;
-                  return (
-                    <Pressable
-                      key={item.en}
-                      onPress={() => setMaritalStatusFilter(item.key)}
-                      style={[
-                        styles.filterChip,
-                        {
-                          backgroundColor: isSelected ? theme.colors.primary : theme.colors.background,
-                          borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Typography
-                        variant="xs"
-                        weight={isSelected ? 'bold' : 'regular'}
-                        color={isSelected ? '#FFFFFF' : theme.colors.textSecondary}
-                      >
-                        {language === 'hi' ? item.hi : item.en}
-                      </Typography>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Manglik Chips */}
-            <View style={styles.filterSection}>
-              <Typography variant="xs" weight="bold" color={theme.colors.textPrimary} style={styles.filterLabel}>
-                {language === 'hi' ? 'मांगलिक स्थिति:' : 'Manglik:'}
-              </Typography>
-              <View style={styles.chipRow}>
-                {[
-                  { key: undefined, hi: 'सभी', en: 'All' },
-                  { key: 'NON_MANGLIK', hi: 'अमांगलिक', en: 'Non-Manglik' },
-                  { key: 'MANGLIK', hi: 'मांगलिक', en: 'Manglik' },
-                  { key: 'ANSHIK', hi: 'आंशिक', en: 'Anshik' },
-                ].map((item) => {
-                  const isSelected = manglikFilter === item.key;
-                  return (
-                    <Pressable
-                      key={item.en}
-                      onPress={() => setManglikFilter(item.key)}
-                      style={[
-                        styles.filterChip,
-                        {
-                          backgroundColor: isSelected ? theme.colors.primary : theme.colors.background,
-                          borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Typography
-                        variant="xs"
-                        weight={isSelected ? 'bold' : 'regular'}
-                        color={isSelected ? '#FFFFFF' : theme.colors.textSecondary}
-                      >
-                        {language === 'hi' ? item.hi : item.en}
-                      </Typography>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Sub-caste & City Inputs */}
-            <View style={styles.inputsRow}>
-              <View style={styles.inputFlex}>
-                <Input
-                  label={language === 'hi' ? 'उपजाति (Sub-caste)' : 'Sub-caste'}
-                  value={subCasteFilter}
-                  onChangeText={setSubCasteFilter}
-                  placeholder="उदा. केवट / मल्लाह"
-                />
-              </View>
-              <View style={styles.inputFlex}>
-                <Input
-                  label={language === 'hi' ? 'शहर (City)' : 'City'}
-                  value={cityFilter}
-                  onChangeText={setCityFilter}
-                  placeholder="उदा. भोपाल"
-                />
-              </View>
-            </View>
-
-            {/* Reset Filters Action */}
-            {activeFilterCount > 0 ? (
-              <View style={styles.resetRow}>
-                <Pressable onPress={handleClearFilters} style={styles.resetBtn}>
-                  <Typography variant="xs" weight="bold" color={theme.colors.error}>
-                    ↺ {language === 'hi' ? 'सभी फ़िल्टर साफ़ करें' : 'Reset All Filters'}
-                  </Typography>
-                </Pressable>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
       </View>
 
-      {/* Main Content Area */}
+      {/* 3. Main Content: Profiles or Interests */}
       {activeTab === 'profiles' ? (
-        <FlatList
-          data={profiles}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <MatrimonialCard
-              profile={item}
-              onPress={handleCardPress}
-              onSendInterest={handleOpenSendInterest}
-              isOwnProfile={user?.id === item.userId}
+        <View style={styles.profilesWrapper}>
+          {/* SearchBar with Filter Button */}
+          <View style={styles.searchBarContainer}>
+            <SearchBar
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder={
+                language === 'hi'
+                  ? 'नाम, उपजाति या शहर से खोजें...'
+                  : 'Search by name, sub-caste, city...'
+              }
+              showFilterButton={true}
+              activeFilterCount={activeFilterCount}
+              onFilterPress={handleOpenFilterSheet}
+              onClear={() => setSearchQuery('')}
             />
-          )}
-          contentContainerStyle={[
-            styles.listContent,
-            profiles.length === 0 && styles.listContentEmpty,
-          ]}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={theme.colors.primary}
-              colors={[theme.colors.primary]}
-            />
-          }
-          onEndReached={handleEndReached}
-          onEndReachedThreshold={0.4}
-          ListFooterComponent={
-            isFetchingMore ? (
-              <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color={theme.colors.primary} />
-                <Typography variant="xs" color={theme.colors.textMuted} style={styles.footerLoaderText}>
-                  {language === 'hi' ? 'और प्रोफ़ाइलें लोड हो रही हैं...' : 'Loading more profiles...'}
+          </View>
+
+          {/* Active Filter Chips Carousel */}
+          {activeFilterCount > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.activeChipsContainer}
+            >
+              {genderFilter ? (
+                <Pressable
+                  onPress={() => setGenderFilter(undefined)}
+                  style={styles.activeChipPill}
+                >
+                  <Typography variant="xs" weight="medium" color="#1976D2">
+                    {genderFilter === 'FEMALE'
+                      ? language === 'hi' ? '👰 वधू' : 'Brides'
+                      : language === 'hi' ? '🤵 वर' : 'Grooms'}{' '}
+                    ✕
+                  </Typography>
+                </Pressable>
+              ) : null}
+
+              {maritalStatusFilter ? (
+                <Pressable
+                  onPress={() => setMaritalStatusFilter(undefined)}
+                  style={styles.activeChipPill}
+                >
+                  <Typography variant="xs" weight="medium" color="#1976D2">
+                    {maritalStatusFilter === 'NEVER_MARRIED'
+                      ? language === 'hi' ? 'अविवाहित' : 'Never Married'
+                      : maritalStatusFilter === 'DIVORCED'
+                      ? language === 'hi' ? 'तलाकशुदा' : 'Divorced'
+                      : language === 'hi' ? 'विधवा/विधुर' : 'Widowed'}{' '}
+                    ✕
+                  </Typography>
+                </Pressable>
+              ) : null}
+
+              {manglikFilter ? (
+                <Pressable
+                  onPress={() => setManglikFilter(undefined)}
+                  style={styles.activeChipPill}
+                >
+                  <Typography variant="xs" weight="medium" color="#1976D2">
+                    {manglikFilter === 'NON_MANGLIK'
+                      ? language === 'hi' ? 'अमांगलिक' : 'Non-Manglik'
+                      : manglikFilter === 'MANGLIK'
+                      ? language === 'hi' ? 'मांगलिक' : 'Manglik'
+                      : language === 'hi' ? 'आंशिक मांगलिक' : 'Anshik'}{' '}
+                    ✕
+                  </Typography>
+                </Pressable>
+              ) : null}
+
+              {subCasteFilter.trim() ? (
+                <Pressable
+                  onPress={() => setSubCasteFilter('')}
+                  style={styles.activeChipPill}
+                >
+                  <Typography variant="xs" weight="medium" color="#1976D2">
+                    {language === 'hi' ? `उपजाति: ${subCasteFilter}` : `Sub-caste: ${subCasteFilter}`}{' '}
+                    ✕
+                  </Typography>
+                </Pressable>
+              ) : null}
+
+              {cityFilter.trim() ? (
+                <Pressable
+                  onPress={() => setCityFilter('')}
+                  style={styles.activeChipPill}
+                >
+                  <Typography variant="xs" weight="medium" color="#1976D2">
+                    {language === 'hi' ? `शहर: ${cityFilter}` : `City: ${cityFilter}`}{' '}
+                    ✕
+                  </Typography>
+                </Pressable>
+              ) : null}
+
+              <Pressable onPress={handleClearFilters} style={styles.clearAllChip}>
+                <Typography variant="xs" weight="bold" color="#DC2626">
+                  {language === 'hi' ? 'सभी साफ़ करें' : 'Clear All'}
                 </Typography>
-              </View>
-            ) : null
-          }
-          ListEmptyComponent={
-            isLoading ? (
-              <View style={styles.emptyContainer}>
-                <ActivityIndicator size="large" color={theme.colors.primary} />
-                <Typography variant="sm" color={theme.colors.textMuted} style={styles.emptySubText}>
-                  {language === 'hi' ? 'विवाह प्रोफ़ाइलें खोजी जा रही हैं...' : 'Searching matrimonial profiles...'}
+              </Pressable>
+            </ScrollView>
+          ) : null}
+
+          {/* Results Count Banner */}
+          <View style={styles.countBanner}>
+            <Typography variant="xs" color="#64748B" weight="medium">
+              {language === 'hi'
+                ? `💍 ${displayedProfiles.length} विवाह प्रोफ़ाइलें उपलब्ध`
+                : `💍 ${displayedProfiles.length} Matrimonial profiles found`}
+            </Typography>
+
+            {activeFilterCount > 0 || searchQuery.trim() ? (
+              <Pressable
+                onPress={() => {
+                  handleClearFilters();
+                  setSearchQuery('');
+                }}
+                hitSlop={6}
+              >
+                <Typography variant="xs" color="#1976D2" weight="bold">
+                  {language === 'hi' ? 'सभी दिखाएं' : 'Show All'}
                 </Typography>
-              </View>
-            ) : error ? (
-              <Card style={styles.errorCard}>
-                <Typography variant="md" weight="bold" color={theme.colors.error} align="center">
-                  ⚠️ {language === 'hi' ? 'लोड करने में समस्या' : 'Failed to Load'}
-                </Typography>
-                <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.errorMsg}>
-                  {error}
-                </Typography>
-                <Button
-                  title={language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
-                  onPress={() => loadProfiles(1, false)}
-                  variant="outline"
-                  size="sm"
-                />
-              </Card>
-            ) : (
-              <Card style={styles.emptyCard}>
-                <Typography variant="lg" align="center" style={styles.emptyIcon}>
-                  💍
-                </Typography>
-                <Typography variant="md" weight="bold" color={theme.colors.textPrimary} align="center">
-                  {language === 'hi' ? 'कोई प्रोफ़ाइल नहीं मिली' : 'No Profiles Found'}
-                </Typography>
-                <Typography variant="xs" color={theme.colors.textMuted} align="center" style={styles.emptySubText}>
-                  {activeFilterCount > 0
-                    ? language === 'hi'
-                      ? 'वर्तमान फ़िल्टर के अनुसार कोई स्वीकृत प्रोफ़ाइल नहीं है। फ़िल्टर बदल कर देखें।'
-                      : 'No approved profiles match the selected filters.'
-                    : language === 'hi'
-                    ? 'वर्तमान में इस समुदाय में कोई सक्रिय विवाह प्रोफ़ाइल उपलब्ध नहीं है।'
-                    : 'No approved matrimonial profiles are currently available in this community.'}
-                </Typography>
-                {activeFilterCount > 0 ? (
+              </Pressable>
+            ) : null}
+          </View>
+
+          {/* Profiles FlatList */}
+          <FlatList
+            data={displayedProfiles}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <MatrimonialCard
+                profile={item}
+                onPress={handleCardPress}
+                onSendInterest={handleOpenSendInterest}
+                isOwnProfile={user?.id === item.userId}
+              />
+            )}
+            contentContainerStyle={[
+              styles.listContent,
+              displayedProfiles.length === 0 && styles.listContentEmpty,
+              { paddingBottom: Math.max(insets.bottom + 90, 110) },
+            ]}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor="#1976D2"
+                colors={['#1976D2']}
+              />
+            }
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={
+              isFetchingMore ? (
+                <View style={styles.footerLoader}>
+                  <ActivityIndicator size="small" color="#1976D2" />
+                  <Typography variant="xs" color="#64748B" style={styles.footerLoaderText}>
+                    {language === 'hi' ? 'और प्रोफ़ाइलें लोड हो रही हैं...' : 'Loading more profiles...'}
+                  </Typography>
+                </View>
+              ) : null
+            }
+            ListEmptyComponent={
+              isLoading ? (
+                <View style={styles.emptyContainer}>
+                  <ActivityIndicator size="large" color="#1976D2" />
+                  <Typography variant="sm" color="#64748B" style={styles.emptySubText}>
+                    {language === 'hi'
+                      ? 'विवाह प्रोफ़ाइलें खोजी जा रही हैं...'
+                      : 'Searching matrimonial profiles...'}
+                  </Typography>
+                </View>
+              ) : error ? (
+                <Card style={styles.errorCard}>
+                  <Typography variant="md" weight="bold" color="#DC2626" align="center">
+                    ⚠️ {language === 'hi' ? 'लोड करने में समस्या' : 'Failed to Load'}
+                  </Typography>
+                  <Typography variant="sm" color="#475569" align="center" style={styles.errorMsg}>
+                    {error}
+                  </Typography>
                   <Button
-                    title={language === 'hi' ? 'फ़िल्टर हटाएं' : 'Clear Filters'}
-                    onPress={handleClearFilters}
+                    title={language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
+                    onPress={() => loadProfiles(1, false)}
                     variant="outline"
                     size="sm"
-                    style={styles.clearFiltersBtn}
                   />
-                ) : null}
-              </Card>
-            )
-          }
-        />
+                </Card>
+              ) : (
+                <Card style={styles.emptyCard}>
+                  <Typography variant="lg" align="center" style={styles.emptyIcon}>
+                    💍
+                  </Typography>
+                  <Typography variant="md" weight="bold" color="#0F172A" align="center">
+                    {language === 'hi' ? 'कोई प्रोफ़ाइल नहीं मिली' : 'No Profiles Found'}
+                  </Typography>
+                  <Typography variant="xs" color="#64748B" align="center" style={styles.emptySubText}>
+                    {activeFilterCount > 0 || searchQuery.trim()
+                      ? language === 'hi'
+                        ? 'वर्तमान फ़िल्टर या खोज के अनुसार कोई स्वीकृत प्रोफ़ाइल नहीं है। फ़िल्टर बदल कर देखें।'
+                        : 'No approved profiles match the selected filters or search query.'
+                      : language === 'hi'
+                      ? 'वर्तमान में इस समुदाय में कोई सक्रिय विवाह प्रोफ़ाइल उपलब्ध नहीं है।'
+                      : 'No approved matrimonial profiles are currently available in this community.'}
+                  </Typography>
+                  {activeFilterCount > 0 || searchQuery.trim() ? (
+                    <Button
+                      title={language === 'hi' ? 'फ़िल्टर हटाएं' : 'Clear Filters'}
+                      onPress={() => {
+                        handleClearFilters();
+                        setSearchQuery('');
+                      }}
+                      variant="outline"
+                      size="sm"
+                      style={styles.clearFiltersBtn}
+                    />
+                  ) : null}
+                </Card>
+              )
+            }
+          />
+        </View>
       ) : (
         /* Interests Tab Content */
         <View style={styles.interestsContainer}>
-          {/* Sub-toggle: Received vs Sent */}
-          <View style={[styles.interestsSubTabs, { backgroundColor: theme.colors.surface }]}>
+          {/* Sub-tabs: Received vs Sent */}
+          <View style={styles.interestsSubTabs}>
             <Pressable
               onPress={() => setInterestsSubTab('received')}
               style={[
                 styles.subTabBtn,
-                interestsSubTab === 'received' && {
-                  borderBottomColor: theme.colors.primary,
-                  borderBottomWidth: 2,
-                },
+                interestsSubTab === 'received' && styles.subTabBtnActive,
               ]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: interestsSubTab === 'received' }}
             >
               <Typography
                 variant="sm"
                 weight={interestsSubTab === 'received' ? 'bold' : 'medium'}
-                color={interestsSubTab === 'received' ? theme.colors.primary : theme.colors.textMuted}
+                color={interestsSubTab === 'received' ? '#1976D2' : '#64748B'}
               >
                 📥 {language === 'hi' ? 'प्राप्त रुचियाँ' : 'Received Requests'}
               </Typography>
@@ -633,16 +622,15 @@ export default function MatrimonialDiscoveryScreen() {
               onPress={() => setInterestsSubTab('sent')}
               style={[
                 styles.subTabBtn,
-                interestsSubTab === 'sent' && {
-                  borderBottomColor: theme.colors.primary,
-                  borderBottomWidth: 2,
-                },
+                interestsSubTab === 'sent' && styles.subTabBtnActive,
               ]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: interestsSubTab === 'sent' }}
             >
               <Typography
                 variant="sm"
                 weight={interestsSubTab === 'sent' ? 'bold' : 'medium'}
-                color={interestsSubTab === 'sent' ? theme.colors.primary : theme.colors.textMuted}
+                color={interestsSubTab === 'sent' ? '#1976D2' : '#64748B'}
               >
                 📤 {language === 'hi' ? 'भेजी गई रुचियाँ' : 'Sent Requests'}
               </Typography>
@@ -651,8 +639,8 @@ export default function MatrimonialDiscoveryScreen() {
 
           {isLoadingInterests ? (
             <View style={styles.emptyContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Typography variant="sm" color={theme.colors.textMuted} style={styles.emptySubText}>
+              <ActivityIndicator size="large" color="#1976D2" />
+              <Typography variant="sm" color="#64748B" style={styles.emptySubText}>
                 {language === 'hi' ? 'रुचियाँ लोड हो रही हैं...' : 'Loading interests...'}
               </Typography>
             </View>
@@ -661,7 +649,7 @@ export default function MatrimonialDiscoveryScreen() {
               <Typography variant="lg" align="center" style={styles.emptyIcon}>
                 💌
               </Typography>
-              <Typography variant="md" weight="bold" color={theme.colors.textPrimary} align="center">
+              <Typography variant="md" weight="bold" color="#0F172A" align="center">
                 {interestsSubTab === 'received'
                   ? language === 'hi'
                     ? 'कोई प्राप्त रुचि नहीं'
@@ -670,7 +658,7 @@ export default function MatrimonialDiscoveryScreen() {
                   ? 'कोई भेजी गई रुचि नहीं'
                   : 'No Sent Interests'}
               </Typography>
-              <Typography variant="xs" color={theme.colors.textMuted} align="center" style={styles.emptySubText}>
+              <Typography variant="xs" color="#64748B" align="center" style={styles.emptySubText}>
                 {interestsSubTab === 'received'
                   ? language === 'hi'
                     ? 'अन्य सदस्यों से प्राप्त विवाह संबंध अनुरोध यहाँ दिखाई देंगे।'
@@ -684,20 +672,31 @@ export default function MatrimonialDiscoveryScreen() {
             <FlatList
               data={interestsList}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[
+                styles.listContent,
+                { paddingBottom: Math.max(insets.bottom + 90, 110) },
+              ]}
               renderItem={({ item }) => {
                 const other = item.otherPartyProfile;
                 const isReceived = interestsSubTab === 'received';
                 const isPending = item.status === 'PENDING';
+                const initialChar = other?.fullName ? other.fullName.trim().charAt(0).toUpperCase() : 'वि';
 
                 return (
                   <Card style={styles.interestCard}>
                     <View style={styles.interestHeader}>
+                      {/* Avatar / Initial Fallback */}
+                      <View style={styles.interestAvatarBox}>
+                        <Typography variant="md" weight="bold" color="#0369A1">
+                          {initialChar}
+                        </Typography>
+                      </View>
+
                       <View style={styles.interestProfileInfo}>
-                        <Typography variant="sm" weight="bold" color={theme.colors.textPrimary}>
+                        <Typography variant="sm" weight="bold" color="#0F172A">
                           {other?.fullName || (language === 'hi' ? 'समाज सदस्य' : 'Community Member')}
                         </Typography>
-                        <Typography variant="xs" color={theme.colors.textSecondary}>
+                        <Typography variant="xs" color="#64748B">
                           {[
                             other?.age ? `${other.age} ${language === 'hi' ? 'वर्ष' : 'yrs'}` : null,
                             other?.occupation,
@@ -709,40 +708,45 @@ export default function MatrimonialDiscoveryScreen() {
                       </View>
 
                       {/* Status Badge */}
-                      <Badge
-                        label={
+                      <View
+                        style={[
+                          styles.statusBadgePill,
                           item.status === 'ACCEPTED'
-                            ? language === 'hi'
-                              ? '💖 स्वीकृत'
-                              : 'Connected'
+                            ? styles.statusBadgeAccepted
                             : item.status === 'DECLINED'
-                            ? language === 'hi'
-                              ? '✕ अस्वीकृत'
-                              : 'Declined'
-                            : language === 'hi'
-                            ? '⏳ प्रतीक्षारत'
-                            : 'Pending'
-                        }
-                        variant={
-                          item.status === 'ACCEPTED'
-                            ? 'success'
+                            ? styles.statusBadgeDeclined
+                            : styles.statusBadgePending,
+                        ]}
+                      >
+                        <Typography
+                          variant="xs"
+                          weight="bold"
+                          color={
+                            item.status === 'ACCEPTED'
+                              ? '#15803D'
+                              : item.status === 'DECLINED'
+                              ? '#B91C1C'
+                              : '#C2410C'
+                          }
+                        >
+                          {item.status === 'ACCEPTED'
+                            ? language === 'hi' ? '💖 स्वीकृत' : 'Connected'
                             : item.status === 'DECLINED'
-                            ? 'error'
-                            : 'warning'
-                        }
-                        size="sm"
-                      />
+                            ? language === 'hi' ? '✕ अस्वीकृत' : 'Declined'
+                            : language === 'hi' ? '⏳ प्रतीक्षारत' : 'Pending'}
+                        </Typography>
+                      </View>
                     </View>
 
                     {item.message ? (
-                      <View style={[styles.messageBox, { backgroundColor: theme.colors.background }]}>
-                        <Typography variant="xs" color={theme.colors.textSecondary}>
+                      <View style={styles.messageBox}>
+                        <Typography variant="xs" color="#334155">
                           "{item.message}"
                         </Typography>
                       </View>
                     ) : null}
 
-                    {/* Received Actions */}
+                    {/* Received Pending Action Buttons */}
                     {isReceived && isPending ? (
                       <View style={styles.actionButtonsRow}>
                         <Button
@@ -769,8 +773,9 @@ export default function MatrimonialDiscoveryScreen() {
                       <Pressable
                         onPress={() => handleCardPress(other.id)}
                         style={styles.viewProfileBtn}
+                        hitSlop={4}
                       >
-                        <Typography variant="xs" weight="bold" color={theme.colors.primary}>
+                        <Typography variant="xs" weight="bold" color="#1976D2">
                           {language === 'hi' ? 'प्रोफ़ाइल देखें →' : 'View Profile →'}
                         </Typography>
                       </Pressable>
@@ -783,93 +788,252 @@ export default function MatrimonialDiscoveryScreen() {
         </View>
       )}
 
-      {/* Express Interest Modal */}
-      <Modal
-        visible={Boolean(interestTarget)}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
-          if (!isSubmittingInterest) setInterestTarget(null);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
-            <Typography variant="md" weight="bold" color={theme.colors.textPrimary} style={styles.modalTitle}>
-              💌 {language === 'hi' ? 'विवाह संबंध रुचि भेजें' : 'Express Matrimonial Interest'}
+      {/* 4. Slide-up Filter Bottom Sheet */}
+      <BottomSheet
+        visible={isFilterSheetVisible}
+        onClose={() => setIsFilterSheetVisible(false)}
+        title={language === 'hi' ? 'विवाह फ़िल्टर' : 'Filter Matrimonial Profiles'}
+        icon="🎛️"
+        headerAccessory={
+          <Pressable
+            onPress={() => {
+              setDraftGender(undefined);
+              setDraftMaritalStatus(undefined);
+              setDraftManglik(undefined);
+              setDraftSubCaste('');
+              setDraftCity('');
+            }}
+            hitSlop={8}
+            style={{ marginRight: 8 }}
+          >
+            <Typography variant="xs" weight="bold" color="#DC2626">
+              {language === 'hi' ? 'साफ़ करें' : 'Reset'}
             </Typography>
-
-            {interestTarget ? (
-              <View style={[styles.targetInfoBox, { backgroundColor: theme.colors.background }]}>
-                <Typography variant="sm" weight="bold" color={theme.colors.textPrimary}>
-                  {interestTarget.fullName}
-                </Typography>
-                <Typography variant="xs" color={theme.colors.textSecondary}>
-                  {[
-                    interestTarget.age ? `${interestTarget.age} ${language === 'hi' ? 'वर्ष' : 'yrs'}` : null,
-                    interestTarget.occupation,
-                    interestTarget.city,
-                  ]
-                    .filter(Boolean)
-                    .join(' • ')}
-                </Typography>
-              </View>
-            ) : null}
-
-            <Input
-              label={language === 'hi' ? 'संदेश (वैकल्पिक)' : 'Message (Optional)'}
-              value={interestMessage}
-              onChangeText={setInterestMessage}
-              placeholder={
-                language === 'hi'
-                  ? 'नमस्ते, आपकी प्रोफ़ाइल हमारे परिवार को उपयुक्त लगी...'
-                  : 'Namaste, we found your profile suitable...'
-              }
-              maxLength={500}
-              multiline
-              numberOfLines={3}
-              helperText={`${interestMessage.length} / 500`}
+          </Pressable>
+        }
+        footer={
+          <View style={styles.sheetActionsRow}>
+            <Button
+              title={language === 'hi' ? 'रद्द करें' : 'Cancel'}
+              onPress={() => setIsFilterSheetVisible(false)}
+              variant="outline"
+              size="md"
+              style={styles.sheetActionBtn}
             />
-
-            {interestError ? (
-              <View style={[styles.errorBox, { backgroundColor: '#FFEBEE' }]}>
-                <Typography variant="xs" color="#C62828">
-                  {interestError}
-                </Typography>
-              </View>
-            ) : null}
-
-            {interestSuccess ? (
-              <View style={[styles.successBox, { backgroundColor: '#E8F5E9' }]}>
-                <Typography variant="xs" weight="bold" color="#2E7D32">
-                  ✓ {interestSuccess}
-                </Typography>
-              </View>
-            ) : null}
-
-            <View style={styles.modalActionsRow}>
-              <Button
-                title={language === 'hi' ? 'रद्द करें' : 'Cancel'}
-                onPress={() => setInterestTarget(null)}
-                variant="outline"
-                size="sm"
-                disabled={isSubmittingInterest}
-                style={styles.modalActionBtn}
-              />
-              <Button
-                title={language === 'hi' ? 'रुचि भेजें' : 'Send Interest'}
-                onPress={handleConfirmSendInterest}
-                loading={isSubmittingInterest}
-                size="sm"
-                variant="primary"
-                style={styles.modalActionBtn}
-              />
-            </View>
+            <Button
+              title={language === 'hi' ? 'फ़िल्टर लागू करें' : 'Apply Filters'}
+              onPress={handleApplyFilters}
+              variant="primary"
+              size="md"
+              style={styles.sheetActionBtn}
+            />
+          </View>
+        }
+      >
+        {/* Gender Filter */}
+        <View style={styles.filterSection}>
+          <Typography variant="xs" weight="bold" color="#0F172A" style={styles.filterSectionTitle}>
+            {language === 'hi' ? 'लिंग / अपेक्षा:' : 'Looking For:'}
+          </Typography>
+          <View style={styles.filterRow}>
+            {[
+              { key: undefined, hi: 'सभी', en: 'All' },
+              { key: 'FEMALE', hi: '👰 वधू', en: 'Brides' },
+              { key: 'MALE', hi: '🤵 वर', en: 'Grooms' },
+            ].map((item) => {
+              const isSelected = draftGender === item.key;
+              return (
+                <Pressable
+                  key={item.en}
+                  onPress={() => setDraftGender(item.key as any)}
+                  style={[
+                    styles.filterSelectChip,
+                    isSelected && styles.filterSelectChipActive,
+                  ]}
+                >
+                  <Typography
+                    variant="xs"
+                    weight={isSelected ? 'bold' : 'medium'}
+                    color={isSelected ? '#1976D2' : '#475569'}
+                  >
+                    {language === 'hi' ? item.hi : item.en}
+                  </Typography>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
-      </Modal>
 
-      {/* Bottom Navigation */}
-      <BottomNavigation activeTab="matrimonial" />
+        {/* Marital Status Filter */}
+        <View style={styles.filterSection}>
+          <Typography variant="xs" weight="bold" color="#0F172A" style={styles.filterSectionTitle}>
+            {language === 'hi' ? 'वैवाहिक स्थिति:' : 'Marital Status:'}
+          </Typography>
+          <View style={styles.filterRow}>
+            {[
+              { key: undefined, hi: 'सभी', en: 'All' },
+              { key: 'NEVER_MARRIED', hi: 'अविवाहित', en: 'Never Married' },
+              { key: 'DIVORCED', hi: 'तलाकशुदा', en: 'Divorced' },
+              { key: 'WIDOWED', hi: 'विधवा/विधुर', en: 'Widowed' },
+            ].map((item) => {
+              const isSelected = draftMaritalStatus === item.key;
+              return (
+                <Pressable
+                  key={item.en}
+                  onPress={() => setDraftMaritalStatus(item.key)}
+                  style={[
+                    styles.filterSelectChip,
+                    isSelected && styles.filterSelectChipActive,
+                  ]}
+                >
+                  <Typography
+                    variant="xs"
+                    weight={isSelected ? 'bold' : 'medium'}
+                    color={isSelected ? '#1976D2' : '#475569'}
+                  >
+                    {language === 'hi' ? item.hi : item.en}
+                  </Typography>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Manglik Filter */}
+        <View style={styles.filterSection}>
+          <Typography variant="xs" weight="bold" color="#0F172A" style={styles.filterSectionTitle}>
+            {language === 'hi' ? 'मांगलिक स्थिति:' : 'Manglik Status:'}
+          </Typography>
+          <View style={styles.filterRow}>
+            {[
+              { key: undefined, hi: 'सभी', en: 'All' },
+              { key: 'NON_MANGLIK', hi: 'अमांगलिक', en: 'Non-Manglik' },
+              { key: 'MANGLIK', hi: 'मांगलिक', en: 'Manglik' },
+              { key: 'ANSHIK', hi: 'आंशिक', en: 'Anshik' },
+            ].map((item) => {
+              const isSelected = draftManglik === item.key;
+              return (
+                <Pressable
+                  key={item.en}
+                  onPress={() => setDraftManglik(item.key)}
+                  style={[
+                    styles.filterSelectChip,
+                    isSelected && styles.filterSelectChipActive,
+                  ]}
+                >
+                  <Typography
+                    variant="xs"
+                    weight={isSelected ? 'bold' : 'medium'}
+                    color={isSelected ? '#1976D2' : '#475569'}
+                  >
+                    {language === 'hi' ? item.hi : item.en}
+                  </Typography>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Sub-caste Input */}
+        <View style={styles.inputSection}>
+          <Input
+            label={language === 'hi' ? 'उपजाति (Sub-caste)' : 'Sub-caste'}
+            value={draftSubCaste}
+            onChangeText={setDraftSubCaste}
+            placeholder="उदा. केवट / मल्लाह / कश्यप"
+          />
+        </View>
+
+        {/* City Input */}
+        <View style={styles.inputSection}>
+          <Input
+            label={language === 'hi' ? 'शहर (City)' : 'City'}
+            value={draftCity}
+            onChangeText={setDraftCity}
+            placeholder="उदा. भोपाल, इंदौर, ग्वालियर"
+          />
+        </View>
+      </BottomSheet>
+
+      {/* 5. Express Interest Bottom Sheet */}
+      <BottomSheet
+        visible={Boolean(interestTarget)}
+        onClose={() => {
+          if (!isSubmittingInterest) setInterestTarget(null);
+        }}
+        title={language === 'hi' ? 'विवाह संबंध रुचि भेजें' : 'Express Matrimonial Interest'}
+        icon="💌"
+        preventDismiss={isSubmittingInterest}
+        footer={
+          <View style={styles.modalActionsRow}>
+            <Button
+              title={language === 'hi' ? 'रद्द करें' : 'Cancel'}
+              onPress={() => setInterestTarget(null)}
+              variant="outline"
+              size="md"
+              disabled={isSubmittingInterest}
+              style={styles.modalActionBtn}
+            />
+            <Button
+              title={language === 'hi' ? 'रुचि भेजें' : 'Send Interest'}
+              onPress={handleConfirmSendInterest}
+              loading={isSubmittingInterest}
+              disabled={isSubmittingInterest}
+              size="md"
+              variant="primary"
+              style={styles.modalActionBtn}
+            />
+          </View>
+        }
+      >
+        {interestTarget ? (
+          <View style={styles.targetInfoBox}>
+            <Typography variant="sm" weight="bold" color="#0F172A">
+              {interestTarget.fullName}
+            </Typography>
+            <Typography variant="xs" color="#64748B">
+              {[
+                interestTarget.age ? `${interestTarget.age} ${language === 'hi' ? 'वर्ष' : 'yrs'}` : null,
+                interestTarget.occupation,
+                interestTarget.city,
+              ]
+                .filter(Boolean)
+                .join(' • ')}
+            </Typography>
+          </View>
+        ) : null}
+
+        <Input
+          label={language === 'hi' ? 'संदेश (वैकल्पिक)' : 'Message (Optional)'}
+          value={interestMessage}
+          onChangeText={setInterestMessage}
+          placeholder={
+            language === 'hi'
+              ? 'नमस्ते, आपकी प्रोफ़ाइल हमारे परिवार को उपयुक्त लगी...'
+              : 'Namaste, we found your profile suitable...'
+          }
+          maxLength={500}
+          multiline
+          numberOfLines={3}
+          helperText={`${interestMessage.length} / 500`}
+        />
+
+        {interestError ? (
+          <View style={styles.errorBox}>
+            <Typography variant="xs" color="#DC2626">
+              {interestError}
+            </Typography>
+          </View>
+        ) : null}
+
+        {interestSuccess ? (
+          <View style={styles.successBox}>
+            <Typography variant="xs" weight="bold" color="#16A34A">
+              ✓ {interestSuccess}
+            </Typography>
+          </View>
+        ) : null}
+      </BottomSheet>
     </View>
   );
 }
@@ -877,191 +1041,279 @@ export default function MatrimonialDiscoveryScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    backgroundColor: '#F8FAFC',
   },
-  headerContainer: {
+  segmentedContainer: {
     paddingHorizontal: 16,
+    paddingTop: 10,
     paddingBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  titleColumn: {
-    flex: 1,
-  },
-  titleBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 2,
-  },
-  filterToggleBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   segmentedControl: {
     flexDirection: 'row',
-    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
     padding: 3,
-    marginTop: 4,
   },
   segmentBtn: {
     flex: 1,
     paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 6,
+    borderRadius: 8,
   },
-  filterPanel: {
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
+  segmentBtnActive: {
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
   },
-  filterSection: {
-    marginBottom: 8,
-  },
-  filterLabel: {
-    marginBottom: 4,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  filterChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  inputsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  inputFlex: {
+  profilesWrapper: {
     flex: 1,
   },
-  resetRow: {
-    alignItems: 'flex-end',
-    marginTop: 4,
-    marginBottom: 4,
+  searchBarContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
   },
-  resetBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+  activeChipsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    gap: 8,
+    alignItems: 'center',
+  },
+  activeChipPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  clearAllChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+  },
+  countBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingTop: 6,
   },
   listContentEmpty: {
     flexGrow: 1,
     justifyContent: 'center',
   },
   footerLoader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: 16,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   footerLoaderText: {
-    marginLeft: 8,
+    fontSize: 12,
   },
   emptyContainer: {
+    paddingVertical: 48,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
+  },
+  emptyIcon: {
+    fontSize: 40,
+    marginBottom: 8,
   },
   emptyCard: {
     padding: 24,
     alignItems: 'center',
-  },
-  errorCard: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   emptySubText: {
     marginTop: 6,
+    marginBottom: 16,
     lineHeight: 18,
   },
-  errorMsg: {
-    marginVertical: 8,
-  },
   clearFiltersBtn: {
-    marginTop: 12,
+    minWidth: 140,
+  },
+  errorCard: {
+    padding: 24,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  errorMsg: {
+    marginTop: 6,
+    marginBottom: 16,
   },
   interestsContainer: {
     flex: 1,
   },
   interestsSubTabs: {
     flexDirection: 'row',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   subTabBtn: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  subTabBtnActive: {
+    borderBottomColor: '#1976D2',
   },
   interestCard: {
     padding: 14,
     marginBottom: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   interestHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 6,
+    alignItems: 'center',
+    gap: 10,
+  },
+  interestAvatarBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E0F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
   },
   interestProfileInfo: {
     flex: 1,
-    marginRight: 8,
+  },
+  statusBadgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  statusBadgeAccepted: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#BBF7D0',
+  },
+  statusBadgeDeclined: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
+  },
+  statusBadgePending: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FFEDD5',
   },
   messageBox: {
-    padding: 8,
-    borderRadius: 6,
-    marginBottom: 10,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   actionButtonsRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 6,
+    gap: 10,
+    marginTop: 12,
   },
   actionBtn: {
     flex: 1,
   },
   viewProfileBtn: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-end',
+    marginTop: 10,
+    paddingVertical: 4,
   },
-  modalOverlay: {
+  // Sheet Styles
+  sheetOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'flex-end',
   },
-  modalContent: {
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 8,
+  sheetContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    maxHeight: '85%',
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  sheetScroll: {
+    marginTop: 12,
+  },
+  filterSection: {
+    marginBottom: 16,
+  },
+  filterSectionTitle: {
+    marginBottom: 8,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterSelectChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  filterSelectChipActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#1976D2',
+  },
+  inputSection: {
+    marginBottom: 12,
+  },
+  sheetActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  sheetActionBtn: {
+    flex: 1,
   },
   modalTitle: {
     marginBottom: 12,
@@ -1069,25 +1321,29 @@ const styles = StyleSheet.create({
   targetInfoBox: {
     padding: 10,
     borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     marginBottom: 12,
   },
   errorBox: {
     padding: 8,
     borderRadius: 6,
-    marginVertical: 6,
+    backgroundColor: '#FEE2E2',
+    marginTop: 8,
   },
   successBox: {
     padding: 8,
     borderRadius: 6,
-    marginVertical: 6,
+    backgroundColor: '#DCFCE7',
+    marginTop: 8,
   },
   modalActionsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 12,
+    marginTop: 16,
   },
   modalActionBtn: {
     flex: 1,
   },
 });
-

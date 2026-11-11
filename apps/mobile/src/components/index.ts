@@ -13,4 +13,9 @@ export * from './GroupCard';
 export * from './MatrimonialCard';
 export * from './chat';
 export * from './video';
+export * from './AppHeader';
+export * from './SearchBar';
+export * from './ProfileAvatar';
+export * from './BottomSheet';
+export * from './ConfirmationDialog';
 

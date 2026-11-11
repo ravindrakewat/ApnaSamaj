@@ -6,6 +6,9 @@ import {
   RefreshControl,
   Pressable,
   ActivityIndicator,
+  TextInput,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,9 +17,9 @@ import {
   Typography,
   Card,
   Button,
-  Input,
   MemberCard,
   BottomNavigation,
+  BottomSheet,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -27,8 +30,8 @@ export default function MemberDirectoryScreen() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { language, setLanguage, t } = useLocalization();
-  const { communitySlug } = useAuth();
+  const { language, setLanguage } = useLocalization();
+  const { user, communitySlug } = useAuth();
 
   // Search & Filter State
   const [searchInput, setSearchInput] = useState<string>('');
@@ -37,7 +40,13 @@ export default function MemberDirectoryScreen() {
   const [stateFilter, setStateFilter] = useState<string>('');
   const [gotraFilter, setGotraFilter] = useState<string>('');
   const [subCasteFilter, setSubCasteFilter] = useState<string>('');
-  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(false);
+
+  // Filter Modal / Dialog State
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState<boolean>(false);
+  const [draftCity, setDraftCity] = useState<string>('');
+  const [draftState, setDraftState] = useState<string>('');
+  const [draftGotra, setDraftGotra] = useState<string>('');
+  const [draftSubCaste, setDraftSubCaste] = useState<string>('');
 
   // Directory Data State
   const [members, setMembers] = useState<PublicDirectoryMember[]>([]);
@@ -68,8 +77,16 @@ export default function MemberDirectoryScreen() {
     };
   }, [searchInput]);
 
+  // Compute active filters
+  const activeDetailedFilterCount = [
+    cityFilter.trim(),
+    stateFilter.trim(),
+    gotraFilter.trim(),
+    subCasteFilter.trim(),
+  ].filter(Boolean).length;
+
   const hasActiveFilters = Boolean(
-    debouncedSearch || cityFilter.trim() || stateFilter.trim() || gotraFilter.trim() || subCasteFilter.trim()
+    debouncedSearch || activeDetailedFilterCount > 0
   );
 
   const handleClearAllFilters = () => {
@@ -79,6 +96,50 @@ export default function MemberDirectoryScreen() {
     setStateFilter('');
     setGotraFilter('');
     setSubCasteFilter('');
+  };
+
+  const handleRemoveFilter = (key: 'search' | 'city' | 'state' | 'gotra' | 'subCaste') => {
+    switch (key) {
+      case 'search':
+        setSearchInput('');
+        setDebouncedSearch('');
+        break;
+      case 'city':
+        setCityFilter('');
+        break;
+      case 'state':
+        setStateFilter('');
+        break;
+      case 'gotra':
+        setGotraFilter('');
+        break;
+      case 'subCaste':
+        setSubCasteFilter('');
+        break;
+    }
+  };
+
+  const handleOpenFilterModal = () => {
+    setDraftCity(cityFilter);
+    setDraftState(stateFilter);
+    setDraftGotra(gotraFilter);
+    setDraftSubCaste(subCasteFilter);
+    setIsFilterModalOpen(true);
+  };
+
+  const handleApplyFilterModal = () => {
+    setCityFilter(draftCity.trim());
+    setStateFilter(draftState.trim());
+    setGotraFilter(draftGotra.trim());
+    setSubCasteFilter(draftSubCaste.trim());
+    setIsFilterModalOpen(false);
+  };
+
+  const handleClearFilterModalDraft = () => {
+    setDraftCity('');
+    setDraftState('');
+    setDraftGotra('');
+    setDraftSubCaste('');
   };
 
   /**
@@ -168,96 +229,177 @@ export default function MemberDirectoryScreen() {
   // Header Component for FlatList
   const renderListHeader = () => (
     <View style={styles.headerContainer}>
-      {/* Search Input Bar */}
-      <View style={styles.searchRow}>
-        <Input
-          placeholder={
-            language === 'hi'
-              ? 'नाम, गोत्र, शहर या उप-जाति से खोजें...'
-              : 'Search by name, gotra, city, or sub-caste...'
-          }
-          value={searchInput}
-          onChangeText={setSearchInput}
-          containerStyle={styles.searchInput}
-          rightAccessory={
-            searchInput ? (
-              <Pressable
-                onPress={() => setSearchInput('')}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-              >
-                <Typography variant="xs" weight="bold" color={theme.colors.textMuted}>
-                  ✕
-                </Typography>
-              </Pressable>
-            ) : null
-          }
-        />
-        <Button
-          title={isFilterExpanded ? '▲' : '▼ फ़िल्टर'}
-          size="sm"
-          variant={hasActiveFilters ? 'primary' : 'outline'}
-          onPress={() => setIsFilterExpanded(!isFilterExpanded)}
-          style={styles.filterToggleBtn}
-        />
+      {/* 1. Modern Search & Filter Trigger Bar */}
+      <View style={styles.searchFilterRow}>
+        <View style={styles.searchBar}>
+          <Typography variant="sm" color="#64748B" style={styles.searchIcon}>
+            🔍
+          </Typography>
+          <TextInput
+            placeholder={
+              language === 'hi'
+                ? 'नाम, गोत्र, शहर या उप-जाति खोजें...'
+                : 'Search name, gotra, city, sub-caste...'
+            }
+            placeholderTextColor="#94A3B8"
+            value={searchInput}
+            onChangeText={setSearchInput}
+            style={styles.searchInputText}
+            returnKeyType="search"
+            accessibilityRole="search"
+            accessibilityLabel="Search directory"
+          />
+          {searchInput ? (
+            <Pressable
+              onPress={() => setSearchInput('')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search input"
+              style={styles.clearSearchBtn}
+            >
+              <Typography variant="xs" weight="bold" color="#64748B">
+                ✕
+              </Typography>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {/* Filter Button */}
+        <Pressable
+          onPress={handleOpenFilterModal}
+          style={[
+            styles.filterTriggerBtn,
+            activeDetailedFilterCount > 0 && styles.filterTriggerBtnActive,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Open filter options"
+          hitSlop={4}
+        >
+          <Typography
+            variant="xs"
+            weight="bold"
+            color={activeDetailedFilterCount > 0 ? '#FFFFFF' : '#1976D2'}
+          >
+            🎛️ {language === 'hi' ? 'फ़िल्टर' : 'Filter'}
+          </Typography>
+          {activeDetailedFilterCount > 0 && (
+            <View style={styles.activeFilterBadge}>
+              <Typography variant="xs" weight="bold" color="#1976D2" style={styles.activeFilterBadgeText}>
+                {activeDetailedFilterCount}
+              </Typography>
+            </View>
+          )}
+        </Pressable>
       </View>
 
-      {/* Expandable Location & Roots Filters */}
-      {isFilterExpanded ? (
-        <Card style={styles.filterCard}>
-          <Typography variant="xs" weight="bold" color={theme.colors.textPrimary} style={styles.filterTitle}>
-            {language === 'hi' ? 'विस्तृत फ़िल्टर' : 'Detailed Filters'}
-          </Typography>
-          <View style={styles.filterInputsGrid}>
-            <Input
-              placeholder={language === 'hi' ? 'शहर (City)' : 'City'}
-              value={cityFilter}
-              onChangeText={setCityFilter}
-              containerStyle={styles.filterInputItem}
-            />
-            <Input
-              placeholder={language === 'hi' ? 'राज्य (State)' : 'State'}
-              value={stateFilter}
-              onChangeText={setStateFilter}
-              containerStyle={styles.filterInputItem}
-            />
-            <Input
-              placeholder={language === 'hi' ? 'गोत्र (Gotra)' : 'Gotra'}
-              value={gotraFilter}
-              onChangeText={setGotraFilter}
-              containerStyle={styles.filterInputItem}
-            />
-            <Input
-              placeholder={language === 'hi' ? 'उप-जाति (Sub-Caste)' : 'Sub-Caste'}
-              value={subCasteFilter}
-              onChangeText={setSubCasteFilter}
-              containerStyle={styles.filterInputItem}
-            />
-          </View>
-          {hasActiveFilters ? (
-            <Button
-              title={language === 'hi' ? 'सभी फ़िल्टर साफ़ करें' : 'Clear All Filters'}
-              variant="outline"
-              size="sm"
-              onPress={handleClearAllFilters}
-              style={styles.clearFiltersBtn}
-            />
+      {/* 2. Active Filters Chip Bar */}
+      {hasActiveFilters && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.activeChipsContainer}
+        >
+          {debouncedSearch ? (
+            <Pressable
+              onPress={() => handleRemoveFilter('search')}
+              style={styles.activeChipPill}
+              hitSlop={4}
+            >
+              <Typography variant="xs" color="#0369A1" numberOfLines={1}>
+                🔍 "{debouncedSearch}"
+              </Typography>
+              <Typography variant="xs" weight="bold" color="#0369A1" style={styles.chipClose}>
+                ✕
+              </Typography>
+            </Pressable>
           ) : null}
-        </Card>
-      ) : null}
 
-      {/* Results Count Banner */}
+          {gotraFilter ? (
+            <Pressable
+              onPress={() => handleRemoveFilter('gotra')}
+              style={styles.activeChipPill}
+              hitSlop={4}
+            >
+              <Typography variant="xs" color="#0369A1" numberOfLines={1}>
+                🏛️ {language === 'hi' ? `गोत्र: ${gotraFilter}` : `Gotra: ${gotraFilter}`}
+              </Typography>
+              <Typography variant="xs" weight="bold" color="#0369A1" style={styles.chipClose}>
+                ✕
+              </Typography>
+            </Pressable>
+          ) : null}
+
+          {stateFilter ? (
+            <Pressable
+              onPress={() => handleRemoveFilter('state')}
+              style={styles.activeChipPill}
+              hitSlop={4}
+            >
+              <Typography variant="xs" color="#0369A1" numberOfLines={1}>
+                📍 {language === 'hi' ? `राज्य: ${stateFilter}` : `State: ${stateFilter}`}
+              </Typography>
+              <Typography variant="xs" weight="bold" color="#0369A1" style={styles.chipClose}>
+                ✕
+              </Typography>
+            </Pressable>
+          ) : null}
+
+          {cityFilter ? (
+            <Pressable
+              onPress={() => handleRemoveFilter('city')}
+              style={styles.activeChipPill}
+              hitSlop={4}
+            >
+              <Typography variant="xs" color="#0369A1" numberOfLines={1}>
+                🏙️ {language === 'hi' ? `शहर: ${cityFilter}` : `City: ${cityFilter}`}
+              </Typography>
+              <Typography variant="xs" weight="bold" color="#0369A1" style={styles.chipClose}>
+                ✕
+              </Typography>
+            </Pressable>
+          ) : null}
+
+          {subCasteFilter ? (
+            <Pressable
+              onPress={() => handleRemoveFilter('subCaste')}
+              style={styles.activeChipPill}
+              hitSlop={4}
+            >
+              <Typography variant="xs" color="#0369A1" numberOfLines={1}>
+                🏷️ {language === 'hi' ? `उप-जाति: ${subCasteFilter}` : `Sub-Caste: ${subCasteFilter}`}
+              </Typography>
+              <Typography variant="xs" weight="bold" color="#0369A1" style={styles.chipClose}>
+                ✕
+              </Typography>
+            </Pressable>
+          ) : null}
+
+          <Pressable
+            onPress={handleClearAllFilters}
+            style={styles.clearAllChip}
+            hitSlop={4}
+          >
+            <Typography variant="xs" weight="bold" color="#DC2626">
+              ✕ {language === 'hi' ? 'सब साफ़ करें' : 'Clear All'}
+            </Typography>
+          </Pressable>
+        </ScrollView>
+      )}
+
+      {/* 3. Results Count Banner */}
       {!isLoading && !error && members.length > 0 ? (
         <View style={styles.countRow}>
-          <Typography variant="xs" color={theme.colors.textMuted}>
-            {language === 'hi'
-              ? `${totalMembers} सत्यापित सदस्य मिले`
-              : `${totalMembers} verified members found`}
-          </Typography>
+          <View style={styles.countLeft}>
+            <View style={styles.blueIndicatorDot} />
+            <Typography variant="xs" weight="semibold" color="#475569">
+              {language === 'hi'
+                ? `${totalMembers} सत्यापित सदस्य मिले`
+                : `${totalMembers} verified members found`}
+            </Typography>
+          </View>
           {hasActiveFilters ? (
-            <Pressable onPress={handleClearAllFilters}>
-              <Typography variant="xs" color={theme.colors.primary} weight="semibold">
+            <Pressable onPress={handleClearAllFilters} hitSlop={6}>
+              <Typography variant="xs" color="#1976D2" weight="bold">
                 {language === 'hi' ? 'फ़िल्टर हटाएं' : 'Reset'}
               </Typography>
             </Pressable>
@@ -272,8 +414,8 @@ export default function MemberDirectoryScreen() {
     if (isFetchingMore) {
       return (
         <View style={styles.footerLoader}>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-          <Typography variant="xs" color={theme.colors.textMuted} style={styles.loadingMoreText}>
+          <ActivityIndicator size="small" color="#1976D2" />
+          <Typography variant="xs" color="#64748B" style={styles.loadingMoreText}>
             {language === 'hi' ? 'और सदस्य लोड हो रहे हैं...' : 'Loading more members...'}
           </Typography>
         </View>
@@ -282,8 +424,8 @@ export default function MemberDirectoryScreen() {
     if (page >= totalPages && members.length > 0) {
       return (
         <View style={styles.footerDone}>
-          <Typography variant="xs" color={theme.colors.textMuted}>
-            {language === 'hi' ? 'सभी सदस्य लोड हो चुके हैं' : 'All members loaded'}
+          <Typography variant="xs" color="#94A3B8">
+            {language === 'hi' ? '• सभी सत्यापित सदस्य लोड हो चुके हैं •' : '• All verified members loaded •'}
           </Typography>
         </View>
       );
@@ -296,8 +438,8 @@ export default function MemberDirectoryScreen() {
     if (isLoading) {
       return (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Typography variant="sm" color={theme.colors.textSecondary} style={styles.stateText}>
+          <ActivityIndicator size="large" color="#1976D2" />
+          <Typography variant="sm" color="#475569" style={styles.stateText}>
             {language === 'hi' ? 'सदस्य निर्देशिका लोड हो रही है...' : 'Loading member directory...'}
           </Typography>
         </View>
@@ -307,17 +449,20 @@ export default function MemberDirectoryScreen() {
     if (error) {
       return (
         <Card style={styles.stateCard}>
-          <Typography variant="md" weight="bold" color={theme.colors.error} align="center">
+          <View style={styles.stateIconCircle}>
+            <Typography variant="lg">⚠️</Typography>
+          </View>
+          <Typography variant="md" weight="bold" color="#DC2626" align="center" style={styles.stateTitle}>
             {language === 'hi' ? 'निर्देशिका लोड नहीं हो सकी' : 'Unable to Load Directory'}
           </Typography>
-          <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.errorDesc}>
+          <Typography variant="sm" color="#64748B" align="center" style={styles.stateDesc}>
             {error}
           </Typography>
           <Button
             title={language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
             variant="outline"
             onPress={() => loadDirectory(1)}
-            style={styles.retryBtn}
+            style={styles.stateActionBtn}
           />
         </Card>
       );
@@ -325,31 +470,34 @@ export default function MemberDirectoryScreen() {
 
     return (
       <Card style={styles.stateCard}>
-        <Typography variant="md" weight="bold" color={theme.colors.textPrimary} align="center">
+        <View style={styles.stateIconCircle}>
+          <Typography variant="lg">{hasActiveFilters ? '🔍' : '👥'}</Typography>
+        </View>
+        <Typography variant="md" weight="bold" color="#0F172A" align="center" style={styles.stateTitle}>
           {language === 'hi' ? 'कोई सदस्य नहीं मिला' : 'No Members Found'}
         </Typography>
-        <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={styles.emptyDesc}>
+        <Typography variant="sm" color="#64748B" align="center" style={styles.stateDesc}>
           {hasActiveFilters
             ? language === 'hi'
-              ? 'आपके वर्तमान फ़िल्टर से कोई सक्रिय सदस्य मेल नहीं खाता। कृपया खोज फ़िल्टर बदलें।'
-              : 'No active members match your filter criteria. Try clearing search filters.'
+              ? 'आपके वर्तमान फ़िल्टर से कोई सक्रिय सदस्य मेल नहीं खाता। कृपया फ़िल्टर बदलें या साफ़ करें।'
+              : 'No active members match your filter criteria. Try adjusting or clearing filters.'
             : language === 'hi'
             ? 'समुदाय निर्देशिका में अभी कोई सत्यापित सक्रिय सदस्य पंजीकृत नहीं है।'
             : 'No verified active members registered in this community yet.'}
         </Typography>
         {hasActiveFilters ? (
           <Button
-            title={language === 'hi' ? 'फ़िल्टर साफ़ करें' : 'Clear Filters'}
+            title={language === 'hi' ? 'सभी फ़िल्टर साफ़ करें' : 'Clear All Filters'}
             variant="outline"
             onPress={handleClearAllFilters}
-            style={styles.retryBtn}
+            style={styles.stateActionBtn}
           />
         ) : (
           <Button
             title={language === 'hi' ? 'रीफ़्रेश करें' : 'Refresh'}
             variant="outline"
             onPress={handleRefresh}
-            style={styles.retryBtn}
+            style={styles.stateActionBtn}
           />
         )}
       </Card>
@@ -357,44 +505,64 @@ export default function MemberDirectoryScreen() {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      {/* Top Navbar */}
+    <View style={[styles.screen, { backgroundColor: '#F8FAFC' }]}>
+      {/* 1. Modern Top Header Navbar */}
       <View
         style={[
           styles.topBar,
-          { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, paddingTop: Math.max(insets.top, 12) },
+          {
+            paddingTop: Math.max(insets.top, 10),
+          },
         ]}
       >
         <View style={styles.brandRow}>
-          <View style={[styles.brandIcon, { backgroundColor: theme.colors.primary }]}>
-            <Typography variant="sm" weight="bold" color={theme.colors.textInverse}>
+          <View style={styles.brandIcon}>
+            <Typography variant="sm" weight="bold" color="#FFFFFF">
               👥
             </Typography>
           </View>
-          <View>
-            <Typography variant="md" weight="bold" color={theme.colors.primary}>
+          <View style={styles.brandTextCol}>
+            <Typography variant="md" weight="bold" color="#1976D2" style={styles.brandTitle}>
               {language === 'hi' ? 'सदस्य निर्देशिका' : 'Member Directory'}
             </Typography>
-            <Typography variant="xs" color={theme.colors.textMuted}>
-              {communitySlug}
-            </Typography>
+            <View style={styles.communitySlugPill}>
+              <Typography variant="xs" weight="bold" color="#0369A1" style={styles.communitySlugText}>
+                {communitySlug}
+              </Typography>
+            </View>
           </View>
         </View>
 
-        {/* Language Toggle Pill */}
-        <Pressable
-          onPress={toggleLanguage}
-          style={[styles.langPill, { borderColor: theme.colors.border }]}
-          accessibilityRole="button"
-          accessibilityLabel="Switch language"
-        >
-          <Typography variant="xs" weight="semibold" color={theme.colors.primary}>
-            {language === 'hi' ? 'English' : 'हिन्दी'}
-          </Typography>
-        </Pressable>
+        <View style={styles.topActions}>
+          {/* Language Switcher Pill */}
+          <Pressable
+            onPress={toggleLanguage}
+            style={styles.langPill}
+            accessibilityRole="button"
+            accessibilityLabel="Switch language"
+            hitSlop={8}
+          >
+            <Typography variant="xs" weight="bold" color="#1976D2">
+              {language === 'hi' ? 'English' : 'हिन्दी'}
+            </Typography>
+          </Pressable>
+
+          {/* User Profile Avatar Button */}
+          <Pressable
+            onPress={() => router.push('/(app)/profile' as any)}
+            style={styles.profileAvatar}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            hitSlop={8}
+          >
+            <Typography variant="xs" weight="bold" color="#0369A1">
+              {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'स'}
+            </Typography>
+          </Pressable>
+        </View>
       </View>
 
-      {/* Member Directory List */}
+      {/* 2. Member Directory FlatList */}
       <FlatList
         data={members}
         keyExtractor={(item) => item.id}
@@ -404,21 +572,105 @@ export default function MemberDirectoryScreen() {
         ListHeaderComponent={renderListHeader}
         ListFooterComponent={renderListFooter}
         ListEmptyComponent={renderEmptyComponent}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: Math.max(insets.bottom, 16) + 72 },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[theme.colors.primary]}
-            tintColor={theme.colors.primary}
+            colors={['#1976D2']}
+            tintColor="#1976D2"
           />
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.4}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
       />
 
-      {/* Bottom Navigation */}
+      {/* 3. Standardized Detailed Filters Bottom Sheet */}
+      <BottomSheet
+        visible={isFilterModalOpen}
+        onClose={() => setIsFilterModalOpen(false)}
+        title={language === 'hi' ? 'विस्तृत खोज फ़िल्टर' : 'Detailed Search Filters'}
+        icon="🎛️"
+        footer={
+          <View style={styles.modalActionRow}>
+            <Button
+              title={language === 'hi' ? 'साफ़ करें' : 'Clear'}
+              variant="outline"
+              size="md"
+              onPress={handleClearFilterModalDraft}
+              style={styles.modalClearBtn}
+            />
+            <Button
+              title={language === 'hi' ? 'फ़िल्टर लागू करें' : 'Apply Filters'}
+              variant="primary"
+              size="md"
+              onPress={handleApplyFilterModal}
+              style={styles.modalApplyBtn}
+            />
+          </View>
+        }
+      >
+        <View style={styles.filterField}>
+          <Typography variant="xs" weight="bold" color="#475569" style={styles.fieldLabel}>
+            🏛️ {language === 'hi' ? 'गोत्र (Gotra)' : 'Gotra'}
+          </Typography>
+          <TextInput
+            placeholder={language === 'hi' ? 'उदा. कश्यप, भारद्वाज...' : 'e.g. Kashyap, Bharadwaj...'}
+            placeholderTextColor="#94A3B8"
+            value={draftGotra}
+            onChangeText={setDraftGotra}
+            style={styles.modalInput}
+          />
+        </View>
+
+        <View style={styles.filterField}>
+          <Typography variant="xs" weight="bold" color="#475569" style={styles.fieldLabel}>
+            📍 {language === 'hi' ? 'राज्य (State)' : 'State'}
+          </Typography>
+          <TextInput
+            placeholder={language === 'hi' ? 'उदा. मध्य प्रदेश, उत्तर प्रदेश...' : 'e.g. Madhya Pradesh...'}
+            placeholderTextColor="#94A3B8"
+            value={draftState}
+            onChangeText={setDraftState}
+            style={styles.modalInput}
+          />
+        </View>
+
+        <View style={styles.filterField}>
+          <Typography variant="xs" weight="bold" color="#475569" style={styles.fieldLabel}>
+            🏙️ {language === 'hi' ? 'शहर (City)' : 'City'}
+          </Typography>
+          <TextInput
+            placeholder={language === 'hi' ? 'उदा. ग्वालियर, इंदौर, भोपाल...' : 'e.g. Gwalior, Indore...'}
+            placeholderTextColor="#94A3B8"
+            value={draftCity}
+            onChangeText={setDraftCity}
+            style={styles.modalInput}
+          />
+        </View>
+
+        <View style={styles.filterField}>
+          <Typography variant="xs" weight="bold" color="#475569" style={styles.fieldLabel}>
+            🏷️ {language === 'hi' ? 'उप-जाति (Sub-Caste)' : 'Sub-Caste'}
+          </Typography>
+          <TextInput
+            placeholder={language === 'hi' ? 'उदा. केवट, मल्लाह, कश्यप...' : 'e.g. Kewat, Mallah...'}
+            placeholderTextColor="#94A3B8"
+            value={draftSubCaste}
+            onChangeText={setDraftSubCaste}
+            style={styles.modalInput}
+          />
+        </View>
+      </BottomSheet>
+
+      {/* 4. Bottom Navigation */}
       <BottomNavigation activeTab="directory" />
     </View>
   );
@@ -433,9 +685,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    elevation: 2,
+    paddingBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    elevation: 3,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    zIndex: 10,
   },
   brandRow: {
     flexDirection: 'row',
@@ -443,65 +702,188 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   brandIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#1976D2',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#1976D2',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  brandTextCol: {
+    justifyContent: 'center',
+  },
+  brandTitle: {
+    fontSize: 16.5,
+    lineHeight: 20,
+    letterSpacing: -0.3,
+  },
+  communitySlugPill: {
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  communitySlugText: {
+    fontSize: 10,
+    letterSpacing: 0.2,
+  },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   langPill: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  profileAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1.5,
+    borderColor: '#1976D2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerContainer: {
-    paddingTop: 12,
-    marginBottom: 8,
+    paddingTop: 10,
+    marginBottom: 6,
   },
-  searchRow: {
+  searchFilterRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 8,
     marginBottom: 8,
   },
-  searchInput: {
+  searchBar: {
     flex: 1,
-    marginBottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    height: 44,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  filterToggleBtn: {
-    height: 48,
-    minWidth: 84,
+  searchIcon: {
+    fontSize: 15,
+    marginRight: 6,
   },
-  filterCard: {
-    padding: 12,
-    marginBottom: 10,
+  searchInputText: {
+    flex: 1,
+    fontSize: 13.5,
+    color: '#0F172A',
+    paddingVertical: 0,
+    height: '100%',
   },
-  filterTitle: {
+  clearSearchBtn: {
+    padding: 4,
+  },
+  filterTriggerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 44,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 22,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  filterTriggerBtnActive: {
+    backgroundColor: '#1976D2',
+    borderColor: '#1976D2',
+  },
+  activeFilterBadge: {
+    backgroundColor: '#FFFFFF',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 2,
+  },
+  activeFilterBadgeText: {
+    fontSize: 10,
+    lineHeight: 12,
+  },
+  activeChipsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
     marginBottom: 8,
   },
-  filterInputsGrid: {
+  activeChipPill: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  filterInputItem: {
-    width: '48%',
-    marginBottom: 4,
+  chipClose: {
+    fontSize: 11,
+    marginLeft: 2,
   },
-  clearFiltersBtn: {
-    marginTop: 8,
+  clearAllChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   countRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 4,
-    marginBottom: 8,
+    paddingVertical: 4,
+    marginBottom: 4,
+  },
+  countLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  blueIndicatorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1976D2',
   },
   listContent: {
     paddingHorizontal: 12,
-    paddingBottom: 24,
   },
   footerLoader: {
     alignItems: 'center',
@@ -513,7 +895,7 @@ const styles = StyleSheet.create({
   },
   footerDone: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 18,
   },
   centerContainer: {
     alignItems: 'center',
@@ -527,16 +909,98 @@ const styles = StyleSheet.create({
     padding: 24,
     marginTop: 16,
     alignItems: 'center',
+    borderRadius: 16,
+    borderColor: '#E2E8F0',
   },
-  errorDesc: {
-    marginTop: 6,
+  stateIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  stateTitle: {
+    marginBottom: 6,
+  },
+  stateDesc: {
     marginBottom: 16,
+    lineHeight: 18,
   },
-  emptyDesc: {
-    marginTop: 6,
-    marginBottom: 16,
-  },
-  retryBtn: {
+  stateActionBtn: {
     minWidth: 140,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalDismissArea: {
+    flex: 1,
+  },
+  modalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  modalHandleBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalFormScroll: {
+    maxHeight: 340,
+  },
+  filterField: {
+    marginBottom: 14,
+  },
+  fieldLabel: {
+    marginBottom: 6,
+    fontSize: 12,
+  },
+  modalInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  modalClearBtn: {
+    flex: 1,
+  },
+  modalApplyBtn: {
+    flex: 2,
   },
 });

@@ -22,6 +22,9 @@ const originalRequire = (moduleMod.prototype as any).require;
   if (id === 'react-native-safe-area-context') {
     return originalRequire.call(this, path.resolve(__dirname, './mocks/react-native-safe-area-context'));
   }
+  if (id === 'expo-router') {
+    return originalRequire.call(this, path.resolve(__dirname, './mocks/expo-router'));
+  }
   return originalRequire.apply(this, arguments);
 };
 
@@ -65,6 +68,18 @@ async function runAll() {
   await runInlineVideoPlaybackTests();
   const { runWebToMobilePostParityTests } = await import('./web-to-mobile-post-parity.test');
   await runWebToMobilePostParityTests();
+  const { runDesignSystemFoundationTests } = await import('./design-system-foundation.test');
+  await runDesignSystemFoundationTests();
+  const { runGroupsCommunityUiTests } = await import('./groups-community-ui.test');
+  await runGroupsCommunityUiTests();
+  const { runMatrimonialUiTests } = await import('./matrimonial-ui.test');
+  await runMatrimonialUiTests();
+  const { runProfileSettingsUiTests } = await import('./profile-settings-ui.test');
+  await runProfileSettingsUiTests();
+  const { runAuthUiTests } = await import('./auth-ui.test');
+  await runAuthUiTests();
+  const { runNavigationBottomSheetTests } = await import('./navigation-bottom-sheet.test');
+  await runNavigationBottomSheetTests();
 }
 
 runAll()

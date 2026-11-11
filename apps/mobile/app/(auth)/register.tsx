@@ -14,7 +14,6 @@ import {
   Card,
   Input,
   Button,
-  Badge,
 } from '../../src/components';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useLocalization } from '../../src/hooks/useLocalization';
@@ -122,11 +121,17 @@ export default function RegisterScreen() {
       style={[styles.screen, { backgroundColor: theme.colors.background }]}
     >
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 16) }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top + 8, 20),
+            paddingBottom: Math.max(insets.bottom + 24, 40),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Top Bar with Back and Language Buttons */}
+        {/* Top Header Bar */}
         <View style={styles.topBar}>
           <Pressable
             onPress={() => router.back()}
@@ -134,8 +139,8 @@ export default function RegisterScreen() {
             accessibilityRole="button"
             accessibilityLabel="Go back to login"
           >
-            <Typography variant="sm" weight="semibold" color={theme.colors.primary}>
-              {language === 'hi' ? '← लॉगिन' : '← Login'}
+            <Typography variant="sm" weight="bold" color={theme.colors.primary}>
+              {language === 'hi' ? '← लॉगिन पर लौटें' : '← Back to Login'}
             </Typography>
           </Pressable>
 
@@ -152,16 +157,23 @@ export default function RegisterScreen() {
             ]}
           >
             <Typography variant="xs" weight="semibold" color={theme.colors.primary}>
-              {language === 'hi' ? 'English' : 'हिन्दी'}
+              🌐 {language === 'hi' ? 'English' : 'हिन्दी'}
             </Typography>
           </Pressable>
         </View>
 
-        {/* Brand Banner */}
+        {/* Hero Header */}
         <View style={styles.header}>
-          <Typography variant="title" weight="bold" color={theme.colors.primary}>
-            {t('auth:registerTitle')}
-          </Typography>
+          <View style={styles.titleRow}>
+            <View style={[styles.brandBadge, { backgroundColor: theme.colors.primary }]}>
+              <Typography variant="sm" weight="bold" color="#FFFFFF">
+                अ
+              </Typography>
+            </View>
+            <Typography variant="title" weight="bold" color={theme.colors.textPrimary}>
+              {t('auth:registerTitle')}
+            </Typography>
+          </View>
           <Typography
             variant="sm"
             color={theme.colors.textSecondary}
@@ -173,7 +185,7 @@ export default function RegisterScreen() {
           </Typography>
         </View>
 
-        {/* Registration Form Card */}
+        {/* Form Card */}
         <Card style={styles.formCard}>
           {/* Server Error Alert */}
           {(serverError || authError) && (
@@ -186,15 +198,15 @@ export default function RegisterScreen() {
                 },
               ]}
             >
-              <Typography variant="xs" weight="medium" color={theme.colors.error}>
-                {serverError || authError}
+              <Typography variant="xs" weight="bold" color={theme.colors.error}>
+                ⚠️ {serverError || authError}
               </Typography>
             </View>
           )}
 
           {/* Community Slug Input */}
           <Input
-            label={language === 'hi' ? 'कम्युनिटी स्लग (Community)' : 'Community Slug'}
+            label={language === 'hi' ? 'कम्युनिटी स्लग (Community Slug)' : 'Community Slug'}
             value={slug}
             onChangeText={(val) => {
               setSlug(val);
@@ -224,7 +236,7 @@ export default function RegisterScreen() {
             error={fullNameError}
           />
 
-          {/* Mobile Phone Input */}
+          {/* Mobile Phone Input with +91 Country Code Badge */}
           <Input
             label={t('auth:phone')}
             value={phone}
@@ -236,6 +248,14 @@ export default function RegisterScreen() {
             keyboardType="phone-pad"
             maxLength={13}
             error={phoneError}
+            leftAccessory={
+              <View style={styles.phonePrefix}>
+                <Typography variant="sm" weight="bold" color={theme.colors.primary}>
+                  +91
+                </Typography>
+                <View style={[styles.prefixDivider, { backgroundColor: theme.colors.border }]} />
+              </View>
+            }
             helperText={
               language === 'hi'
                 ? '10-अंकों का भारतीय मोबाइल नंबर (6, 7, 8 या 9 से शुरू)'
@@ -262,12 +282,12 @@ export default function RegisterScreen() {
             rightAccessory={
               <Pressable
                 onPress={() => setShowPassword((prev) => !prev)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 style={styles.eyeBtn}
                 accessibilityRole="button"
                 accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
               >
-                <Typography variant="xs" weight="medium" color={theme.colors.primary}>
+                <Typography variant="xs" weight="semibold" color={theme.colors.primary}>
                   {showPassword
                     ? language === 'hi'
                       ? 'छुपाएँ'
@@ -283,7 +303,13 @@ export default function RegisterScreen() {
           {/* Optional Profile Details Accordion Toggle */}
           <Pressable
             onPress={() => setShowOptionalFields((prev) => !prev)}
-            style={[styles.accordionToggle, { borderColor: theme.colors.border }]}
+            style={[
+              styles.accordionToggle,
+              {
+                borderColor: theme.colors.border,
+                backgroundColor: showOptionalFields ? '#EFF6FF' : '#F8FAFC',
+              },
+            ]}
             accessibilityRole="button"
           >
             <Typography variant="sm" weight="semibold" color={theme.colors.primary}>
@@ -308,7 +334,7 @@ export default function RegisterScreen() {
                   color={theme.colors.textPrimary}
                   style={styles.genderLabel}
                 >
-                  {language === 'hi' ? 'लिंग' : 'Gender'}
+                  {language === 'hi' ? 'लिंग (Gender)' : 'Gender'}
                 </Typography>
                 <View style={styles.genderRow}>
                   {(
@@ -333,7 +359,7 @@ export default function RegisterScreen() {
                               : theme.colors.border,
                             backgroundColor: isSelected
                               ? theme.colors.primary
-                              : theme.colors.surface,
+                              : '#F8FAFC',
                           },
                         ]}
                       >
@@ -342,7 +368,7 @@ export default function RegisterScreen() {
                           weight="semibold"
                           color={
                             isSelected
-                              ? theme.colors.textInverse
+                              ? '#FFFFFF'
                               : theme.colors.textPrimary
                           }
                         >
@@ -393,6 +419,7 @@ export default function RegisterScreen() {
             title={t('auth:registerButton')}
             onPress={handleRegister}
             loading={isSubmitting}
+            disabled={isSubmitting}
             fullWidth
             style={styles.submitBtn}
           />
@@ -405,15 +432,20 @@ export default function RegisterScreen() {
             style={styles.linkPressable}
             accessibilityRole="link"
           >
-            <Typography
-              variant="sm"
-              weight="medium"
-              color={theme.colors.primary}
-              align="center"
-            >
-              {t('auth:alreadyHaveAccount')}
+            <Typography variant="sm" color={theme.colors.textSecondary} align="center">
+              {language === 'hi' ? 'पहले से खाता है? ' : 'Already have an account? '}
+              <Typography variant="sm" weight="bold" color={theme.colors.primary}>
+                {language === 'hi' ? 'लॉगिन करें' : 'Login'}
+              </Typography>
             </Typography>
           </Pressable>
+
+          {/* Trust & Security Badge */}
+          <View style={styles.securityNote}>
+            <Typography variant="xs" color={theme.colors.textMuted} align="center">
+              🔒 {language === 'hi' ? '256-बिट सुरक्षित एन्क्रिप्टेड समुदाय नेटवर्क' : '256-bit Encrypted Secure Community Platform'}
+            </Typography>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -426,8 +458,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
   },
   topBar: {
     flexDirection: 'row',
@@ -444,42 +474,76 @@ const styles = StyleSheet.create({
   langPill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    minHeight: 32,
+    minHeight: 34,
     justifyContent: 'center',
     alignItems: 'center',
   },
   header: {
     marginBottom: 20,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  brandBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   subtitle: {
     marginTop: 6,
     lineHeight: 20,
   },
   formCard: {
-    padding: 20,
-    marginBottom: 20,
+    padding: 22,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    marginBottom: 16,
   },
   errorBanner: {
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     marginBottom: 16,
   },
+  phonePrefix: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 6,
+  },
+  prefixDivider: {
+    width: 1,
+    height: 20,
+    marginLeft: 8,
+  },
   eyeBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
   accordionToggle: {
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    marginVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginVertical: 14,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   optionalSection: {
-    marginTop: 8,
+    marginTop: 4,
   },
   genderContainer: {
     marginBottom: 16,
@@ -493,24 +557,30 @@ const styles = StyleSheet.create({
   },
   genderChip: {
     flex: 1,
-    height: 40,
-    borderRadius: 20,
+    height: 42,
+    borderRadius: 10,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
   },
   submitBtn: {
     marginTop: 10,
+    height: 48,
+    borderRadius: 12,
   },
   footerContainer: {
     alignItems: 'center',
     marginTop: 4,
   },
   linkPressable: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     minHeight: 48,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  securityNote: {
+    marginTop: 8,
+    paddingHorizontal: 16,
   },
 });
