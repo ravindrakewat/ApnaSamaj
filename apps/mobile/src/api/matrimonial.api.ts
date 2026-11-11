@@ -7,8 +7,14 @@ import {
   MatrimonialInterestItem,
   PaginatedMatrimonialInterestsResponse,
   OwnMatrimonialProfile,
+  MatrimonialPartnerPreferenceItem,
+  MatrimonialPhotoItem,
   MatrimonialInterestStatus,
 } from '@apnasamaj/shared-types';
+import {
+  UpsertMatrimonialProfileInput,
+  UpdatePartnerPreferenceInput,
+} from '@apnasamaj/validation';
 
 export interface MatrimonialFilterParams {
   page?: number;
@@ -232,6 +238,93 @@ export const matrimonialApi = {
     }
 
     return response.data ?? null;
+  },
+
+  /**
+   * Creates or updates the authenticated member's matrimonial profile.
+   */
+  async upsertMyProfile(data: UpsertMatrimonialProfileInput): Promise<OwnMatrimonialProfile> {
+    const response = await apiClient.put<ApiResponse<OwnMatrimonialProfile>>('/matrimonial/me', data);
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to save matrimonial profile.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Submits the authenticated member's matrimonial profile for admin approval.
+   */
+  async submitMyProfile(): Promise<OwnMatrimonialProfile> {
+    const response = await apiClient.post<ApiResponse<OwnMatrimonialProfile>>('/matrimonial/me/submit');
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to submit matrimonial profile for approval.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Creates or updates partner preferences for the member's matrimonial profile.
+   */
+  async upsertMyPreferences(data: UpdatePartnerPreferenceInput): Promise<MatrimonialPartnerPreferenceItem> {
+    const response = await apiClient.put<ApiResponse<MatrimonialPartnerPreferenceItem>>(
+      '/matrimonial/me/preferences',
+      data
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to save partner preferences.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Uploads a gallery photo to the user's matrimonial profile (max 5 photos).
+   */
+  async uploadPhoto(
+    file: { uri: string; name: string; type: string },
+    isPrimary?: boolean
+  ): Promise<MatrimonialPhotoItem> {
+    const formData = new FormData();
+    formData.append('file', {
+      uri: file.uri,
+      name: file.name,
+      type: file.type,
+    } as any);
+
+    if (isPrimary !== undefined) {
+      formData.append('isPrimary', String(isPrimary));
+    }
+
+    const response = await apiClient.upload<ApiResponse<MatrimonialPhotoItem>>(
+      '/matrimonial/me/photos',
+      formData
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to upload matrimonial photo.');
+    }
+
+    return response.data;
+  },
+
+  /**
+   * Deletes a gallery photo from the user's matrimonial profile.
+   */
+  async deletePhoto(photoId: string): Promise<void> {
+    if (!photoId) {
+      throw new Error('Photo ID is required.');
+    }
+
+    const response = await apiClient.delete<ApiResponse<void>>(`/matrimonial/me/photos/${photoId}`);
+
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to delete matrimonial photo.');
+    }
   },
 };
 

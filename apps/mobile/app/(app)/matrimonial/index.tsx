@@ -27,6 +27,7 @@ import {
   SearchBar,
   ProfileAvatar,
   BottomSheet,
+  BottomNavigation,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -326,8 +327,19 @@ export default function MatrimonialDiscoveryScreen() {
         showLanguageSwitcher={true}
         language={language}
         onLanguageToggle={toggleLanguage}
-        showProfileAvatar={true}
-        avatarInitial={user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'वि'}
+        rightAccessory={
+          <Pressable
+            onPress={() => router.push('/(app)/matrimonial/manage' as any)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={language === 'hi' ? 'मेरा विवाह बायोडाटा' : 'My Matrimonial Profile'}
+            style={styles.myProfileHeaderBtn}
+          >
+            <Typography variant="xs" weight="bold" color="#1976D2">
+              {language === 'hi' ? '📝 मेरा बायोडाटा' : '📝 My Profile'}
+            </Typography>
+          </Pressable>
+        }
       />
 
       {/* 2. Primary View Switcher: Profiles vs Interests */}
@@ -1034,6 +1046,9 @@ export default function MatrimonialDiscoveryScreen() {
           </View>
         ) : null}
       </BottomSheet>
+
+      {/* 6. Shared Bottom Navigation */}
+      <BottomNavigation activeTab="matrimonial" />
     </View>
   );
 }
@@ -1042,6 +1057,14 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  myProfileHeaderBtn: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
   segmentedContainer: {
     paddingHorizontal: 16,

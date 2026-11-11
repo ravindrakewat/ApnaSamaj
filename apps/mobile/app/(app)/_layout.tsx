@@ -92,6 +92,41 @@ export default function AppLayout() {
         }}
       />
       <Stack.Screen
+        name="matrimonial/manage"
+        options={{
+          title: 'विवाह बायोडाटा',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="employment/index"
+        options={{
+          title: 'रोजगार व करियर',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="employment/[id]"
+        options={{
+          title: 'नौकरी विवरण',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="government-schemes/index"
+        options={{
+          title: 'सरकारी योजनाएँ',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="government-schemes/[id]"
+        options={{
+          title: 'योजना विवरण',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
         name="chat/index"
         options={{
           title: 'संदेश व चैट',
@@ -116,6 +151,13 @@ export default function AppLayout() {
         name="profile/settings"
         options={{
           title: 'सेटिंग्स',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="notifications/index"
+        options={{
+          title: 'सूचनाएँ',
           headerShown: false,
         }}
       />

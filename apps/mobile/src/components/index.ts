@@ -11,6 +11,8 @@ export * from './BottomNavigation';
 export * from './MemberCard';
 export * from './GroupCard';
 export * from './MatrimonialCard';
+export * from './JobCard';
+export * from './SchemeCard';
 export * from './chat';
 export * from './video';
 export * from './AppHeader';
@@ -18,4 +20,5 @@ export * from './SearchBar';
 export * from './ProfileAvatar';
 export * from './BottomSheet';
 export * from './ConfirmationDialog';
+export * from './NotificationCard';
 

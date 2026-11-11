@@ -5,7 +5,6 @@ import {
   FlatList,
   RefreshControl,
   Pressable,
-  Image,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -17,18 +16,18 @@ import {
 } from '@apnasamaj/shared-types';
 import {
   Typography,
-  Card,
   Button,
-  Input,
-  Badge,
+  SearchBar,
+  AppHeader,
   BottomNavigation,
+  ChatConversationCard,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { chatApi } from '../../../src/api/chat.api';
 import { groupsApi } from '../../../src/api/groups.api';
-import { getChatSocket, connectChatSocket } from '../../../src/services/socket.service';
+import { connectChatSocket } from '../../../src/services/socket.service';
 
 type InboxTab = 'ALL' | 'PERSONAL' | 'GROUPS';
 
@@ -122,7 +121,6 @@ export default function UnifiedChatInboxScreen() {
     const socket = connectChatSocket();
 
     const handleNewMessage = () => {
-      // Refresh inbox list to update preview and unread counters
       loadInboxData();
     };
 
@@ -194,37 +192,22 @@ export default function UnifiedChatInboxScreen() {
     return list.filter((item) => item.name.toLowerCase().includes(query));
   }, [personalChats, groups, activeTab, searchQuery, language]);
 
-  const formatInboxTime = (dateString: string) => {
-    try {
-      const d = new Date(dateString);
-      const today = new Date();
-      const yesterday = new Date();
-      yesterday.setDate(today.getDate() - 1);
-
-      if (d.toDateString() === today.toDateString()) {
-        return d.toLocaleTimeString(language === 'hi' ? 'hi-IN' : 'en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-      }
-      if (d.toDateString() === yesterday.toDateString()) {
-        return language === 'hi' ? 'कल' : 'Yesterday';
-      }
-      return d.toLocaleDateString(language === 'hi' ? 'hi-IN' : 'en-US', {
-        day: 'numeric',
-        month: 'short',
-      });
-    } catch {
-      return '';
-    }
-  };
+  // Total unread count for badge
+  const totalUnread = useMemo(() => {
+    return personalChats.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+  }, [personalChats]);
 
   const renderChatItem = ({ item }: { item: UnifiedChatItem }) => {
     if (item.type === 'personal') {
-      const initial = item.name.trim().charAt(0).toUpperCase() || 'M';
-
       return (
-        <Pressable
+        <ChatConversationCard
+          type="personal"
+          id={item.id}
+          name={item.name}
+          avatarUrl={item.avatarUrl}
+          lastMessage={item.lastMessage}
+          timestamp={item.timestamp}
+          unreadCount={item.unreadCount}
           onPress={() =>
             router.push({
               pathname: '/chat/[id]',
@@ -235,145 +218,85 @@ export default function UnifiedChatInboxScreen() {
               },
             } as any)
           }
-          style={[styles.chatCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.name}, ${item.lastMessage}`}
-        >
-          {/* Avatar */}
-          <View style={styles.avatarContainer}>
-            {item.avatarUrl ? (
-              <Image source={{ uri: item.avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <View style={[styles.avatarFallback, { backgroundColor: theme.colors.primaryLight }]}>
-                <Typography variant="sm" weight="bold" color={theme.colors.primaryDark}>
-                  {initial}
-                </Typography>
-              </View>
-            )}
-          </View>
-
-          {/* Details */}
-          <View style={styles.chatDetails}>
-            <View style={styles.chatHeaderRow}>
-              <Typography variant="sm" weight="bold" color={theme.colors.textPrimary} numberOfLines={1} style={styles.chatName}>
-                {item.name}
-              </Typography>
-              <Typography variant="xs" color={theme.colors.textMuted} style={styles.timeText}>
-                {formatInboxTime(item.timestamp)}
-              </Typography>
-            </View>
-
-            <View style={styles.previewRow}>
-              <Typography variant="xs" color={theme.colors.textSecondary} numberOfLines={1} style={styles.previewText}>
-                {item.lastMessage}
-              </Typography>
-
-              {item.unreadCount > 0 && (
-                <View style={[styles.unreadBadge, { backgroundColor: theme.colors.primary }]}>
-                  <Typography variant="xs" weight="bold" color="#FFFFFF" style={styles.unreadCountText}>
-                    {item.unreadCount > 99 ? '99+' : item.unreadCount}
-                  </Typography>
-                </View>
-              )}
-            </View>
-          </View>
-        </Pressable>
+        />
       );
     }
 
-    // Group chat item
     return (
-      <Pressable
+      <ChatConversationCard
+        type="group"
+        id={item.id}
+        name={item.name}
+        avatarUrl={item.coverUrl}
+        subtitle={item.subtitle}
+        timestamp={item.timestamp}
+        privacy={item.privacy}
         onPress={() => router.push(`/group/${item.slug}/chat` as any)}
-        style={[styles.chatCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-        accessibilityRole="button"
-        accessibilityLabel={`${item.name}, Group Chat`}
-      >
-        {/* Group Cover / Icon */}
-        <View style={styles.avatarContainer}>
-          {item.coverUrl ? (
-            <Image source={{ uri: item.coverUrl }} style={styles.avatarImage} />
-          ) : (
-            <View style={[styles.avatarFallback, { backgroundColor: '#F1F5F9' }]}>
-              <Typography variant="md">🏛️</Typography>
-            </View>
-          )}
-        </View>
-
-        {/* Details */}
-        <View style={styles.chatDetails}>
-          <View style={styles.chatHeaderRow}>
-            <Typography variant="sm" weight="bold" color={theme.colors.textPrimary} numberOfLines={1} style={styles.chatName}>
-              {item.name}
-            </Typography>
-            <Badge
-              label={item.privacy === GroupPrivacy.PRIVATE ? (language === 'hi' ? 'निजी' : 'Private') : (language === 'hi' ? 'सार्वजनिक' : 'Public')}
-              variant={item.privacy === GroupPrivacy.PRIVATE ? 'warning' : 'info'}
-              size="sm"
-            />
-          </View>
-
-          <View style={styles.previewRow}>
-            <Typography variant="xs" color={theme.colors.textSecondary} numberOfLines={1} style={styles.previewText}>
-              {item.subtitle}
-            </Typography>
-            <Typography variant="xs" color={theme.colors.primary} weight="semibold">
-              {language === 'hi' ? 'खोलें 💬' : 'Open 💬'}
-            </Typography>
-          </View>
-        </View>
-      </Pressable>
+      />
     );
   };
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
-      {/* Top Header */}
-      <View
-        style={[
-          styles.headerBar,
-          {
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.border,
-            paddingTop: Math.max(insets.top, 14),
-          },
-        ]}
-      >
-        <Typography variant="lg" weight="bold" color={theme.colors.textPrimary}>
-          {language === 'hi' ? 'संदेश व चैट' : 'Chats & Messages'}
-        </Typography>
-        <Badge label={communitySlug} variant="default" size="sm" />
-      </View>
+      {/* Top Modern AppHeader */}
+      <AppHeader
+        mode="brand"
+        title={language === 'hi' ? 'संदेश व बातचीत' : 'Chats & Messages'}
+        communitySlug={communitySlug}
+        rightAccessory={
+          <Pressable
+            onPress={() => router.push('/(app)/directory' as any)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={language === 'hi' ? 'निर्देशिका' : 'Directory'}
+            style={styles.directoryIconButton}
+          >
+            <Typography variant="md">👥</Typography>
+          </Pressable>
+        }
+      />
 
       {/* Search Input Bar */}
       <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface }]}>
-        <Input
-          placeholder={language === 'hi' ? 'नाम या समूह खोजें...' : 'Search chats or groups...'}
+        <SearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
-          clearButtonMode="while-editing"
-          containerStyle={styles.searchInput}
+          placeholder={language === 'hi' ? 'नाम या समूह खोजें...' : 'Search chats or groups...'}
+          onClear={() => setSearchQuery('')}
         />
       </View>
 
-      {/* Segmented Filter Tabs */}
+      {/* Modern Segmented Filter Tabs */}
       <View style={[styles.tabsContainer, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
         <Pressable
           onPress={() => setActiveTab('ALL')}
           style={[styles.tabButton, activeTab === 'ALL' && [styles.activeTab, { borderBottomColor: theme.colors.primary }]]}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'ALL' }}
         >
-          <Typography
-            variant="sm"
-            weight={activeTab === 'ALL' ? 'bold' : 'regular'}
-            color={activeTab === 'ALL' ? theme.colors.primary : theme.colors.textSecondary}
-          >
-            {language === 'hi' ? 'सभी चैट' : 'All Chats'}
-          </Typography>
+          <View style={styles.tabContentRow}>
+            <Typography
+              variant="sm"
+              weight={activeTab === 'ALL' ? 'bold' : 'regular'}
+              color={activeTab === 'ALL' ? theme.colors.primary : theme.colors.textSecondary}
+            >
+              {language === 'hi' ? 'सभी चैट' : 'All Chats'}
+            </Typography>
+            {totalUnread > 0 && (
+              <View style={[styles.tabBadge, { backgroundColor: theme.colors.primary }]}>
+                <Typography variant="xs" weight="bold" color="#FFFFFF" style={styles.tabBadgeText}>
+                  {totalUnread > 99 ? '99+' : totalUnread}
+                </Typography>
+              </View>
+            )}
+          </View>
         </Pressable>
 
         <Pressable
           onPress={() => setActiveTab('PERSONAL')}
           style={[styles.tabButton, activeTab === 'PERSONAL' && [styles.activeTab, { borderBottomColor: theme.colors.primary }]]}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'PERSONAL' }}
         >
           <Typography
             variant="sm"
@@ -387,6 +310,8 @@ export default function UnifiedChatInboxScreen() {
         <Pressable
           onPress={() => setActiveTab('GROUPS')}
           style={[styles.tabButton, activeTab === 'GROUPS' && [styles.activeTab, { borderBottomColor: theme.colors.primary }]]}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'GROUPS' }}
         >
           <Typography
             variant="sm"
@@ -459,7 +384,7 @@ export default function UnifiedChatInboxScreen() {
           data={unifiedItems}
           keyExtractor={(item) => `${item.type}-${item.id}`}
           renderItem={renderChatItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(insets.bottom + 64, 80) }]}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -481,21 +406,14 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  directoryIconButton: {
+    padding: 6,
+    borderRadius: 8,
   },
   searchContainer: {
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
-  },
-  searchInput: {
-    marginBottom: 0,
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -507,8 +425,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  tabContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tabBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeText: {
+    fontSize: 9,
+  },
   activeTab: {
-    borderBottomWidth: 2,
+    borderBottomWidth: 2.5,
   },
   centerContainer: {
     flex: 1,
@@ -523,13 +457,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   emptyIcon: {
-    fontSize: 44,
+    fontSize: 48,
     marginBottom: 8,
   },
   emptySubtitle: {
-    marginTop: 4,
-    marginBottom: 16,
+    marginTop: 6,
+    marginBottom: 20,
     lineHeight: 18,
+    maxWidth: 280,
   },
   emptyActionRow: {
     flexDirection: 'row',
@@ -539,68 +474,5 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    paddingBottom: 24,
-  },
-  chatCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 12,
-  },
-  avatarContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarFallback: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatDetails: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  chatHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-    gap: 8,
-  },
-  chatName: {
-    flex: 1,
-  },
-  timeText: {
-    fontSize: 10,
-  },
-  previewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  previewText: {
-    flex: 1,
-  },
-  unreadBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unreadCountText: {
-    fontSize: 10,
   },
 });

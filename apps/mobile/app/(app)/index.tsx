@@ -26,6 +26,8 @@ import { useTheme } from '../../src/hooks/useTheme';
 import { useLocalization } from '../../src/hooks/useLocalization';
 import { useAuth } from '../../src/hooks/useAuth';
 import { postsApi } from '../../src/api/posts.api';
+import { notificationsApi } from '../../src/api/notifications.api';
+import { getChatSocket } from '../../src/services/socket.service';
 import { APP_CONFIG } from '../../src/constants/config';
 
 export default function SocialFeedHomeScreen() {
@@ -70,6 +72,42 @@ export default function SocialFeedHomeScreen() {
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 40,
   }).current;
+
+  // Unread Notification Count State
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
+
+  const loadUnreadCount = useCallback(async () => {
+    try {
+      const count = await notificationsApi.getUnreadCount();
+      setUnreadNotificationsCount(count);
+    } catch {
+      // Non-blocking fallback
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUnreadCount();
+    }, [loadUnreadCount])
+  );
+
+  useEffect(() => {
+    const socket = getChatSocket();
+    const handleUnreadCount = ({ unreadCount }: { unreadCount: number }) => {
+      setUnreadNotificationsCount(unreadCount);
+    };
+    const handleNewNotif = () => {
+      setUnreadNotificationsCount((prev) => prev + 1);
+    };
+
+    socket.on('notification:unread-count', handleUnreadCount);
+    socket.on('notification:new', handleNewNotif);
+
+    return () => {
+      socket.off('notification:unread-count', handleUnreadCount);
+      socket.off('notification:new', handleNewNotif);
+    };
+  }, []);
 
   // Profile Drawer Modal State
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
@@ -272,20 +310,47 @@ export default function SocialFeedHomeScreen() {
             { key: 'GENERAL' as PostType, hi: 'सामान्य', en: 'General', icon: '💬' },
             { key: 'ANNOUNCEMENT' as PostType, hi: 'सूचनाएं', en: 'Notices', icon: '📢' },
             { key: 'EVENT' as PostType, hi: 'आयोजन', en: 'Events', icon: '📅' },
+            { key: 'EMPLOYMENT_NAV' as any, hi: 'रोजगार', en: 'Jobs', icon: '💼' },
+            { key: 'SCHEMES_NAV' as any, hi: 'सरकारी योजनाएँ', en: 'Schemes', icon: '🏛️' },
           ]}
-          keyExtractor={(item) => item.key || 'ALL'}
+          keyExtractor={(item) => (item.key as string) || 'ALL'}
           contentContainerStyle={styles.filterScroll}
           renderItem={({ item }) => {
-            const isSelected = selectedType === item.key;
+            const isEmp = item.key === 'EMPLOYMENT_NAV';
+            const isScheme = item.key === 'SCHEMES_NAV';
+            const isNav = isEmp || isScheme;
+            const isSelected = !isNav && selectedType === item.key;
             return (
               <Pressable
-                onPress={() => setSelectedType(item.key)}
+                onPress={() => {
+                  if (isEmp) {
+                    router.push('/(app)/employment' as any);
+                    return;
+                  }
+                  if (isScheme) {
+                    router.push('/(app)/government-schemes' as any);
+                    return;
+                  }
+                  setSelectedType(item.key as PostType | undefined);
+                }}
                 style={[
                   styles.filterChip,
                   {
-                    borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                    backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
-                    borderWidth: isSelected ? 1.5 : 1,
+                    borderColor: isSelected
+                      ? theme.colors.primary
+                      : isEmp
+                        ? '#BFDBFE'
+                        : isScheme
+                          ? '#99F6E4'
+                          : theme.colors.border,
+                    backgroundColor: isSelected
+                      ? theme.colors.primary
+                      : isEmp
+                        ? '#EFF6FF'
+                        : isScheme
+                          ? '#F0FDFA'
+                          : theme.colors.surface,
+                    borderWidth: isSelected || isNav ? 1.5 : 1,
                   },
                 ]}
                 accessibilityRole="button"
@@ -297,7 +362,15 @@ export default function SocialFeedHomeScreen() {
                 <Typography
                   variant="xs"
                   weight={isSelected ? 'bold' : 'semibold'}
-                  color={isSelected ? theme.colors.textInverse : theme.colors.textPrimary}
+                  color={
+                    isSelected
+                      ? theme.colors.textInverse
+                      : isEmp
+                        ? '#1D4ED8'
+                        : isScheme
+                          ? '#0F766E'
+                          : theme.colors.textPrimary
+                  }
                 >
                   {language === 'hi' ? item.hi : item.en}
                 </Typography>
@@ -477,6 +550,26 @@ export default function SocialFeedHomeScreen() {
         </View>
 
         <View style={styles.topActions}>
+          {/* Notification Bell with Badge */}
+          <Pressable
+            onPress={() => router.push('/(app)/notifications' as any)}
+            style={[styles.bellButton, { backgroundColor: '#F1F5F9' }]}
+            accessibilityRole="button"
+            accessibilityLabel={language === 'hi' ? 'सूचनाएँ' : 'Notifications'}
+            hitSlop={8}
+          >
+            <Typography variant="md" style={styles.bellEmoji}>
+              🔔
+            </Typography>
+            {unreadNotificationsCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Typography variant="xs" weight="bold" color="#FFFFFF" style={styles.unreadBadgeText}>
+                  {unreadNotificationsCount > 99 ? '99+' : String(unreadNotificationsCount)}
+                </Typography>
+              </View>
+            )}
+          </Pressable>
+
           {/* Language Switcher Pill */}
           <Pressable
             onPress={toggleLanguage}
@@ -516,12 +609,36 @@ export default function SocialFeedHomeScreen() {
             isPlayingInline={activePlayingPostId === item.id}
             onPlayInline={(postId) => setActivePlayingPostId(postId)}
             onPauseInline={() => setActivePlayingPostId(null)}
-            onPressPost={(postId) =>
+            onPressPost={(postId) => {
+              const targetPost = posts.find((p) => p.id === postId);
+              if (
+                targetPost &&
+                (targetPost.title?.startsWith('[सरकारी') ||
+                  targetPost.title?.startsWith('[Govt Scheme') ||
+                  targetPost.title?.toLowerCase().includes('योजना'))
+              ) {
+                router.push({
+                  pathname: '/(app)/government-schemes/[id]',
+                  params: { id: postId },
+                } as any);
+                return;
+              }
+              if (
+                targetPost &&
+                (targetPost.title?.startsWith('[रोजगार') ||
+                  targetPost.title?.startsWith('[Employment'))
+              ) {
+                router.push({
+                  pathname: '/(app)/employment/[id]',
+                  params: { id: postId },
+                } as any);
+                return;
+              }
               router.push({
                 pathname: '/(app)/post/[id]',
                 params: { id: postId },
-              })
-            }
+              });
+            }}
             onPressComments={(postId) =>
               router.push({
                 pathname: '/(app)/post/[id]',
@@ -701,6 +818,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  bellButton: {
+    position: 'relative',
+    padding: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    minWidth: 36,
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bellEmoji: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  unreadBadgeText: {
+    fontSize: 9,
+    lineHeight: 12,
   },
   langPill: {
     paddingHorizontal: 10,

@@ -21,6 +21,7 @@ import {
   Input,
   AppHeader,
   BottomSheet,
+  BottomNavigation,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -647,6 +648,9 @@ export default function ProfileScreen() {
           </View>
         ) : null}
       </BottomSheet>
+
+      {/* Shared Bottom Navigation */}
+      <BottomNavigation activeTab="profile" />
     </View>
   );
 }

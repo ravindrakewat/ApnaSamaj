@@ -4,7 +4,6 @@ import {
   StyleSheet,
   FlatList,
   Pressable,
-  Image,
   ActivityIndicator,
   TextInput,
   KeyboardAvoidingView,
@@ -21,8 +20,8 @@ import {
 } from '@apnasamaj/shared-types';
 import {
   Typography,
-  Card,
   Button,
+  ProfileAvatar,
   ChatAttachmentButton,
   SelectedChatAttachment,
   ChatAttachmentPreview,
@@ -39,6 +38,10 @@ import {
   ChatSearchBar,
   ChatSearchResultsModal,
   ChatMediaGalleryModal,
+  ChatDateSeparator,
+  ChatMessageStatus,
+  ChatMessageActionSheet,
+  ChatActionMessageInfo,
 } from '../../../src/components';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
@@ -92,6 +95,8 @@ export default function PersonalChatScreen() {
   });
 
   const [reactionTargetMessage, setReactionTargetMessage] = useState<ExtendedDirectMessage | null>(null);
+  const [actionSheetMessage, setActionSheetMessage] = useState<ChatActionMessageInfo | null>(null);
+  const [actionTargetDirectMessage, setActionTargetDirectMessage] = useState<ExtendedDirectMessage | null>(null);
   const flatListRef = useRef<FlatList<ExtendedDirectMessage>>(null);
 
   // Search & Media Gallery state
@@ -369,29 +374,6 @@ export default function PersonalChatScreen() {
     }
   };
 
-  const formatDateHeader = (dateString: string) => {
-    try {
-      const d = new Date(dateString);
-      const today = new Date();
-      const yesterday = new Date();
-      yesterday.setDate(today.getDate() - 1);
-
-      if (d.toDateString() === today.toDateString()) {
-        return language === 'hi' ? 'आज' : 'Today';
-      }
-      if (d.toDateString() === yesterday.toDateString()) {
-        return language === 'hi' ? 'कल' : 'Yesterday';
-      }
-      return d.toLocaleDateString(language === 'hi' ? 'hi-IN' : 'en-US', {
-        day: 'numeric',
-        month: 'short',
-        year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
-      });
-    } catch {
-      return '';
-    }
-  };
-
   const renderMessageItem = ({ item, index }: { item: ExtendedDirectMessage; index: number }) => {
     const isOwn = item.senderId === user?.id;
 
@@ -413,125 +395,37 @@ export default function PersonalChatScreen() {
       item.isDeletedForEveryone || item.content === DELETED_CHAT_MESSAGE_PLACEHOLDER
     );
 
+    const isSender = item.senderId === user?.id;
+    const messageAgeMs = Date.now() - new Date(item.createdAt).getTime();
+    const canDeleteForEveryone = isSender && messageAgeMs <= 60 * 60 * 1000;
+
     return (
       <View style={styles.messageRowWrapper}>
         {/* Date separator pill above the first message of each day */}
-        {isDifferentDay && (
-          <View style={styles.dateSeparatorContainer}>
-            <View style={styles.datePill}>
-              <Typography variant="xs" weight="semibold" color="#4B5563">
-                {formatDateHeader(item.createdAt)}
-              </Typography>
-            </View>
-          </View>
-        )}
+        {isDifferentDay && <ChatDateSeparator date={item.createdAt} />}
 
-        {/* Message Bubble Container with Long Press Reaction/Reply/Delete */}
+        {/* Message Bubble Container with Long Press Action Sheet */}
         <View style={[styles.bubbleRow, isOwn ? styles.bubbleRowOwn : styles.bubbleRowOther]}>
           <View style={isOwn ? styles.bubbleColumnOwn : styles.bubbleColumnOther}>
             <Pressable
               onLongPress={() => {
-                if (isDeleted) {
-                  Alert.alert(
-                    language === 'hi' ? 'हटाया गया संदेश' : 'Deleted Message',
-                    undefined,
-                    [
-                      {
-                        text: language === 'hi' ? 'मेरे लिए हटाएं' : 'Delete for Me',
-                        style: 'destructive',
-                        onPress: () => {
-                          Alert.alert(
-                            language === 'hi' ? 'संदेश हटाएं?' : 'Delete message?',
-                            language === 'hi' ? 'यह संदेश केवल आपके लिए हटा दिया जाएगा।' : 'This message will be deleted for you only.',
-                            [
-                              { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-                              {
-                                text: language === 'hi' ? 'हटाएं' : 'Delete',
-                                style: 'destructive',
-                                onPress: () => deleteMessage(item.id, 'ME'),
-                              },
-                            ]
-                          );
-                        },
-                      },
-                      { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-                    ]
-                  );
-                  return;
-                }
-
-                const isSender = item.senderId === user?.id;
-                const messageAgeMs = Date.now() - new Date(item.createdAt).getTime();
-                const canDeleteForEveryone = isSender && messageAgeMs <= 60 * 60 * 1000;
-
-                const actionButtons: any[] = [
-                  {
-                    text: language === 'hi' ? 'प्रतिक्रिया दें' : 'React',
-                    onPress: () => setReactionTargetMessage(item),
-                  },
-                  {
-                    text: language === 'hi' ? 'उत्तर दें (Reply)' : 'Reply',
-                    onPress: () => setReplyingToMessage(item),
-                  },
-                  {
-                    text: language === 'hi' ? 'मेरे लिए हटाएं' : 'Delete for Me',
-                    style: 'destructive',
-                    onPress: () => {
-                      Alert.alert(
-                        language === 'hi' ? 'संदेश हटाएं?' : 'Delete message?',
-                        language === 'hi' ? 'यह संदेश केवल आपके लिए हटा दिया जाएगा।' : 'This message will be deleted for you only.',
-                        [
-                          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-                          {
-                            text: language === 'hi' ? 'हटाएं' : 'Delete',
-                            style: 'destructive',
-                            onPress: () => deleteMessage(item.id, 'ME'),
-                          },
-                        ]
-                      );
-                    },
-                  },
-                ];
-
-                if (canDeleteForEveryone) {
-                  actionButtons.push({
-                    text: language === 'hi' ? 'सभी के लिए हटाएं' : 'Delete for Everyone',
-                    style: 'destructive',
-                    onPress: () => {
-                      Alert.alert(
-                        language === 'hi' ? 'सभी के लिए हटाएं?' : 'Delete for Everyone?',
-                        language === 'hi'
-                          ? 'यह संदेश दोनों प्रतिभागियों के लिए हटा दिया जाएगा।'
-                          : 'This message will be deleted for both participants.',
-                        [
-                          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-                          {
-                            text: language === 'hi' ? 'सभी के लिए हटाएं' : 'Delete for Everyone',
-                            style: 'destructive',
-                            onPress: () => deleteMessage(item.id, 'EVERYONE'),
-                          },
-                        ]
-                      );
-                    },
-                  });
-                }
-
-                actionButtons.push({
-                  text: language === 'hi' ? 'रद्द करें' : 'Cancel',
-                  style: 'cancel',
+                setActionTargetDirectMessage(item);
+                setActionSheetMessage({
+                  id: item.id,
+                  content: item.content,
+                  senderName: isOwn ? (language === 'hi' ? 'आप' : 'You') : displayParticipant.fullName,
+                  isOwn,
+                  canDeleteForEveryone,
+                  isDeleted,
                 });
-
-                Alert.alert(
-                  isOwn ? 'You' : displayParticipant.fullName,
-                  undefined,
-                  actionButtons
-                );
               }}
               style={[
                 styles.bubble,
                 isOwn ? styles.bubbleOwn : styles.bubbleOther,
                 item.isError && styles.bubbleError,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={`${isOwn ? 'Your message' : displayParticipant.fullName}: ${item.content || 'attachment'}`}
             >
               {/* Quoted Message Preview inside bubble if present */}
               {item.replyTo && (
@@ -592,30 +486,12 @@ export default function PersonalChatScreen() {
                   {formatMessageTime(item.createdAt)}
                 </Typography>
                 {isOwn && (
-                  <Typography
-                    variant="xs"
-                    weight={isReadByRecipient ? 'bold' : 'regular'}
-                    color={
-                      item.isError || item.deliveryStatus === 'failed'
-                        ? theme.colors.error
-                        : isReadByRecipient
-                          ? '#0284C7' // WhatsApp blue ticks
-                          : item.isOptimistic || item.deliveryStatus === 'pending' || item.deliveryStatus === 'sending'
-                            ? '#94A3B8'
-                            : '#64748B'
-                    }
-                    style={styles.statusIndicator}
-                  >
-                    {item.isError || item.deliveryStatus === 'failed'
-                      ? '⚠️'
-                      : item.deliveryStatus === 'sending'
-                        ? '⏳'
-                        : item.deliveryStatus === 'pending' || item.isOptimistic
-                          ? '🕒'
-                          : isReadByRecipient
-                            ? '✓✓'
-                            : '✓'}
-                  </Typography>
+                  <ChatMessageStatus
+                    status={item.deliveryStatus}
+                    isRead={Boolean(isReadByRecipient)}
+                    isError={Boolean(item.isError)}
+                    isOptimistic={Boolean(item.isOptimistic)}
+                  />
                 )}
               </View>
             </Pressable>
@@ -647,8 +523,6 @@ export default function PersonalChatScreen() {
       </View>
     );
   };
-
-  const initial = displayParticipant.fullName.trim().charAt(0).toUpperCase() || 'M';
 
   return (
     <View style={[styles.container, { backgroundColor: '#ECE5DD' }]}>
@@ -697,17 +571,11 @@ export default function PersonalChatScreen() {
           </Pressable>
 
           {/* Participant Avatar */}
-          <View style={styles.headerAvatarContainer}>
-            {displayParticipant.avatarUrl ? (
-              <Image source={{ uri: displayParticipant.avatarUrl }} style={styles.headerAvatar} />
-            ) : (
-              <View style={[styles.headerAvatarFallback, { backgroundColor: theme.colors.primaryLight }]}>
-                <Typography variant="xs" weight="bold" color={theme.colors.primaryDark}>
-                  {initial}
-                </Typography>
-              </View>
-            )}
-          </View>
+          <ProfileAvatar
+            uri={displayParticipant.avatarUrl}
+            name={displayParticipant.fullName}
+            size="sm"
+          />
 
           {/* Title & Typing Subtitle */}
           <View style={styles.headerTitleContainer}>
@@ -866,7 +734,7 @@ export default function PersonalChatScreen() {
           />
         )}
 
-        {/* Message Input Composer */}
+        {/* WhatsApp-Style Message Input Composer */}
         <View
           style={[
             styles.composerContainer,
@@ -931,6 +799,60 @@ export default function PersonalChatScreen() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* Modern Chat Message Action Sheet */}
+      <ChatMessageActionSheet
+        visible={Boolean(actionSheetMessage)}
+        onClose={() => {
+          setActionSheetMessage(null);
+          setActionTargetDirectMessage(null);
+        }}
+        message={actionSheetMessage}
+        onReact={() => {
+          if (actionTargetDirectMessage) {
+            setReactionTargetMessage(actionTargetDirectMessage);
+          }
+        }}
+        onReply={() => {
+          if (actionTargetDirectMessage) {
+            setReplyingToMessage(actionTargetDirectMessage);
+          }
+        }}
+        onDeleteForMe={() => {
+          if (!actionTargetDirectMessage) return;
+          Alert.alert(
+            language === 'hi' ? 'संदेश हटाएं?' : 'Delete message?',
+            language === 'hi'
+              ? 'यह संदेश केवल आपके लिए हटा दिया जाएगा।'
+              : 'This message will be deleted for you only.',
+            [
+              { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+              {
+                text: language === 'hi' ? 'हटाएं' : 'Delete',
+                style: 'destructive',
+                onPress: () => deleteMessage(actionTargetDirectMessage.id, 'ME'),
+              },
+            ]
+          );
+        }}
+        onDeleteForEveryone={() => {
+          if (!actionTargetDirectMessage) return;
+          Alert.alert(
+            language === 'hi' ? 'सभी के लिए हटाएं?' : 'Delete for Everyone?',
+            language === 'hi'
+              ? 'यह संदेश दोनों प्रतिभागियों के लिए हटा दिया जाएगा।'
+              : 'This message will be deleted for both participants.',
+            [
+              { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+              {
+                text: language === 'hi' ? 'सभी के लिए हटाएं' : 'Delete for Everyone',
+                style: 'destructive',
+                onPress: () => deleteMessage(actionTargetDirectMessage.id, 'EVERYONE'),
+              },
+            ]
+          );
+        }}
+      />
 
       {/* Emoji Reaction Selector Modal */}
       <EmojiReactionSelector
@@ -998,24 +920,9 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 6,
   },
-  headerAvatarContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    overflow: 'hidden',
-  },
-  headerAvatar: {
-    width: '100%',
-    height: '100%',
-  },
-  headerAvatarFallback: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   headerTitleContainer: {
     flex: 1,
+    marginLeft: 2,
   },
   connectionDot: {
     width: 8,
@@ -1067,16 +974,6 @@ const styles = StyleSheet.create({
   messageRowWrapper: {
     marginVertical: 3,
   },
-  dateSeparatorContainer: {
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  datePill: {
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -1097,19 +994,19 @@ const styles = StyleSheet.create({
     maxWidth: '82%',
   },
   bubble: {
-    maxWidth: '78%',
+    maxWidth: '84%',
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 6,
-    borderRadius: 14,
+    borderRadius: 16,
     elevation: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
-    shadowRadius: 1,
+    shadowRadius: 1.5,
   },
   bubbleOwn: {
-    backgroundColor: '#E7F5EF', // WhatsApp green tint
+    backgroundColor: '#E0F2FE', // Unified primary soft blue tint
     borderBottomRightRadius: 2,
   },
   bubbleOther: {
@@ -1132,13 +1029,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     marginTop: 4,
-    gap: 4,
+    gap: 2,
   },
   messageTime: {
     fontSize: 10,
-  },
-  statusIndicator: {
-    fontSize: 11,
   },
   retryButton: {
     paddingHorizontal: 8,

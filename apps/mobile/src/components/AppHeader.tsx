@@ -39,6 +39,12 @@ export interface AppHeaderProps {
   avatarInitial?: string;
   /** Callback when profile avatar is pressed */
   onProfilePress?: () => void;
+  /** Whether to show notification bell icon */
+  showNotifications?: boolean;
+  /** Unread notification count for badge display */
+  unreadNotificationsCount?: number;
+  /** Callback when notification bell is pressed */
+  onNotificationsPress?: () => void;
   /** Right-side accessory / action components */
   rightAccessory?: React.ReactNode;
   /** Container style overrides */
@@ -60,6 +66,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   avatarUrl,
   avatarInitial,
   onProfilePress,
+  showNotifications,
+  unreadNotificationsCount,
+  onNotificationsPress,
   rightAccessory,
   style,
 }) => {
@@ -70,6 +79,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const shouldShowBack = showBackButton !== undefined ? showBackButton : !isBrand;
   const shouldShowLang = showLanguageSwitcher !== undefined ? showLanguageSwitcher : isBrand;
   const shouldShowProfile = showProfileAvatar !== undefined ? showProfileAvatar : isBrand;
+  const shouldShowNotifications = showNotifications !== undefined ? showNotifications : false;
 
   const handleBack = () => {
     if (onBackPress) {
@@ -86,6 +96,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       onProfilePress();
     } else {
       router.push('/(app)/profile' as any);
+    }
+  };
+
+  const handleNotifications = () => {
+    if (onNotificationsPress) {
+      onNotificationsPress();
+    } else {
+      router.push('/(app)/notifications' as any);
     }
   };
 
@@ -163,6 +181,27 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       {/* 2. Right Actions Section */}
       <View style={styles.rightSection}>
         {rightAccessory}
+
+        {shouldShowNotifications && (
+          <Pressable
+            onPress={handleNotifications}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={language === 'hi' ? 'सूचनाएँ' : 'Notifications'}
+            style={styles.bellButton}
+          >
+            <Typography variant="md" style={styles.bellEmoji}>
+              🔔
+            </Typography>
+            {unreadNotificationsCount !== undefined && unreadNotificationsCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Typography variant="xs" weight="bold" color="#FFFFFF" style={styles.unreadBadgeText}>
+                  {unreadNotificationsCount > 99 ? '99+' : String(unreadNotificationsCount)}
+                </Typography>
+              </View>
+            )}
+          </Pressable>
+        )}
 
         {shouldShowLang && onLanguageToggle && (
           <Pressable
@@ -276,6 +315,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     backgroundColor: '#F8FAFC',
+  },
+  bellButton: {
+    position: 'relative',
+    padding: 6,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 36,
+    minHeight: 36,
+  },
+  bellEmoji: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  unreadBadgeText: {
+    fontSize: 9,
+    lineHeight: 12,
   },
 });
 

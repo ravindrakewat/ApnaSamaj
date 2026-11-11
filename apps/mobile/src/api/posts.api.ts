@@ -147,6 +147,16 @@ export const postsApi = {
   },
 
   /**
+   * Deletes one's own post by ID.
+   */
+  async deletePost(postId: string): Promise<void> {
+    const response = await apiClient.delete<ApiResponse<void>>(`/posts/${postId}`);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to delete post.');
+    }
+  },
+
+  /**
    * Uploads an image to Supabase Storage via backend /api/v1/posts/media/upload.
    */
   async uploadMedia(file: UploadFileParam): Promise<UploadMediaResponseData> {

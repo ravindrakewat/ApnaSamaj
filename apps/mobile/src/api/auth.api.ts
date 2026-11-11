@@ -97,4 +97,61 @@ export const authApi = {
       // Best-effort server notification; local session will be purged regardless
     }
   },
+
+  /**
+   * Requests password reset instructions for the provided phone number.
+   * Returns a generic anti-enumeration response matching the backend contract.
+   */
+  async forgotPassword(phone: string, communitySlug?: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post<ApiResponse<void>>(
+      '/auth/forgot-password',
+      { phone },
+      { skipAuth: true, communitySlug }
+    );
+    return {
+      success: true,
+      message:
+        response.message ||
+        'If an account is associated with this phone number, password reset instructions have been sent.',
+    };
+  },
+
+  /**
+   * Verifies whether a password reset token is active and unexpired.
+   */
+  async verifyResetToken(token: string, communitySlug?: string): Promise<boolean> {
+    const response = await apiClient.post<ApiResponse<{ valid: boolean }>>(
+      '/auth/verify-reset-token',
+      { token },
+      { skipAuth: true, communitySlug }
+    );
+    if (!response.success || !response.data?.valid) {
+      throw new Error(response.error || 'Invalid or expired reset token.');
+    }
+    return true;
+  },
+
+  /**
+   * Redeems a valid reset token to update the member's password.
+   */
+  async resetPassword(
+    token: string,
+    newPassword: string,
+    communitySlug?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post<ApiResponse<void>>(
+      '/auth/reset-password',
+      { token, newPassword },
+      { skipAuth: true, communitySlug }
+    );
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to reset password.');
+    }
+    return {
+      success: true,
+      message:
+        response.message ||
+        'Password has been reset successfully. Please log in with your new password.',
+    };
+  },
 };

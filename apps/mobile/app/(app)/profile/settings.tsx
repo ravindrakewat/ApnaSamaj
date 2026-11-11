@@ -323,9 +323,21 @@ export default function SettingsScreen() {
 
         {/* 4. Notification Preferences */}
         <Card style={styles.sectionCard}>
-          <Typography variant="sm" weight="bold" color="#0F172A" style={styles.sectionTitle}>
-            🔔 {language === 'hi' ? 'सूचना प्राथमिकताएं' : 'Notification Preferences'}
-          </Typography>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="sm" weight="bold" color="#0F172A" style={styles.sectionTitle}>
+              🔔 {language === 'hi' ? 'सूचना प्राथमिकताएं' : 'Notification Preferences'}
+            </Typography>
+            <Pressable
+              onPress={() => router.push('/(app)/notifications' as any)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={language === 'hi' ? 'सूचनाएं देखें' : 'View notifications'}
+            >
+              <Typography variant="xs" weight="bold" color="#1976D2">
+                {language === 'hi' ? 'इनबॉक्स देखें →' : 'View Inbox →'}
+              </Typography>
+            </Pressable>
+          </View>
 
           <Typography variant="xs" color="#64748B" style={styles.sectionSubtitle}>
             {language === 'hi'

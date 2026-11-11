@@ -37,24 +37,32 @@ export async function setupAndroidNotificationChannels(): Promise<void> {
 
 /**
  * Maps raw notification data payload into an authorized Expo Router destination path.
+ * Supports both FCM push routing payloads and in-app NotificationItem models.
  */
 export function resolveNotificationRoute(data: Record<string, any> | undefined): string | null {
   if (!data || !data.type) {
     return null;
   }
 
-  const payload = data as Partial<PushNotificationRoutingPayload>;
+  const type = String(data.type);
+  const entityId =
+    data.entityId ||
+    data.postId ||
+    data.interestId ||
+    data.conversationId ||
+    data.groupId ||
+    data.groupSlug;
 
-  switch (payload.type) {
+  switch (type) {
     case 'PERSONAL_CHAT':
-      if (payload.conversationId) {
-        return `/(app)/chat/${payload.conversationId}`;
+      if (data.conversationId) {
+        return `/(app)/chat/${data.conversationId}`;
       }
       return '/(app)/chat';
 
     case 'GROUP_CHAT':
-      if (payload.groupSlug || payload.groupId) {
-        return `/(app)/group/${payload.groupSlug || payload.groupId}/chat`;
+      if (data.groupSlug || data.groupId) {
+        return `/(app)/group/${data.groupSlug || data.groupId}/chat`;
       }
       return '/(app)/groups';
 
@@ -63,16 +71,34 @@ export function resolveNotificationRoute(data: Record<string, any> | undefined):
 
     case 'POST_COMMENT':
     case 'POST_LIKE':
-      if (payload.postId || payload.entityId) {
-        return `/(app)/post/${payload.postId || payload.entityId}`;
+    case 'POST_MODERATED':
+    case 'ANNOUNCEMENT':
+      if (entityId) {
+        return `/(app)/post/${entityId}`;
       }
       return '/(app)';
 
-    case 'ANNOUNCEMENT':
-      if (payload.postId || payload.entityId) {
-        return `/(app)/post/${payload.postId || payload.entityId}`;
+    case 'GROUP_ROLE_UPDATE':
+    case 'GROUP_MEMBER_REMOVED':
+      if (entityId) {
+        return `/(app)/group/${entityId}`;
       }
-      return '/(app)';
+      return '/(app)/groups';
+
+    case 'ACCOUNT_STATUS_UPDATE':
+      return '/(app)/profile';
+
+    case 'MATRIMONIAL_INTEREST_RECEIVED':
+    case 'MATRIMONIAL_INTEREST_ACCEPTED':
+    case 'MATRIMONIAL_PROFILE_APPROVED':
+    case 'MATRIMONIAL_PROFILE_REJECTED':
+    case 'MATRIMONIAL_PROFILE_SUSPENDED':
+    case 'MATRIMONIAL_DOCUMENT_APPROVED':
+    case 'MATRIMONIAL_DOCUMENT_REJECTED':
+      if (entityId) {
+        return `/(app)/matrimonial/${entityId}`;
+      }
+      return '/(app)/matrimonial';
 
     default:
       return null;

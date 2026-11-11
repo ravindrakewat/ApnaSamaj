@@ -4,7 +4,6 @@ import {
   StyleSheet,
   FlatList,
   Pressable,
-  Image,
   ActivityIndicator,
   TextInput,
   KeyboardAvoidingView,
@@ -25,6 +24,7 @@ import {
   Typography,
   Card,
   Button,
+  ProfileAvatar,
   ChatAttachmentButton,
   SelectedChatAttachment,
   ChatAttachmentPreview,
@@ -41,6 +41,10 @@ import {
   ChatSearchBar,
   ChatSearchResultsModal,
   ChatMediaGalleryModal,
+  ChatDateSeparator,
+  ChatMessageStatus,
+  ChatMessageActionSheet,
+  ChatActionMessageInfo,
 } from '../../../../src/components';
 import { useTheme } from '../../../../src/hooks/useTheme';
 import { useLocalization } from '../../../../src/hooks/useLocalization';
@@ -128,6 +132,8 @@ export default function GroupChatScreen() {
   });
 
   const [reactionTargetMessage, setReactionTargetMessage] = useState<ExtendedChatMessage | null>(null);
+  const [actionSheetMessage, setActionSheetMessage] = useState<ChatActionMessageInfo | null>(null);
+  const [actionTargetGroupMessage, setActionTargetGroupMessage] = useState<ExtendedChatMessage | null>(null);
   const flatListRef = useRef<FlatList<ExtendedChatMessage>>(null);
 
   // Search & Media Gallery state
@@ -385,29 +391,6 @@ export default function GroupChatScreen() {
     }
   };
 
-  const formatDateHeader = (isoString: string): string => {
-    try {
-      const d = new Date(isoString);
-      const today = new Date();
-      const yesterday = new Date();
-      yesterday.setDate(today.getDate() - 1);
-
-      if (d.toDateString() === today.toDateString()) {
-        return language === 'hi' ? 'आज' : 'Today';
-      }
-      if (d.toDateString() === yesterday.toDateString()) {
-        return language === 'hi' ? 'कल' : 'Yesterday';
-      }
-      return d.toLocaleDateString(language === 'hi' ? 'hi-IN' : 'en-US', {
-        day: 'numeric',
-        month: 'short',
-        year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
-      });
-    } catch {
-      return '';
-    }
-  };
-
   // Distinct color for other sender names (WhatsApp-style)
   const getSenderColor = (senderId: string) => {
     const colors = ['#E53935', '#8E24AA', '#1E88E5', '#00897B', '#FB8C00', '#6D4C41', '#039BE5'];
@@ -432,164 +415,52 @@ export default function GroupChatScreen() {
       item.isDeletedForEveryone || item.content === DELETED_CHAT_MESSAGE_PLACEHOLDER
     );
 
+    const isSender = item.senderId === user?.id;
+    const messageAgeMs = Date.now() - new Date(item.createdAt).getTime();
+    const canDeleteForEveryone = isSender && messageAgeMs <= 60 * 60 * 1000;
+    const isGroupAdmin = group?.myRole === 'ADMIN' || group?.createdById === user?.id;
+    const canAdminDelete = !canDeleteForEveryone && isGroupAdmin;
+
     return (
       <View style={styles.messageRowWrapper}>
         {/* Date separator pill above the first message of each day */}
-        {isDifferentDay && (
-          <View style={styles.dateSeparatorContainer}>
-            <View style={styles.datePill}>
-              <Typography variant="xs" weight="semibold" color="#4B5563">
-                {formatDateHeader(item.createdAt)}
-              </Typography>
-            </View>
-          </View>
-        )}
+        {isDifferentDay && <ChatDateSeparator date={item.createdAt} />}
 
         {/* Message Bubble Container */}
         <View style={[styles.bubbleRow, isOwn ? styles.bubbleRowOwn : styles.bubbleRowOther]}>
           {/* Avatar for other senders */}
           {!isOwn && (
             <View style={styles.senderAvatarContainer}>
-              {item.sender?.avatarUrl ? (
-                <Image source={{ uri: item.sender.avatarUrl }} style={styles.senderAvatar} />
-              ) : (
-                <View style={[styles.senderAvatarFallback, { backgroundColor: theme.colors.surfaceSubtle }]}>
-                  <Typography variant="xs" weight="bold" color={getSenderColor(item.senderId)}>
-                    {(item.sender?.fullName || 'M').charAt(0).toUpperCase()}
-                  </Typography>
-                </View>
-              )}
+              <ProfileAvatar
+                uri={item.sender?.avatarUrl}
+                name={item.sender?.fullName || 'M'}
+                size="xs"
+              />
             </View>
           )}
 
-          {/* Bubble Card with Long Press Reaction/Reply/Delete */}
+          {/* Bubble Card with Long Press Action Sheet */}
           <View style={isOwn ? styles.bubbleColumnOwn : styles.bubbleColumnOther}>
             <Pressable
               onLongPress={() => {
-                if (isDeleted) {
-                  Alert.alert(
-                    language === 'hi' ? 'हटाया गया संदेश' : 'Deleted Message',
-                    undefined,
-                    [
-                      {
-                        text: language === 'hi' ? 'मेरे लिए हटाएं' : 'Delete for Me',
-                        style: 'destructive',
-                        onPress: () => {
-                          Alert.alert(
-                            language === 'hi' ? 'संदेश हटाएं?' : 'Delete message?',
-                            language === 'hi' ? 'यह संदेश केवल आपके लिए हटा दिया जाएगा।' : 'This message will be deleted for you only.',
-                            [
-                              { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-                              {
-                                text: language === 'hi' ? 'हटाएं' : 'Delete',
-                                style: 'destructive',
-                                onPress: () => deleteMessage(item.id, 'ME'),
-                              },
-                            ]
-                          );
-                        },
-                      },
-                      { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-                    ]
-                  );
-                  return;
-                }
-
-                const isSender = item.senderId === user?.id;
-                const messageAgeMs = Date.now() - new Date(item.createdAt).getTime();
-                const canDeleteForEveryone = isSender && messageAgeMs <= 60 * 60 * 1000;
-                const isGroupAdmin = group?.myRole === 'ADMIN' || group?.createdById === user?.id;
-                const canAdminDelete = !canDeleteForEveryone && isGroupAdmin;
-
-                const actionButtons: any[] = [
-                  {
-                    text: language === 'hi' ? 'प्रतिक्रिया दें' : 'React',
-                    onPress: () => setReactionTargetMessage(item),
-                  },
-                  {
-                    text: language === 'hi' ? 'उत्तर दें (Reply)' : 'Reply',
-                    onPress: () => setReplyingToMessage(item),
-                  },
-                  {
-                    text: language === 'hi' ? 'मेरे लिए हटाएं' : 'Delete for Me',
-                    style: 'destructive',
-                    onPress: () => {
-                      Alert.alert(
-                        language === 'hi' ? 'संदेश हटाएं?' : 'Delete message?',
-                        language === 'hi' ? 'यह संदेश केवल आपके लिए हटा दिया जाएगा।' : 'This message will be deleted for you only.',
-                        [
-                          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-                          {
-                            text: language === 'hi' ? 'हटाएं' : 'Delete',
-                            style: 'destructive',
-                            onPress: () => deleteMessage(item.id, 'ME'),
-                          },
-                        ]
-                      );
-                    },
-                  },
-                ];
-
-                if (canDeleteForEveryone) {
-                  actionButtons.push({
-                    text: language === 'hi' ? 'सभी के लिए हटाएं' : 'Delete for Everyone',
-                    style: 'destructive',
-                    onPress: () => {
-                      Alert.alert(
-                        language === 'hi' ? 'सभी के लिए हटाएं?' : 'Delete for Everyone?',
-                        language === 'hi'
-                          ? 'यह संदेश सभी समूह सदस्यों के लिए हटा दिया जाएगा।'
-                          : 'This message will be deleted for all group members.',
-                        [
-                          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-                          {
-                            text: language === 'hi' ? 'सभी के लिए हटाएं' : 'Delete for Everyone',
-                            style: 'destructive',
-                            onPress: () => deleteMessage(item.id, 'EVERYONE'),
-                          },
-                        ]
-                      );
-                    },
-                  });
-                } else if (canAdminDelete) {
-                  actionButtons.push({
-                    text: language === 'hi' ? 'व्यवस्थापक द्वारा हटाएं' : 'Admin Delete',
-                    style: 'destructive',
-                    onPress: () => {
-                      Alert.alert(
-                        language === 'hi' ? 'व्यवस्थापक द्वारा हटाएं?' : 'Admin Delete (Moderation)?',
-                        language === 'hi'
-                          ? 'समूह व्यवस्थापक के रूप में यह संदेश सभी के लिए हटा दिया जाएगा।'
-                          : 'As a group admin, this message will be deleted for all group members.',
-                        [
-                          { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-                          {
-                            text: language === 'hi' ? 'व्यवस्थापक द्वारा हटाएं' : 'Admin Delete',
-                            style: 'destructive',
-                            onPress: () => deleteMessage(item.id, 'EVERYONE'),
-                          },
-                        ]
-                      );
-                    },
-                  });
-                }
-
-                actionButtons.push({
-                  text: language === 'hi' ? 'रद्द करें' : 'Cancel',
-                  style: 'cancel',
+                setActionTargetGroupMessage(item);
+                setActionSheetMessage({
+                  id: item.id,
+                  content: item.content,
+                  senderName: item.sender?.fullName || (isOwn ? (language === 'hi' ? 'आप' : 'You') : 'Member'),
+                  isOwn,
+                  canDeleteForEveryone,
+                  canAdminDelete,
+                  isDeleted,
                 });
-
-                Alert.alert(
-                  item.sender?.fullName || (isOwn ? 'You' : 'Member'),
-                  undefined,
-                  actionButtons
-                );
               }}
               style={[
                 styles.bubble,
                 isOwn ? styles.bubbleOwn : styles.bubbleOther,
                 item.isError && styles.bubbleError,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.sender?.fullName || (isOwn ? 'You' : 'Member')}: ${item.content || 'attachment'}`}
             >
               {/* Quoted Message Preview inside bubble if present */}
               {item.replyTo && (
@@ -661,41 +532,13 @@ export default function GroupChatScreen() {
                   {formatMessageTime(item.createdAt)}
                 </Typography>
                 {isOwn && (
-                  <Typography
-                    variant="xs"
-                    color={
-                      item.isError || item.deliveryStatus === 'failed'
-                        ? theme.colors.error
-                        : item.deliveryStatus === 'pending' || item.deliveryStatus === 'sending' || item.isOptimistic
-                          ? '#94A3B8'
-                          : '#059669'
-                    }
-                    style={styles.statusIndicator}
-                  >
-                    {item.isError || item.deliveryStatus === 'failed'
-                      ? '⚠️'
-                      : item.deliveryStatus === 'sending'
-                        ? '⏳'
-                        : item.deliveryStatus === 'pending' || item.isOptimistic
-                          ? '🕒'
-                          : '✓'}
-                  </Typography>
+                  <ChatMessageStatus
+                    status={item.deliveryStatus}
+                    isError={Boolean(item.isError)}
+                    isOptimistic={Boolean(item.isOptimistic)}
+                  />
                 )}
               </View>
-
-              {/* Failed message retry CTA */}
-              {isOwn && (item.isError || item.deliveryStatus === 'failed') && (
-                <Pressable
-                  onPress={() => item.tempId && retryMessage(item.tempId)}
-                  style={styles.retryButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Retry sending message"
-                >
-                  <Typography variant="xs" color={theme.colors.error} weight="bold">
-                    {language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
-                  </Typography>
-                </Pressable>
-              )}
             </Pressable>
 
             {/* Reaction Badges */}
@@ -707,12 +550,24 @@ export default function GroupChatScreen() {
               />
             )}
           </View>
+
+          {/* Failed message retry CTA */}
+          {isOwn && (item.isError || item.deliveryStatus === 'failed') && (
+            <Pressable
+              onPress={() => item.tempId && retryMessage(item.tempId)}
+              style={styles.retryButton}
+              accessibilityRole="button"
+              accessibilityLabel="Retry sending message"
+            >
+              <Typography variant="xs" color={theme.colors.error} weight="bold">
+                {language === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
+              </Typography>
+            </Pressable>
+          )}
         </View>
       </View>
     );
   };
-
-  const initial = group?.name ? group.name.charAt(0).toUpperCase() : 'G';
 
   return (
     <KeyboardAvoidingView
@@ -720,7 +575,7 @@ export default function GroupChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      {/* WhatsApp-Style Top Header / Search Header */}
+      {/* Top Header / Search Header */}
       {isSearchVisible ? (
         <View style={{ paddingTop: Math.max(insets.top + 6, 14), backgroundColor: theme.colors.surface }}>
           <ChatSearchBar
@@ -755,10 +610,11 @@ export default function GroupChatScreen() {
           <Pressable
             onPress={() => router.back()}
             style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityRole="button"
             accessibilityLabel={language === 'hi' ? 'पीछे जाएं' : 'Back'}
           >
-            <Typography variant="lg" weight="bold" color={theme.colors.textPrimary}>
+            <Typography variant="lg" weight="bold" color={theme.colors.primary}>
               ←
             </Typography>
           </Pressable>
@@ -767,15 +623,11 @@ export default function GroupChatScreen() {
             onPress={() => router.push(`/(app)/group/${slug}` as any)}
             style={styles.headerGroupInfo}
           >
-            {group?.coverUrl ? (
-              <Image source={{ uri: group.coverUrl }} style={styles.groupHeaderAvatar} />
-            ) : (
-              <View style={[styles.groupHeaderAvatarFallback, { backgroundColor: theme.colors.primaryLight }]}>
-                <Typography variant="sm" weight="bold" color={theme.colors.primaryDark}>
-                  {initial}
-                </Typography>
-              </View>
-            )}
+            <ProfileAvatar
+              uri={group?.coverUrl}
+              name={group?.name || 'G'}
+              size="sm"
+            />
 
             <View style={styles.headerTextContainer}>
               <Typography variant="md" weight="bold" color={theme.colors.textPrimary} numberOfLines={1}>
@@ -976,8 +828,8 @@ export default function GroupChatScreen() {
                         {
                           backgroundColor:
                             !isSending && !isUploadingAttachment
-                              ? '#10B981'
-                              : '#CBD5E1',
+                              ? theme.colors.primary
+                              : theme.colors.border,
                         },
                       ]}
                       accessibilityRole="button"
@@ -986,7 +838,7 @@ export default function GroupChatScreen() {
                       {isSending || isUploadingAttachment ? (
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
-                        <Typography variant="md" color="#FFFFFF" weight="bold">
+                        <Typography variant="sm" color="#FFFFFF" weight="bold">
                           ➤
                         </Typography>
                       )}
@@ -1000,24 +852,94 @@ export default function GroupChatScreen() {
                 </View>
               </View>
             ) : (
-              <View style={styles.joinPromptContainer}>
-                <Typography variant="xs" color={theme.colors.textSecondary} align="center" style={{ marginBottom: 6 }}>
+              <View style={styles.nonMemberBar}>
+                <Typography variant="sm" color={theme.colors.textSecondary} align="center" style={{ marginBottom: 10 }}>
                   {language === 'hi'
-                    ? 'बातचीत में शामिल होने के लिए समूह सदस्य बनना आवश्यक है।'
-                    : 'Join the group to participate in this chat conversation.'}
+                    ? 'संदेश भेजने के लिए समूह में शामिल हों।'
+                    : 'Join this group to participate in the conversation.'}
                 </Typography>
                 <Button
-                  title={language === 'hi' ? 'समूह से जुड़ें (Join Group)' : 'Join Group to Chat'}
+                  title={language === 'hi' ? 'समूह में शामिल हों' : 'Join Group'}
                   onPress={handleJoin}
                   loading={isJoining}
                   variant="primary"
-                  size="sm"
                 />
               </View>
             )}
           </View>
         </View>
       )}
+
+      {/* Modern Group Chat Message Action Sheet */}
+      <ChatMessageActionSheet
+        visible={Boolean(actionSheetMessage)}
+        onClose={() => {
+          setActionSheetMessage(null);
+          setActionTargetGroupMessage(null);
+        }}
+        message={actionSheetMessage}
+        onReact={() => {
+          if (actionTargetGroupMessage) {
+            setReactionTargetMessage(actionTargetGroupMessage);
+          }
+        }}
+        onReply={() => {
+          if (actionTargetGroupMessage) {
+            setReplyingToMessage(actionTargetGroupMessage);
+          }
+        }}
+        onDeleteForMe={() => {
+          if (!actionTargetGroupMessage) return;
+          Alert.alert(
+            language === 'hi' ? 'संदेश हटाएं?' : 'Delete message?',
+            language === 'hi'
+              ? 'यह संदेश केवल आपके लिए हटा दिया जाएगा।'
+              : 'This message will be deleted for you only.',
+            [
+              { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+              {
+                text: language === 'hi' ? 'हटाएं' : 'Delete',
+                style: 'destructive',
+                onPress: () => deleteMessage(actionTargetGroupMessage.id, 'ME'),
+              },
+            ]
+          );
+        }}
+        onDeleteForEveryone={() => {
+          if (!actionTargetGroupMessage) return;
+          Alert.alert(
+            language === 'hi' ? 'सभी के लिए हटाएं?' : 'Delete for Everyone?',
+            language === 'hi'
+              ? 'यह संदेश सभी समूह सदस्यों के लिए हटा दिया जाएगा।'
+              : 'This message will be deleted for all group members.',
+            [
+              { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+              {
+                text: language === 'hi' ? 'सभी के लिए हटाएं' : 'Delete for Everyone',
+                style: 'destructive',
+                onPress: () => deleteMessage(actionTargetGroupMessage.id, 'EVERYONE'),
+              },
+            ]
+          );
+        }}
+        onAdminDelete={() => {
+          if (!actionTargetGroupMessage) return;
+          Alert.alert(
+            language === 'hi' ? 'व्यवस्थापक द्वारा हटाएं?' : 'Admin Delete (Moderation)?',
+            language === 'hi'
+              ? 'समूह व्यवस्थापक के रूप में यह संदेश सभी के लिए हटा दिया जाएगा।'
+              : 'As a group admin, this message will be deleted for all group members.',
+            [
+              { text: language === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+              {
+                text: language === 'hi' ? 'व्यवस्थापक द्वारा हटाएं' : 'Admin Delete',
+                style: 'destructive',
+                onPress: () => deleteMessage(actionTargetGroupMessage.id, 'EVERYONE'),
+              },
+            ]
+          );
+        }}
+      />
 
       {/* Emoji Reaction Selector Modal */}
       <EmojiReactionSelector
@@ -1048,9 +970,9 @@ export default function GroupChatScreen() {
       <ChatMediaGalleryModal
         visible={isGalleryVisible}
         onClose={() => setIsGalleryVisible(false)}
-        title={group?.name || 'Group Media'}
+        title={group?.name || 'Group'}
         onFetchMedia={(type, cursor) =>
-          chatApi.getGroupMediaGallery(group?.id || slug || '', { type, cursor, limit: 30 })
+          chatApi.getGroupMediaGallery(group?.id || '', { type, cursor, limit: 30 })
         }
         onNavigateToMessage={(msgId) => {
           setIsGalleryVisible(false);
@@ -1066,210 +988,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerBar: {
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
     paddingBottom: 10,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginLeft: 6,
-  },
-  headerIconButton: {
-    padding: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
   },
   backButton: {
-    padding: 8,
-    marginRight: 4,
+    padding: 6,
   },
   headerGroupInfo: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  groupHeaderAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    marginRight: 10,
-  },
-  groupHeaderAvatarFallback: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
+    gap: 10,
   },
   headerTextContainer: {
     flex: 1,
   },
-  centerContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  loadingText: {
-    marginTop: 8,
-  },
-  lockCard: {
-    padding: 20,
-    width: '100%',
-    alignItems: 'center',
-  },
-  chatArea: {
-    flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  messageRowWrapper: {
-    marginVertical: 3,
-  },
-  dateSeparatorContainer: {
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  datePill: {
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  bubbleRow: {
-    flexDirection: 'row',
-    marginVertical: 2,
-    maxWidth: '82%',
-  },
-  bubbleRowOwn: {
-    alignSelf: 'flex-end',
-    justifyContent: 'flex-end',
-  },
-  bubbleRowOther: {
-    alignSelf: 'flex-start',
-    justifyContent: 'flex-start',
-  },
-  bubbleColumnOwn: {
-    alignItems: 'flex-end',
-    maxWidth: '100%',
-  },
-  bubbleColumnOther: {
-    alignItems: 'flex-start',
-    maxWidth: '100%',
-  },
-  senderAvatarContainer: {
-    marginRight: 6,
-    alignSelf: 'flex-end',
-    marginBottom: 2,
-  },
-  senderAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-  },
-  senderAvatarFallback: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bubble: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 6,
-    borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-  bubbleOwn: {
-    backgroundColor: '#E1FFC7', // Classic WhatsApp own-message tint
-    borderBottomRightRadius: 2,
-  },
-  bubbleOther: {
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 2,
-  },
-  bubbleError: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#EF4444',
-    borderWidth: 1,
-  },
-  attachmentsWrapper: {
-    marginBottom: 4,
-  },
-  composerWrapper: {
-    width: '100%',
-  },
-  senderName: {
-    marginBottom: 2,
-  },
-  messageContent: {
-    lineHeight: 20,
-  },
-  messageMeta: {
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: 4,
-    alignSelf: 'flex-end',
+    gap: 4,
+    marginLeft: 4,
   },
-  messageTime: {
-    fontSize: 10,
-    marginRight: 4,
-  },
-  statusIndicator: {
-    fontSize: 10,
-  },
-  loadingOlderIndicator: {
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    transform: [{ scaleY: -1 }], // Inverted list correction
-    padding: 32,
-    alignItems: 'center',
-  },
-  composerBar: {
-    borderTopWidth: 1,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  inputPill: {
-    flex: 1,
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
-    maxHeight: 100,
-    marginRight: 8,
-  },
-  textInput: {
-    fontSize: 15,
-    color: '#0F172A',
-    maxHeight: 90,
-  },
-  sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  joinPromptContainer: {
-    alignItems: 'center',
-    paddingVertical: 6,
+  headerIconButton: {
+    padding: 6,
   },
   offlineBanner: {
     backgroundColor: '#FEF3C7',
@@ -1280,13 +1025,147 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  retryButton: {
-    alignSelf: 'flex-end',
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 10,
+  },
+  lockCard: {
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    maxWidth: 320,
+  },
+  chatArea: {
+    flex: 1,
+  },
+  listContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  messageRowWrapper: {
+    marginVertical: 3,
+  },
+  bubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  bubbleRowOwn: {
+    justifyContent: 'flex-end',
+  },
+  bubbleRowOther: {
+    justifyContent: 'flex-start',
+  },
+  senderAvatarContainer: {
+    marginBottom: 4,
+  },
+  bubbleColumnOwn: {
+    alignItems: 'flex-end',
+    maxWidth: '82%',
+  },
+  bubbleColumnOther: {
+    alignItems: 'flex-start',
+    maxWidth: '82%',
+  },
+  bubble: {
+    maxWidth: '84%',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
+    borderRadius: 16,
+    elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 1.5,
+  },
+  bubbleOwn: {
+    backgroundColor: '#E0F2FE', // Unified primary soft blue tint
+    borderBottomRightRadius: 2,
+  },
+  bubbleOther: {
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 2,
+  },
+  bubbleError: {
     backgroundColor: '#FEE2E2',
-    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  senderName: {
+    marginBottom: 2,
+  },
+  attachmentsWrapper: {
+    marginBottom: 4,
+  },
+  messageContent: {
+    lineHeight: 20,
+  },
+  messageMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 4,
+    gap: 2,
+  },
+  messageTime: {
+    fontSize: 10,
+  },
+  retryButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  emptyContainer: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingOlderIndicator: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  composerBar: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  composerWrapper: {
+    gap: 6,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inputPill: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 100,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  textInput: {
+    fontSize: 14,
+    color: '#0F172A',
+    paddingVertical: 8,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nonMemberBar: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
   },
   deletedContainer: {
     flexDirection: 'row',
@@ -1299,4 +1178,3 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
 });
-

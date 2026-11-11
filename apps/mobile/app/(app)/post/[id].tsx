@@ -223,6 +223,43 @@ export default function PostDetailScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* Module Redirection Banners */}
+        {(post.title?.startsWith('[सरकारी') || post.title?.startsWith('[Govt Scheme')) && (
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: '/(app)/government-schemes/[id]',
+                params: { id: post.id },
+              } as any)
+            }
+            style={styles.moduleBannerScheme}
+            accessibilityRole="button"
+            accessibilityLabel="Open dedicated government scheme page"
+          >
+            <Typography variant="xs" weight="bold" color="#0F766E">
+              🏛️ {language === 'hi' ? 'सरकारी योजना विवरण पृष्ठ खोलें (पात्रता, दस्तावेज व लिंक) →' : 'Open Dedicated Scheme Details (Eligibility & Links) →'}
+            </Typography>
+          </Pressable>
+        )}
+
+        {(post.title?.startsWith('[रोजगार') || post.title?.startsWith('[Employment')) && (
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: '/(app)/employment/[id]',
+                params: { id: post.id },
+              } as any)
+            }
+            style={styles.moduleBannerEmployment}
+            accessibilityRole="button"
+            accessibilityLabel="Open dedicated employment page"
+          >
+            <Typography variant="xs" weight="bold" color="#1D4ED8">
+              💼 {language === 'hi' ? 'नौकरी विवरण व आवेदन पृष्ठ खोलें →' : 'Open Dedicated Job Details & Apply →'}
+            </Typography>
+          </Pressable>
+        )}
+
         {/* Full Post Card */}
         <PostCard
           post={post}
@@ -393,6 +430,24 @@ const styles = StyleSheet.create({
   composerBtn: {
     height: 48,
     minWidth: 70,
+  },
+  moduleBannerScheme: {
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  moduleBannerEmployment: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 10,
   },
 });
 

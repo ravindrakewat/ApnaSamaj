@@ -267,6 +267,25 @@ export default function LoginScreen() {
             }
           />
 
+          {/* Forgot Password Action Link */}
+          <View style={styles.forgotPasswordRow}>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: '/(auth)/forgot-password',
+                  params: { slug: slug.trim().toLowerCase() },
+                } as any)
+              }
+              hitSlop={8}
+              accessibilityRole="link"
+              accessibilityLabel={language === 'hi' ? 'पासवर्ड भूल गए?' : 'Forgot Password?'}
+            >
+              <Typography variant="xs" weight="bold" color={theme.colors.primary}>
+                {language === 'hi' ? 'पासवर्ड भूल गए? (Forgot Password?)' : 'Forgot Password?'}
+              </Typography>
+            </Pressable>
+          </View>
+
           {/* Submit Button */}
           <Button
             title={t('auth:loginButton')}
@@ -397,6 +416,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 6,
+  },
+  forgotPasswordRow: {
+    alignItems: 'flex-end',
+    marginBottom: 12,
+    marginTop: -4,
   },
   submitBtn: {
     marginTop: 8,

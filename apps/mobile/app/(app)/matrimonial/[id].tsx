@@ -320,6 +320,21 @@ export default function MatrimonialProfileDetailScreen() {
         showLanguageSwitcher={true}
         language={language}
         onLanguageToggle={toggleLanguage}
+        rightAccessory={
+          profile.userId === user?.id ? (
+            <Pressable
+              onPress={() => router.push('/(app)/matrimonial/manage' as any)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={language === 'hi' ? 'संपादित करें' : 'Edit Profile'}
+              style={styles.editProfileHeaderBtn}
+            >
+              <Typography variant="xs" weight="bold" color="#1976D2">
+                ✏️ {language === 'hi' ? 'संपादित करें' : 'Edit'}
+              </Typography>
+            </Pressable>
+          ) : undefined
+        }
       />
 
       <ScrollView
@@ -877,6 +892,14 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  editProfileHeaderBtn: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
   loadingScreen: {
     flex: 1,

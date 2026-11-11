@@ -80,6 +80,20 @@ async function runAll() {
   await runAuthUiTests();
   const { runNavigationBottomSheetTests } = await import('./navigation-bottom-sheet.test');
   await runNavigationBottomSheetTests();
+  const { runChatUiTests } = await import('./chat-ui.test');
+  await runChatUiTests();
+  const { runMatrimonialProfileManagementTests } = await import('./matrimonial-profile-management.test');
+  await runMatrimonialProfileManagementTests();
+  const { runEmploymentFlowTests } = await import('./employment-flow.test');
+  await runEmploymentFlowTests();
+  const { runGovernmentSchemesFlowTests } = await import('./government-schemes-flow.test');
+  await runGovernmentSchemesFlowTests();
+  const { runPasswordRecoveryFlowTests } = await import('./password-recovery-flow.test');
+  await runPasswordRecoveryFlowTests();
+  const { runNotificationsFlowTests } = await import('./notifications-flow.test');
+  await runNotificationsFlowTests();
+  const { runMatrimonialNavigationFixTests } = await import('./matrimonial-navigation-fix.test');
+  await runMatrimonialNavigationFixTests();
 }
 
 runAll()
