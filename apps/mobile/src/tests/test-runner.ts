@@ -94,6 +94,8 @@ async function runAll() {
   await runNotificationsFlowTests();
   const { runMatrimonialNavigationFixTests } = await import('./matrimonial-navigation-fix.test');
   await runMatrimonialNavigationFixTests();
+  const { runYouTubeChatPreviewTests } = await import('./youtube-chat-preview.test');
+  await runYouTubeChatPreviewTests();
 }
 
 runAll()

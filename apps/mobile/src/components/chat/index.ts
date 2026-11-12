@@ -18,3 +18,4 @@ export * from './ChatConversationCard';
 export * from './ChatDateSeparator';
 export * from './ChatMessageStatus';
 export * from './ChatMessageActionSheet';
+export * from './YouTubeLinkPreview';

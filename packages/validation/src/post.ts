@@ -132,6 +132,12 @@ export function parseYouTubeUrl(rawUrl: string): ParsedYouTubeVideo | null {
       if (pathnameParts.length >= 2 && pathnameParts[0] === 'shorts') {
         candidateId = pathnameParts[1];
       }
+    } else if (parsed.pathname.startsWith('/live/')) {
+      // Format: https://www.youtube.com/live/VIDEO_ID
+      const pathnameParts = parsed.pathname.split('/').filter(Boolean);
+      if (pathnameParts.length >= 2 && pathnameParts[0] === 'live') {
+        candidateId = pathnameParts[1];
+      }
     } else if (parsed.pathname.startsWith('/embed/')) {
       // Format: https://www.youtube.com/embed/VIDEO_ID
       const pathnameParts = parsed.pathname.split('/').filter(Boolean);

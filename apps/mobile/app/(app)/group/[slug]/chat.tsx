@@ -45,7 +45,9 @@ import {
   ChatMessageStatus,
   ChatMessageActionSheet,
   ChatActionMessageInfo,
+  YouTubeLinkPreview,
 } from '../../../../src/components';
+import { findFirstYouTubeLink } from '../../../../src/utils/youtube-link';
 import { useTheme } from '../../../../src/hooks/useTheme';
 import { useLocalization } from '../../../../src/hooks/useLocalization';
 import { useAuth } from '../../../../src/hooks/useAuth';
@@ -415,6 +417,8 @@ export default function GroupChatScreen() {
       item.isDeletedForEveryone || item.content === DELETED_CHAT_MESSAGE_PLACEHOLDER
     );
 
+    const youtubeLink = !isDeleted && item.content ? findFirstYouTubeLink(item.content) : null;
+
     const isSender = item.senderId === user?.id;
     const messageAgeMs = Date.now() - new Date(item.createdAt).getTime();
     const canDeleteForEveryone = isSender && messageAgeMs <= 60 * 60 * 1000;
@@ -515,6 +519,14 @@ export default function GroupChatScreen() {
                         return <ChatDocumentMessage key={att.id} attachment={att} />;
                       })}
                     </View>
+                  )}
+
+                  {/* YouTube Link Preview Card */}
+                  {youtubeLink && (
+                    <YouTubeLinkPreview
+                      youtubeLink={youtubeLink}
+                      isOwn={isOwn}
+                    />
                   )}
 
                   {/* Message Body (only rendered if non-empty content exists) */}

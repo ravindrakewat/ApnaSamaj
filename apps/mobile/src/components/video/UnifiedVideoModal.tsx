@@ -8,6 +8,8 @@ import {
   Platform,
   StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { PostMediaItem } from '@apnasamaj/shared-types';
 import { Typography } from '../Typography';
 import { Badge } from '../Badge';
@@ -34,6 +36,7 @@ export const UnifiedVideoModal: React.FC<UnifiedVideoModalProps> = ({
   onClose,
 }) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { language } = useLocalization();
   const isHindi = language === 'hi';
 
@@ -129,6 +132,37 @@ export const UnifiedVideoModal: React.FC<UnifiedVideoModalProps> = ({
                 <Typography variant="md" weight="bold" color={theme.colors.textMuted}>
                   ✕
                 </Typography>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Floating Controls Overlay (Fullscreen mode) */}
+          {isFullscreen && (
+            <View
+              style={[
+                styles.floatingFullscreenHeader,
+                { top: Math.max(insets.top + 8, 16) },
+              ]}
+              pointerEvents="box-none"
+            >
+              <Pressable
+                onPress={toggleFullscreen}
+                style={styles.floatingActionBtn}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel={isHindi ? 'फुलस्क्रीन से बाहर निकलें' : 'Exit fullscreen'}
+              >
+                <Ionicons name="contract-outline" size={20} color="#FFFFFF" />
+              </Pressable>
+
+              <Pressable
+                onPress={onClose}
+                style={styles.floatingActionBtn}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel={isHindi ? 'वीडियो बंद करें' : 'Close video'}
+              >
+                <Ionicons name="close" size={22} color="#FFFFFF" />
               </Pressable>
             </View>
           )}
@@ -266,6 +300,25 @@ const styles = StyleSheet.create({
   },
   closeActionBtn: {
     minWidth: 80,
+  },
+  floatingFullscreenHeader: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 99,
+  },
+  floatingActionBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(0, 0, 0, 0.68)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
