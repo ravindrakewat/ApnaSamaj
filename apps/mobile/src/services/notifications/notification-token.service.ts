@@ -150,3 +150,60 @@ export async function unregisterPushTokenOnLogout(): Promise<void> {
     console.warn('[Notification Service] Token deactivation on logout failed (suppressed):', err);
   }
 }
+
+/**
+ * Subscribes to runtime push token refresh events from the OS or Firebase.
+ * Automatically updates and re-registers the new token with the backend.
+ */
+export function setupPushTokenRefreshListener(): () => void {
+  if (Platform.OS === 'web') {
+    return () => {};
+  }
+
+  try {
+    const subscription = Notifications.addPushTokenListener(async (tokenIdentifier) => {
+      const newToken = tokenIdentifier.data;
+      if (newToken && typeof newToken === 'string' && newToken !== sessionRegisteredToken) {
+        console.info('[Notification Service] Push token refreshed by OS/FCM. Re-registering with backend...');
+        try {
+          const platform: DevicePlatform = Platform.OS === 'ios' ? 'IOS' : 'ANDROID';
+          const tokenType: PushTokenType =
+            Platform.OS === 'ios' && newToken.length === 64 ? 'APNS' : 'FCM';
+
+          await notificationsApi.registerDeviceToken({
+            token: newToken,
+            platform,
+            tokenType,
+          });
+
+          sessionRegisteredToken = newToken;
+          await setSecureItem(STORED_DEVICE_TOKEN_KEY, newToken);
+        } catch (err) {
+          console.warn('[Notification Service] Failed to register refreshed push token:', err);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  } catch (err) {
+    console.warn('[Notification Service] Failed to setup push token refresh listener:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Retrieves the currently active session-registered push token (useful for inspection/tests).
+ */
+export function getSessionRegisteredToken(): string | null {
+  return sessionRegisteredToken;
+}
+
+/**
+ * Clears session registered token cache for testing.
+ */
+export function clearSessionRegisteredTokenForTesting(): void {
+  sessionRegisteredToken = null;
+}
+

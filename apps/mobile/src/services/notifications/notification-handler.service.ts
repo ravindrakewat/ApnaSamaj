@@ -2,15 +2,81 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { PushNotificationRoutingPayload } from '@apnasamaj/shared-types';
 
+export interface ActiveChatContext {
+  conversationId?: string | null;
+  groupId?: string | null;
+}
+
+let activeChatContext: ActiveChatContext | null = null;
+let pendingNotificationRoute: string | null = null;
+
+export function setActiveChatContext(context: ActiveChatContext | null): void {
+  activeChatContext = context;
+}
+
+export function getActiveChatContext(): ActiveChatContext | null {
+  return activeChatContext;
+}
+
+export function setPendingNotificationRoute(route: string | null): void {
+  pendingNotificationRoute = route;
+}
+
+export function getPendingNotificationRoute(): string | null {
+  return pendingNotificationRoute;
+}
+
+export function consumePendingNotificationRoute(): string | null {
+  const route = pendingNotificationRoute;
+  pendingNotificationRoute = null;
+  return route;
+}
+
 /**
- * Configure default foreground notification behavior.
+ * Determines whether a foreground notification should present an alert banner to the user.
+ * Suppresses alert banners if the user is currently viewing the active conversation
+ * to prevent disruptive duplicate alerts while actively chatting (WhatsApp/Facebook behavior).
+ */
+export function shouldPresentForegroundNotification(
+  notification: Notifications.Notification,
+  context: ActiveChatContext | null = activeChatContext
+): boolean {
+  const data = notification?.request?.content?.data;
+  if (!data) return true;
+
+  // Suppress heads-up banner if currently inside this active direct chat
+  if (
+    context?.conversationId &&
+    data.conversationId &&
+    String(data.conversationId) === String(context.conversationId)
+  ) {
+    return false;
+  }
+
+  // Suppress heads-up banner if currently inside this active group chat
+  if (
+    context?.groupId &&
+    (String(data.groupId) === String(context.groupId) ||
+      String(data.groupSlug) === String(context.groupId))
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Configure default foreground notification behavior with active screen awareness.
  */
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    const shouldPresent = shouldPresentForegroundNotification(notification);
+    return {
+      shouldShowAlert: shouldPresent,
+      shouldPlaySound: shouldPresent,
+      shouldSetBadge: true,
+    };
+  },
 });
 
 /**

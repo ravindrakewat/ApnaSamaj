@@ -19,10 +19,13 @@ import {
   isApnsDeviceToken,
   isFirebaseConfigured,
   resetFirebaseAdminForTesting,
+  setForceMockForTesting,
 } from '../services/firebase.service';
 import { sendDirectMessage } from '../modules/chat/direct-chat.service';
 import { sendChatMessage } from '../modules/chat/chat.service';
 import { sendNotificationSafely } from '../modules/notifications/notifications.service';
+
+setForceMockForTesting(true);
 
 console.log('================================================================');
 console.log('   Apna Samaj — Batch 8.5: FCM Push Notifications Test Suite    ');

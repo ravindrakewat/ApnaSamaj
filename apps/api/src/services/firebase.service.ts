@@ -27,6 +27,11 @@ export interface MulticastPushResult {
 let firebaseAppInstance: admin.app.App | null = null;
 let isConfigured = false;
 let initAttempted = false;
+let forceMockForTesting = false;
+
+export function setForceMockForTesting(enable: boolean): void {
+  forceMockForTesting = enable;
+}
 
 /**
  * Initializes Firebase Admin SDK singleton with service account credentials.
@@ -192,7 +197,7 @@ export async function sendPushNotificationToToken(
   const app = initFirebaseAdmin();
 
   // Mock mode for local dev / tests
-  if (!app || !isConfigured) {
+  if (!app || !isConfigured || forceMockForTesting) {
     return {
       success: true,
       messageId: `mock-fcm-${crypto.randomUUID()}`,
@@ -292,7 +297,7 @@ export async function sendMulticastPushNotification(
   const app = initFirebaseAdmin();
 
   // Mock mode for local dev / tests
-  if (!app || !isConfigured) {
+  if (!app || !isConfigured || forceMockForTesting) {
     return {
       successCount: validTokens.length,
       failureCount: 0,

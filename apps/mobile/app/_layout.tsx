@@ -9,8 +9,11 @@ import { theme } from '../src/theme';
 import {
   setupAndroidNotificationChannels,
   registerPushTokenWithBackend,
+  setupPushTokenRefreshListener,
   setupNotificationListeners,
   checkColdStartNotification,
+  consumePendingNotificationRoute,
+  setPendingNotificationRoute,
 } from '../src/services/notifications';
 
 function NavigationGate() {
@@ -35,25 +38,35 @@ function NavigationGate() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // 1. Android channels
+    // 0. Route to any pending notification tapped before authentication was ready
+    const pendingRoute = consumePendingNotificationRoute();
+    if (pendingRoute) {
+      router.push(pendingRoute as any);
+    }
+
+    // 1. Android notification channels
     setupAndroidNotificationChannels().catch(console.warn);
 
-    // 2. FCM device token registration
+    // 2. FCM device token registration with backend
     registerPushTokenWithBackend().catch(console.warn);
 
-    // 3. Notification listeners (foreground & tap)
+    // 3. Runtime token refresh listener (re-registers on FCM rotation)
+    const cleanupRefreshListener = setupPushTokenRefreshListener();
+
+    // 4. Notification listeners (foreground receipt & background/tap interaction)
     const cleanupListeners = setupNotificationListeners({
       onNavigate: (route) => {
         router.push(route as any);
       },
     });
 
-    // 4. Cold start notification tap
+    // 5. Cold start notification tap (when opened from terminated state)
     checkColdStartNotification((route) => {
       router.push(route as any);
     }).catch(console.warn);
 
     return () => {
+      cleanupRefreshListener();
       cleanupListeners();
     };
   }, [isAuthenticated, router]);

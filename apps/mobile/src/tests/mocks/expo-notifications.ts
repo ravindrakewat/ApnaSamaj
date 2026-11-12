@@ -2,6 +2,7 @@ let mockToken = 'mock-fcm-native-token-abc123xyz';
 let mockTokenType = 'fcm';
 let mockPermissionStatus = 'granted';
 let lastResponse: any = null;
+let pushTokenListeners: Array<(identifier: { data: string; type: string }) => void> = [];
 
 export const AndroidImportance = {
   MAX: 5,
@@ -43,11 +44,27 @@ export const addNotificationResponseReceivedListener = (callback: any) => ({
   remove: () => {},
 });
 
+export const addPushTokenListener = (listener: any) => {
+  pushTokenListeners.push(listener);
+  return {
+    remove: () => {
+      pushTokenListeners = pushTokenListeners.filter((l) => l !== listener);
+    },
+  };
+};
+
 export const getLastNotificationResponseAsync = async () => lastResponse;
 
 // Helpers for unit test manipulation
 export const __setMockPushToken = (token: string) => {
   mockToken = token;
+};
+
+export const __triggerPushTokenRefresh = async (newToken: string, type: string = 'fcm') => {
+  mockToken = newToken;
+  for (const listener of pushTokenListeners) {
+    await listener({ data: newToken, type });
+  }
 };
 
 export const __setMockDeviceTokenType = (type: string) => {

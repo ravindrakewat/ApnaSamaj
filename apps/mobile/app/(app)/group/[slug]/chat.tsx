@@ -55,6 +55,7 @@ import { groupsApi } from '../../../../src/api/groups.api';
 import { chatApi } from '../../../../src/api/chat.api';
 import { useGroupChat, ExtendedChatMessage } from '../../../../src/hooks/useGroupChat';
 import { voicePlaybackService, voiceRecordingService, chatPersistenceService } from '../../../../src/services';
+import { setActiveChatContext } from '../../../../src/services/notifications';
 
 export default function GroupChatScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -149,6 +150,17 @@ export default function GroupChatScreen() {
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { communitySlug } = useAuth();
+
+  // Track active group chat screen to suppress duplicate foreground notifications while viewing
+  useEffect(() => {
+    const activeTarget = group?.id || slug;
+    if (activeTarget) {
+      setActiveChatContext({ groupId: activeTarget });
+    }
+    return () => {
+      setActiveChatContext(null);
+    };
+  }, [group?.id, slug]);
 
   // Debounced search over local cache and remote server
   useEffect(() => {

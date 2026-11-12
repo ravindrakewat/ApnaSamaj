@@ -51,6 +51,7 @@ import { useAuth } from '../../../src/hooks/useAuth';
 import { useDirectChat, ExtendedDirectMessage } from '../../../src/hooks/useDirectChat';
 import { chatApi } from '../../../src/api/chat.api';
 import { voicePlaybackService, voiceRecordingService, chatPersistenceService } from '../../../src/services';
+import { setActiveChatContext } from '../../../src/services/notifications';
 
 export default function PersonalChatScreen() {
   const { id: conversationId, name: queryName, avatar: queryAvatar } =
@@ -112,6 +113,16 @@ export default function PersonalChatScreen() {
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { communitySlug } = useAuth();
+
+  // Track active direct chat screen to suppress duplicate foreground notifications while viewing
+  useEffect(() => {
+    if (conversationId) {
+      setActiveChatContext({ conversationId });
+    }
+    return () => {
+      setActiveChatContext(null);
+    };
+  }, [conversationId]);
 
   // Debounced search over local cache and remote server
   useEffect(() => {
