@@ -94,3 +94,46 @@ export async function deleteNotification(id: string): Promise<void> {
     throw new Error(response.error || 'Failed to delete notification.');
   }
 }
+
+export interface NotificationPreferencesItem {
+  personalMessages: boolean;
+  groupMessages: boolean;
+  matrimonial: boolean;
+  likes: boolean;
+  comments: boolean;
+  announcements: boolean;
+  communityUpdates?: boolean;
+}
+
+/**
+ * Retrieves the current member's notification preferences.
+ */
+export async function fetchNotificationPreferences(): Promise<NotificationPreferencesItem> {
+  const response = await apiFetch<NotificationPreferencesItem>('/api/v1/notifications/preferences', {
+    method: 'GET',
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to fetch notification preferences.');
+  }
+
+  return response.data;
+}
+
+/**
+ * Updates the current member's notification preferences.
+ */
+export async function updateNotificationPreferencesApi(
+  payload: Partial<NotificationPreferencesItem>
+): Promise<NotificationPreferencesItem> {
+  const response = await apiFetch<NotificationPreferencesItem>('/api/v1/notifications/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to update notification preferences.');
+  }
+
+  return response.data;
+}

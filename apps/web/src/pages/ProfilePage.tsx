@@ -19,6 +19,10 @@ import {
   Avatar,
   Card,
   CardContent,
+  LinearProgress,
+  Switch,
+  FormControlLabel,
+  Stack,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
@@ -29,9 +33,15 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import PhoneIcon from '@mui/icons-material/Phone';
 import ShieldIcon from '@mui/icons-material/Shield';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import { CurrentMemberProfile, UserStatus } from '@apnasamaj/shared-types';
 import { updateProfileSchema, UpdateProfileInput } from '@apnasamaj/validation';
 import { getMyProfileApi, updateMyProfileApi, uploadAvatarApi } from '../services/users.service';
+import {
+  fetchNotificationPreferences,
+  updateNotificationPreferencesApi,
+  NotificationPreferencesItem,
+} from '../services/notifications.service';
 import { useAuth } from '../context/AuthContext';
 
 export const ProfilePage: React.FC = () => {
@@ -64,6 +74,54 @@ export const ProfilePage: React.FC = () => {
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  // Notification Preferences State
+  const [notifPreferences, setNotifPreferences] = useState<NotificationPreferencesItem>({
+    personalMessages: true,
+    groupMessages: true,
+    matrimonial: true,
+    likes: true,
+    comments: true,
+    announcements: true,
+  });
+  const [loadingNotifs, setLoadingNotifs] = useState<boolean>(true);
+  const [updatingNotifKey, setUpdatingNotifKey] = useState<string | null>(null);
+
+  const calculateProfileCompletion = () => {
+    if (!profileData?.profile) return { percentage: 20, hint: 'प्रोफ़ाइल विवरण भरें' };
+    const prof = profileData.profile;
+    let score = 0;
+    if (prof.fullName) score += 15;
+    if (prof.avatarUrl) score += 15;
+    if (profileData.isPhoneVerified) score += 15;
+    if (prof.gender) score += 10;
+    if (prof.dateOfBirth) score += 10;
+    if (prof.city || prof.state) score += 15;
+    if (prof.subCaste || prof.gotra) score += 10;
+    if (prof.bio && prof.bio.length > 10) score += 10;
+
+    let hint = '';
+    if (!prof.avatarUrl) hint = 'प्रोफ़ाइल फ़ोटो अपलोड करें (+15%)';
+    else if (!prof.bio) hint = 'अपने बारे में संक्षिप्त परिचय (Bio) लिखें (+10%)';
+    else if (!prof.subCaste || !prof.gotra) hint = 'उप-जाति एवं गोत्र दर्ज करें (+10%)';
+    else if (!prof.city) hint = 'अपना शहर व राज्य जोड़ें (+15%)';
+    else hint = 'आपकी प्रोफ़ाइल पूर्ण एवं सुसज्जित है!';
+
+    return { percentage: Math.min(score, 100), hint };
+  };
+
+  const handleTogglePreference = async (key: keyof NotificationPreferencesItem) => {
+    const updatedVal = !notifPreferences[key];
+    setNotifPreferences((prev) => ({ ...prev, [key]: updatedVal }));
+    setUpdatingNotifKey(key);
+    try {
+      await updateNotificationPreferencesApi({ [key]: updatedVal });
+    } catch {
+      setNotifPreferences((prev) => ({ ...prev, [key]: !updatedVal }));
+    } finally {
+      setUpdatingNotifKey(null);
+    }
+  };
+
   const loadProfile = async () => {
     setIsLoading(true);
     setFetchError(null);
@@ -81,6 +139,11 @@ export const ProfilePage: React.FC = () => {
         subCaste: data.profile?.subCaste || '',
         gotra: data.profile?.gotra || '',
       });
+      // Load notification preferences in parallel
+      fetchNotificationPreferences()
+        .then((prefs) => setNotifPreferences(prefs))
+        .catch(() => {})
+        .finally(() => setLoadingNotifs(false));
     } catch (err: unknown) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load profile.');
     } finally {
@@ -341,6 +404,37 @@ export const ProfilePage: React.FC = () => {
           </Button>
         </Box>
 
+        {/* Profile Completion Progress Bar */}
+        {(() => {
+          const { percentage, hint } = calculateProfileCompletion();
+          return (
+            <Box sx={{ my: 2.5, p: 2, bgcolor: '#f8fafc', borderRadius: 2.5, border: '1px solid #e2e8f0' }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Typography variant="subtitle2" fontWeight={700}>
+                  प्रोफ़ाइल पूर्णता / Profile Completion
+                </Typography>
+                <Chip
+                  label={`${percentage}% पूर्ण`}
+                  size="small"
+                  color={percentage >= 80 ? 'success' : percentage >= 50 ? 'primary' : 'warning'}
+                  sx={{ fontWeight: 700 }}
+                />
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={percentage}
+                color={percentage >= 80 ? 'success' : 'primary'}
+                sx={{ height: 8, borderRadius: 2 }}
+              />
+              {hint && (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  💡 सुझाव: {hint}
+                </Typography>
+              )}
+            </Box>
+          );
+        })()}
+
         <Divider sx={{ my: 2.5 }} />
 
         {/* Profile Information Grid */}
@@ -436,6 +530,171 @@ export const ProfilePage: React.FC = () => {
         </Grid>
       </Paper>
 
+      {/* Notification Preferences Card */}
+      <Paper elevation={2} sx={{ p: { xs: 3, sm: 4 }, borderRadius: 3, mb: 4 }}>
+        <Box display="flex" alignItems="center" gap={1.5} mb={1}>
+          <NotificationsActiveIcon color="primary" sx={{ fontSize: 28 }} />
+          <Typography variant="h6" fontWeight="bold">
+            सूचना प्राथमिकताएं / Notification Preferences
+          </Typography>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          चुनें कि आप किस प्रकार की इन-ऐप व पुश सूचनाएं प्राप्त करना चाहते हैं।
+        </Typography>
+
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}>
+            <Card variant="outlined" sx={{ borderRadius: 2, p: 1.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={notifPreferences.personalMessages}
+                    onChange={() => handleTogglePreference('personalMessages')}
+                    disabled={updatingNotifKey === 'personalMessages'}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      व्यक्तिगत संदेश / Personal Chat
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      नए डायरेक्ट संदेश व उत्तर प्राप्त करें
+                    </Typography>
+                  </Box>
+                }
+                sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+              />
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <Card variant="outlined" sx={{ borderRadius: 2, p: 1.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={notifPreferences.groupMessages}
+                    onChange={() => handleTogglePreference('groupMessages')}
+                    disabled={updatingNotifKey === 'groupMessages'}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      समूह संदेश / Group Chat
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      समूहों में नए संदेशों की सूचना
+                    </Typography>
+                  </Box>
+                }
+                sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+              />
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <Card variant="outlined" sx={{ borderRadius: 2, p: 1.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={notifPreferences.matrimonial}
+                    onChange={() => handleTogglePreference('matrimonial')}
+                    disabled={updatingNotifKey === 'matrimonial'}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      वैवाहिक सूचनाएं / Matrimonial
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      रुचि (Interests) एवं प्रोफाइल सत्यापन
+                    </Typography>
+                  </Box>
+                }
+                sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+              />
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <Card variant="outlined" sx={{ borderRadius: 2, p: 1.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={notifPreferences.likes}
+                    onChange={() => handleTogglePreference('likes')}
+                    disabled={updatingNotifKey === 'likes'}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      पसंद / Post Likes
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      आपकी पोस्ट पर किसी के लाइक करने पर
+                    </Typography>
+                  </Box>
+                }
+                sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+              />
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <Card variant="outlined" sx={{ borderRadius: 2, p: 1.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={notifPreferences.comments}
+                    onChange={() => handleTogglePreference('comments')}
+                    disabled={updatingNotifKey === 'comments'}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      टिप्पणियां / Comments
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      आपकी पोस्ट पर नई टिप्पणियों की सूचना
+                    </Typography>
+                  </Box>
+                }
+                sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+              />
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <Card variant="outlined" sx={{ borderRadius: 2, p: 1.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={notifPreferences.announcements}
+                    onChange={() => handleTogglePreference('announcements')}
+                    disabled={updatingNotifKey === 'announcements'}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      घोषणाएं / Announcements
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      समाज प्रमुखों द्वारा जारी महत्वपूर्ण सूचनाएं
+                    </Typography>
+                  </Box>
+                }
+                sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+              />
+            </Card>
+          </Grid>
+        </Grid>
+      </Paper>
+
       {/* Edit Profile Dialog */}
       <Dialog open={isEditDialogOpen} onClose={handleCloseEdit} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 'bold' }}>Edit Member Profile</DialogTitle>
@@ -464,25 +723,29 @@ export const ProfilePage: React.FC = () => {
                 />
               </Grid>
 
-              {/* Gender */}
+              {/* Gender Chips */}
               <Grid item xs={12} sm={6}>
-                <TextField
-                  select
-                  fullWidth
-                  id="edit-gender"
-                  name="gender"
-                  label="Gender"
-                  value={editForm.gender}
-                  onChange={handleEditChange}
-                  disabled={isSaving}
-                >
-                  <MenuItem value="">
-                    <em>Not specified</em>
-                  </MenuItem>
-                  <MenuItem value="MALE">Male</MenuItem>
-                  <MenuItem value="FEMALE">Female</MenuItem>
-                  <MenuItem value="OTHER">Other</MenuItem>
-                </TextField>
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={0.75}>
+                  लिंग / Gender
+                </Typography>
+                <Stack direction="row" spacing={1}>
+                  {[
+                    { key: 'MALE', label: 'पुरुष / Male' },
+                    { key: 'FEMALE', label: 'महिला / Female' },
+                    { key: 'OTHER', label: 'अन्य / Other' },
+                  ].map((g) => (
+                    <Chip
+                      key={g.key}
+                      label={g.label}
+                      clickable
+                      color={editForm.gender === g.key ? 'primary' : 'default'}
+                      variant={editForm.gender === g.key ? 'filled' : 'outlined'}
+                      onClick={() => setEditForm((prev) => ({ ...prev, gender: g.key }))}
+                      disabled={isSaving}
+                      sx={{ fontWeight: editForm.gender === g.key ? 600 : 400 }}
+                    />
+                  ))}
+                </Stack>
               </Grid>
 
               {/* Date of Birth */}

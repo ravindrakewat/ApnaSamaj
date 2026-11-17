@@ -679,6 +679,21 @@ export const NotificationBell: React.FC = () => {
               </Button>
             </Box>
           )}
+
+          {/* View All Notifications Link */}
+          <Box sx={{ p: 1, textAlign: 'center', borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+            <Button
+              fullWidth
+              size="small"
+              onClick={() => {
+                setAnchorEl(null);
+                navigate('/notifications');
+              }}
+              sx={{ fontSize: '0.8rem', textTransform: 'none', fontWeight: 700 }}
+            >
+              सभी सूचनाएं देखें / View All Notifications
+            </Button>
+          </Box>
         </Box>
       </Popover>
     </>

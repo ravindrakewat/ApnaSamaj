@@ -31,6 +31,12 @@ const MatrimonialProfileDetailPage = lazy(() =>
 );
 const PostDetailPage = lazy(() => import('./pages/PostDetailPage').then((m) => ({ default: m.PostDetailPage })));
 const MyAppealsPage = lazy(() => import('./pages/MyAppealsPage').then((m) => ({ default: m.MyAppealsPage })));
+const ChatPage = lazy(() => import('./pages/ChatPage').then((m) => ({ default: m.ChatPage })));
+const EmploymentPage = lazy(() => import('./pages/EmploymentPage').then((m) => ({ default: m.EmploymentPage })));
+const EmploymentDetailPage = lazy(() => import('./pages/EmploymentDetailPage').then((m) => ({ default: m.EmploymentDetailPage })));
+const GovernmentSchemesPage = lazy(() => import('./pages/GovernmentSchemesPage').then((m) => ({ default: m.GovernmentSchemesPage })));
+const SchemeDetailPage = lazy(() => import('./pages/SchemeDetailPage').then((m) => ({ default: m.SchemeDetailPage })));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 
 const PageFallback: React.FC = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -73,6 +79,54 @@ export const App: React.FC = () => {
                     }
                   />
                   <Route
+                    path="/chat"
+                    element={
+                      <ProtectedRoute>
+                        <ChatPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/chat/:conversationId"
+                    element={
+                      <ProtectedRoute>
+                        <ChatPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/employment"
+                    element={
+                      <ProtectedRoute>
+                        <EmploymentPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/employment/:id"
+                    element={
+                      <ProtectedRoute>
+                        <EmploymentDetailPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/government-schemes"
+                    element={
+                      <ProtectedRoute>
+                        <GovernmentSchemesPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/government-schemes/:id"
+                    element={
+                      <ProtectedRoute>
+                        <SchemeDetailPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
                     path="/posts/:postId"
                     element={
                       <ProtectedRoute>
@@ -85,6 +139,14 @@ export const App: React.FC = () => {
                     element={
                       <ProtectedRoute>
                         <MyAppealsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/notifications"
+                    element={
+                      <ProtectedRoute>
+                        <NotificationsPage />
                       </ProtectedRoute>
                     }
                   />

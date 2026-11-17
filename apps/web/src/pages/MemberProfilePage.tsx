@@ -13,6 +13,8 @@ import {
   Avatar,
   Card,
   CardContent,
+  IconButton,
+  Snackbar,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -25,19 +27,39 @@ import {
   Verified as VerifiedIcon,
   Refresh as RefreshIcon,
   PersonOff as PersonOffIcon,
+  Chat as ChatIcon,
+  Share as ShareIcon,
 } from '@mui/icons-material';
 import { PublicMemberProfile, UserRole } from '@apnasamaj/shared-types';
 import { useTranslation } from '@apnasamaj/i18n';
+import { useAuth } from '../context/AuthContext';
 import { getPublicProfileApi } from '../services/users.service';
+import { createOrGetDirectConversation } from '../services/chat.service';
 
 export const MemberProfilePage: React.FC = () => {
   const { t, i18n } = useTranslation(['directory', 'common']);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [member, setMember] = useState<PublicMemberProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [chatStarting, setChatStarting] = useState<boolean>(false);
+  const [copySuccess, setCopySuccess] = useState<boolean>(false);
+
+  const handleStartChat = async () => {
+    if (!member) return;
+    setChatStarting(true);
+    try {
+      const conv = await createOrGetDirectConversation(member.id);
+      navigate(`/chat/${conv.id}`);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to start conversation.');
+    } finally {
+      setChatStarting(false);
+    }
+  };
 
   const loadMemberProfile = useCallback(async () => {
     if (!id || !id.trim()) {
@@ -235,6 +257,42 @@ export const MemberProfilePage: React.FC = () => {
                 </Box>
               </Box>
             </Box>
+
+            {/* Actions: Chat & Share */}
+            <Box display="flex" alignItems="center" gap={1} mb={{ xs: 1, sm: 0.5 }}>
+              {user && user.id !== member.id && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<ChatIcon />}
+                  onClick={handleStartChat}
+                  disabled={chatStarting}
+                  sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
+                >
+                  {chatStarting ? 'Connecting...' : '💬 व्यक्तिगत संदेश / Message'}
+                </Button>
+              )}
+
+              <IconButton
+                color="primary"
+                title="Share Profile Link"
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({
+                      title: member.fullName,
+                      text: `Check out ${member.fullName}'s profile on Apna Samaj`,
+                      url: window.location.href,
+                    }).catch(() => {});
+                  } else {
+                    navigator.clipboard.writeText(window.location.href);
+                    setCopySuccess(true);
+                  }
+                }}
+                sx={{ border: '1px solid #cbd5e1', borderRadius: 2 }}
+              >
+                <ShareIcon fontSize="small" />
+              </IconButton>
+            </Box>
           </Box>
 
           {/* Member Bio (if present) */}
@@ -347,6 +405,13 @@ export const MemberProfilePage: React.FC = () => {
           </Grid>
         </Box>
       </Paper>
+
+      <Snackbar
+        open={copySuccess}
+        autoHideDuration={3000}
+        onClose={() => setCopySuccess(false)}
+        message="प्रोफ़ाइल लिंक कॉपी हो गया! / Profile link copied to clipboard!"
+      />
     </Container>
   );
 };

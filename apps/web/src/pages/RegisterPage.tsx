@@ -14,10 +14,16 @@ import {
   IconButton,
   CircularProgress,
   Divider,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Chip,
+  Stack,
 } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { registerSchema, RegisterInput } from '@apnasamaj/validation';
 import { useAuth } from '../context/AuthContext';
 
@@ -226,90 +232,121 @@ export const RegisterPage: React.FC = () => {
               />
             </Grid>
 
-            {/* Profile Foundation Details */}
+            {/* Gender Selection Chips */}
             <Grid item xs={12}>
-              <Divider sx={{ my: 1 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Community Profile (Optional)
-                </Typography>
-              </Divider>
+              <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={0.75}>
+                लिंग / Gender (Optional)
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                {[
+                  { key: 'MALE', label: 'पुरुष / Male' },
+                  { key: 'FEMALE', label: 'महिला / Female' },
+                  { key: 'OTHER', label: 'अन्य / Other' },
+                ].map((g) => (
+                  <Chip
+                    key={g.key}
+                    label={g.label}
+                    clickable
+                    color={formData.gender === g.key ? 'primary' : 'default'}
+                    variant={formData.gender === g.key ? 'filled' : 'outlined'}
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        gender: prev.gender === g.key ? '' : g.key,
+                      }))
+                    }
+                    disabled={isSubmitting}
+                    sx={{ fontWeight: formData.gender === g.key ? 600 : 400 }}
+                  />
+                ))}
+              </Stack>
             </Grid>
 
-            {/* Gender */}
-            <Grid item xs={12} sm={6}>
-              <TextField
-                select
-                fullWidth
-                id="gender"
-                name="gender"
-                label="Gender"
-                value={formData.gender}
-                onChange={handleChange}
-                disabled={isSubmitting}
+            {/* Optional Roots Accordion */}
+            <Grid item xs={12}>
+              <Accordion
+                defaultExpanded={false}
+                sx={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px !important',
+                  '&:before': { display: 'none' },
+                  boxShadow: 'none',
+                }}
               >
-                <MenuItem value="">
-                  <em>Not specified</em>
-                </MenuItem>
-                <MenuItem value="MALE">Male</MenuItem>
-                <MenuItem value="FEMALE">Female</MenuItem>
-                <MenuItem value="OTHER">Other</MenuItem>
-              </TextField>
-            </Grid>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      सामुदायिक मूल व विवरण (वैकल्पिक) / Community Roots (Optional)
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      शहर, राज्य, उप-जाति एवं गोत्र जोड़ें
+                    </Typography>
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 1 }}>
+                  <Grid container spacing={2}>
+                    {/* City */}
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        id="city"
+                        name="city"
+                        label="शहर / City"
+                        placeholder="उदा. Bhopal, Indore"
+                        value={formData.city}
+                        onChange={handleChange}
+                        disabled={isSubmitting}
+                      />
+                    </Grid>
 
-            {/* City */}
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                id="city"
-                name="city"
-                label="City"
-                placeholder="e.g. Bhopal"
-                value={formData.city}
-                onChange={handleChange}
-                disabled={isSubmitting}
-              />
-            </Grid>
+                    {/* State */}
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        id="state"
+                        name="state"
+                        label="राज्य / State"
+                        placeholder="उदा. Madhya Pradesh"
+                        value={formData.state}
+                        onChange={handleChange}
+                        disabled={isSubmitting}
+                      />
+                    </Grid>
 
-            {/* State */}
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                id="state"
-                name="state"
-                label="State"
-                placeholder="e.g. Madhya Pradesh"
-                value={formData.state}
-                onChange={handleChange}
-                disabled={isSubmitting}
-              />
-            </Grid>
+                    {/* Sub-Caste */}
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        id="subCaste"
+                        name="subCaste"
+                        label="उप-जाति / Sub-Caste"
+                        placeholder="उदा. Kewat, Kashyap"
+                        value={formData.subCaste}
+                        onChange={handleChange}
+                        disabled={isSubmitting}
+                      />
+                    </Grid>
 
-            {/* Sub-Caste */}
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                id="subCaste"
-                name="subCaste"
-                label="Sub-Caste"
-                placeholder="e.g. Kewat"
-                value={formData.subCaste}
-                onChange={handleChange}
-                disabled={isSubmitting}
-              />
-            </Grid>
-
-            {/* Gotra */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                id="gotra"
-                name="gotra"
-                label="Gotra"
-                placeholder="e.g. Kashyap"
-                value={formData.gotra}
-                onChange={handleChange}
-                disabled={isSubmitting}
-              />
+                    {/* Gotra */}
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        id="gotra"
+                        name="gotra"
+                        label="गोत्र / Gotra"
+                        placeholder="उदा. Kashyap, Bhardwaj"
+                        value={formData.gotra}
+                        onChange={handleChange}
+                        disabled={isSubmitting}
+                      />
+                    </Grid>
+                  </Grid>
+                </AccordionDetails>
+              </Accordion>
             </Grid>
 
             {/* Submit Button */}

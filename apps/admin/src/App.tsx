@@ -10,6 +10,7 @@ import { AdminLayout } from './components/AdminLayout';
 // Route-level code splitting
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const GroupManagementPage = lazy(() => import('./pages/GroupManagementPage').then((m) => ({ default: m.GroupManagementPage })));
 const MemberManagementPage = lazy(() => import('./pages/MemberManagementPage').then((m) => ({ default: m.MemberManagementPage })));
 const ModeratorManagementPage = lazy(() => import('./pages/ModeratorManagementPage').then((m) => ({ default: m.ModeratorManagementPage })));
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage').then((m) => ({ default: m.AuditLogsPage })));
@@ -58,6 +59,14 @@ export const App: React.FC = () => {
                   element={
                     <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN]}>
                       <DashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="groups"
+                  element={
+                    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN]}>
+                      <GroupManagementPage />
                     </ProtectedRoute>
                   }
                 />

@@ -40,6 +40,7 @@ import {
   LocationOn as LocationIcon,
   Person as PersonIcon,
   FileUpload as FileUploadIcon,
+  FileDownload as FileDownloadIcon,
 } from '@mui/icons-material';
 import {
   AdminUserDetails,
@@ -49,6 +50,7 @@ import {
 } from '@apnasamaj/shared-types';
 import { useAuth } from '../context/AuthContext';
 import { BulkImportDialog } from '../components/BulkImportDialog';
+import { generateMemberListCsv, triggerCsvDownload } from '../utils/csv-export';
 import {
   fetchAdminUsers,
   fetchAdminUserDetails,
@@ -213,6 +215,17 @@ export const MemberManagementPage: React.FC = () => {
     }
   };
 
+  const handleExportCsv = () => {
+    if (users.length === 0) {
+      setError('No members available to export.');
+      return;
+    }
+    const csv = generateMemberListCsv(users);
+    const timestamp = new Date().toISOString().slice(0, 10);
+    triggerCsvDownload(csv, `apnasamaj_members_${timestamp}.csv`);
+    setSuccessMessage(`Exported ${users.length} members to CSV.`);
+  };
+
   return (
     <Box>
       {/* Page Title & Controls */}
@@ -227,15 +240,26 @@ export const MemberManagementPage: React.FC = () => {
         </Box>
         <Box display="flex" gap={1.5} flexWrap="wrap">
           {(currentAdmin?.role === UserRole.SUPER_ADMIN || currentAdmin?.role === UserRole.COMMUNITY_ADMIN) && (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<FileUploadIcon />}
-              onClick={() => setIsImportDialogOpen(true)}
-              sx={{ textTransform: 'none' }}
-            >
-              Import Members
-            </Button>
+            <>
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<FileDownloadIcon />}
+                onClick={handleExportCsv}
+                sx={{ textTransform: 'none' }}
+              >
+                Export CSV
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<FileUploadIcon />}
+                onClick={() => setIsImportDialogOpen(true)}
+                sx={{ textTransform: 'none' }}
+              >
+                Import Members
+              </Button>
+            </>
           )}
           <Button
             variant="outlined"

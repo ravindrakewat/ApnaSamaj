@@ -24,10 +24,12 @@ import {
   HourglassEmptyOutlined,
   DynamicFeedOutlined,
   Refresh as RefreshIcon,
+  Campaign as CampaignIcon,
 } from '@mui/icons-material';
 import { AdminMetrics } from '@apnasamaj/shared-types';
 import { useAuth } from '../context/AuthContext';
 import { fetchAdminMetrics } from '../services/admin.metrics.service';
+import { BroadcastNotificationDialog } from '../components/BroadcastNotificationDialog';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -36,6 +38,8 @@ export const DashboardPage: React.FC = () => {
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [broadcastDialogOpen, setBroadcastDialogOpen] = useState<boolean>(false);
+  const [broadcastSuccess, setBroadcastSuccess] = useState<string | null>(null);
 
   const loadMetrics = useCallback(async () => {
     setLoading(true);
@@ -75,13 +79,24 @@ export const DashboardPage: React.FC = () => {
               Apna Samaj Administrative Control Center. Monitor live metrics, manage members, and configure platform settings.
             </Typography>
           </Box>
-          <Chip
-            icon={<VerifiedUserOutlined />}
-            label={`Status: ${user?.status || 'ACTIVE'}`}
-            color={user?.status === 'ACTIVE' ? 'success' : 'warning'}
-            variant="filled"
-            sx={{ fontWeight: 'bold' }}
-          />
+          <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<CampaignIcon />}
+              onClick={() => setBroadcastDialogOpen(true)}
+              sx={{ textTransform: 'none', fontWeight: 'bold' }}
+            >
+              Broadcast Notice / प्रसारण भेजें
+            </Button>
+            <Chip
+              icon={<VerifiedUserOutlined />}
+              label={`Status: ${user?.status || 'ACTIVE'}`}
+              color={user?.status === 'ACTIVE' ? 'success' : 'warning'}
+              variant="filled"
+              sx={{ fontWeight: 'bold' }}
+            />
+          </Box>
         </Box>
 
         <Divider sx={{ my: 3 }} />
@@ -381,6 +396,23 @@ export const DashboardPage: React.FC = () => {
           </Button>
         </Paper>
       </Paper>
+
+      {broadcastSuccess && (
+        <Alert
+          severity="success"
+          sx={{ mb: 3 }}
+          onClose={() => setBroadcastSuccess(null)}
+        >
+          {broadcastSuccess}
+        </Alert>
+      )}
+
+      {/* Community Broadcast Dialog */}
+      <BroadcastNotificationDialog
+        open={broadcastDialogOpen}
+        onClose={() => setBroadcastDialogOpen(false)}
+        onSuccess={(msg) => setBroadcastSuccess(msg)}
+      />
     </Box>
   );
 };

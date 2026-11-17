@@ -226,7 +226,7 @@ export const createPostSchema = z
     groupId: z.string().uuid('Invalid group ID').optional(),
     media: z
       .array(postMediaItemSchema)
-      .max(4, 'A maximum of 4 media attachments can be attached per post')
+      .max(5, 'A maximum of 5 media attachments can be attached per post')
       .optional()
       .default([]),
   })
@@ -284,7 +284,7 @@ export const updatePostSchema = z
     type: postTypeEnum.optional(),
     media: z
       .array(postMediaItemSchema)
-      .max(4, 'A maximum of 4 media attachments can be attached per post')
+      .max(5, 'A maximum of 5 media attachments can be attached per post')
       .optional(),
   })
   .refine(

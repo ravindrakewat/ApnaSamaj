@@ -1,5 +1,6 @@
 import { ApiResponse, RefreshResponseData } from '@apnasamaj/shared-types';
-import { extractCommunitySubdomain } from '@apnasamaj/validation';
+import * as validation from '@apnasamaj/validation';
+const { extractCommunitySubdomain } = validation;
 import { API_BASE_URL } from '../config/api.config';
 
 let inMemoryAccessToken: string | null = null;

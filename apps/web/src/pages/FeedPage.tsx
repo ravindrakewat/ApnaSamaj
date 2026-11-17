@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Container,
   Box,
@@ -22,6 +22,9 @@ import CampaignIcon from '@mui/icons-material/Campaign';
 import EventIcon from '@mui/icons-material/Event';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
+import WorkOutlineIcon from '@mui/icons-material/WorkOutline';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import { PostItem, PostType, FeedPaginationMeta } from '@apnasamaj/shared-types';
 import { useTranslation } from '@apnasamaj/i18n';
 import { getFeedApi } from '../services/posts.service';
@@ -56,6 +59,7 @@ function getPageFromParams(params: URLSearchParams): number {
 export const FeedPage: React.FC = () => {
   const { t } = useTranslation(['feed', 'common']);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // 1. Initial State synchronized with URL parameters
   const [searchTerm, setSearchTerm] = useState<string>(() => getSearchFromParams(searchParams));
@@ -427,6 +431,33 @@ export const FeedPage: React.FC = () => {
                 color={selectedType === PostType.EVENT ? 'info' : 'default'}
                 onClick={() => handleTypeSelect(PostType.EVENT)}
                 sx={{ fontWeight: selectedType === PostType.EVENT ? 600 : 400 }}
+              />
+              <Chip
+                label="रोजगार / Jobs"
+                icon={<WorkOutlineIcon fontSize="small" />}
+                clickable
+                variant="outlined"
+                color="primary"
+                onClick={() => navigate('/employment')}
+                sx={{ fontWeight: 500 }}
+              />
+              <Chip
+                label="सरकारी योजनाएं / Schemes"
+                icon={<AccountBalanceIcon fontSize="small" />}
+                clickable
+                variant="outlined"
+                color="primary"
+                onClick={() => navigate('/government-schemes')}
+                sx={{ fontWeight: 500 }}
+              />
+              <Chip
+                label="वैवाहिक / Matrimonial"
+                icon={<FavoriteIcon fontSize="small" />}
+                clickable
+                variant="outlined"
+                color="secondary"
+                onClick={() => navigate('/matrimonial')}
+                sx={{ fontWeight: 500 }}
               />
             </Stack>
 

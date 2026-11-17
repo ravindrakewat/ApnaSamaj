@@ -41,6 +41,8 @@ import {
   Flag as FlagIcon,
   InfoOutlined as InfoIcon,
   Lock as LockIcon,
+  WorkOutline as WorkOutlineIcon,
+  AccountBalance as AccountBalanceIcon,
 } from '@mui/icons-material';
 import {
   ModerationQueueItem,
@@ -81,6 +83,26 @@ export const ModerationQueuePage: React.FC = () => {
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
   const [statusTab, setStatusTab] = useState<'ALL' | 'PENDING' | 'DISMISSED' | 'ACTIONED'>('PENDING');
   const [selectedReason, setSelectedReason] = useState<string>('ALL');
+  const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'EMPLOYMENT' | 'SCHEMES' | 'GENERAL'>('ALL');
+
+  const displayedReports = reports.filter((item) => {
+    if (selectedCategory === 'ALL') return true;
+    const content = `${item.post?.title || ''} ${item.post?.content || ''}`.toLowerCase();
+    const isEmployment =
+      content.includes('[रोजगार') ||
+      content.includes('रोजगार') ||
+      content.includes('employment') ||
+      content.includes('job');
+    const isScheme =
+      content.includes('[सरकारी योजना') ||
+      content.includes('सरकारी योजना') ||
+      content.includes('scheme');
+
+    if (selectedCategory === 'EMPLOYMENT') return isEmployment;
+    if (selectedCategory === 'SCHEMES') return isScheme;
+    if (selectedCategory === 'GENERAL') return !isEmployment && !isScheme;
+    return true;
+  });
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -349,6 +371,48 @@ export const ModerationQueuePage: React.FC = () => {
             </TextField>
           </Box>
         </Box>
+
+        {/* Specialized Content Filters */}
+        <Divider />
+        <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold', mr: 0.5 }}>
+            Content Specialization:
+          </Typography>
+          <Chip
+            size="small"
+            label="All Content / सभी"
+            clickable
+            color={selectedCategory === 'ALL' ? 'primary' : 'default'}
+            variant={selectedCategory === 'ALL' ? 'filled' : 'outlined'}
+            onClick={() => setSelectedCategory('ALL')}
+          />
+          <Chip
+            size="small"
+            icon={<WorkOutlineIcon fontSize="small" />}
+            label="रोजगार / Employment"
+            clickable
+            color={selectedCategory === 'EMPLOYMENT' ? 'primary' : 'default'}
+            variant={selectedCategory === 'EMPLOYMENT' ? 'filled' : 'outlined'}
+            onClick={() => setSelectedCategory('EMPLOYMENT')}
+          />
+          <Chip
+            size="small"
+            icon={<AccountBalanceIcon fontSize="small" />}
+            label="सरकारी योजनाएं / Schemes"
+            clickable
+            color={selectedCategory === 'SCHEMES' ? 'success' : 'default'}
+            variant={selectedCategory === 'SCHEMES' ? 'filled' : 'outlined'}
+            onClick={() => setSelectedCategory('SCHEMES')}
+          />
+          <Chip
+            size="small"
+            label="General Discussions"
+            clickable
+            color={selectedCategory === 'GENERAL' ? 'secondary' : 'default'}
+            variant={selectedCategory === 'GENERAL' ? 'filled' : 'outlined'}
+            onClick={() => setSelectedCategory('GENERAL')}
+          />
+        </Box>
       </Paper>
 
       {/* Queue Content */}
@@ -356,7 +420,7 @@ export const ModerationQueuePage: React.FC = () => {
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
           <CircularProgress color="secondary" size={44} />
         </Box>
-      ) : reports.length === 0 ? (
+      ) : displayedReports.length === 0 ? (
         <Paper sx={{ p: 6, textAlign: 'center', borderRadius: 2 }}>
           <ShieldIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 1.5 }} />
           <Typography variant="h6" color="text.secondary">
@@ -370,7 +434,7 @@ export const ModerationQueuePage: React.FC = () => {
         </Paper>
       ) : (
         <Stack spacing={2.5}>
-          {reports.map((item) => (
+          {displayedReports.map((item) => (
             <Card
               key={item.id}
               sx={{
@@ -391,6 +455,24 @@ export const ModerationQueuePage: React.FC = () => {
                       icon={<FlagIcon />}
                     />
                     {getStatusChip(item.status)}
+                    {item.post?.content &&
+                      (item.post.content.includes('[रोजगार') || item.post.content.toLowerCase().includes('job')) && (
+                        <Chip
+                          label="रोजगार / Employment"
+                          color="primary"
+                          size="small"
+                          icon={<WorkOutlineIcon />}
+                        />
+                      )}
+                    {item.post?.content &&
+                      (item.post.content.includes('[सरकारी योजना') || item.post.content.toLowerCase().includes('scheme')) && (
+                        <Chip
+                          label="सरकारी योजना / Govt Scheme"
+                          color="success"
+                          size="small"
+                          icon={<AccountBalanceIcon />}
+                        />
+                      )}
                     {item.advisoryFlags && item.advisoryFlags.length > 0 && (
                       <Chip
                         label={`Advisory Alert: ${item.advisoryFlags.join(', ')}`}

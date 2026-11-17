@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Paper,
   Box,
@@ -36,6 +36,7 @@ import {
 } from '@apnasamaj/validation';
 import { useTranslation } from '@apnasamaj/i18n';
 import { createPostApi, uploadPostMediaApi, uploadPostVideoApi } from '../services/posts.service';
+import { fetchGroups } from '../services/groups.service';
 import { useAuth } from '../context/AuthContext';
 
 
@@ -81,7 +82,8 @@ interface CreatePostComposerProps {
   onPostCreated: (post: PostItem) => void;
 }
 
-const MAX_IMAGES = 4;
+const MAX_IMAGES = 5;
+const MAX_TOTAL_MEDIA = 5;
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
@@ -104,6 +106,22 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
   const [attachedYoutubeVideo, setAttachedYoutubeVideo] = useState<ParsedYouTubeVideo | null>(null);
   const [youtubeInputError, setYoutubeInputError] = useState<string | null>(null);
+
+  // Group targeted posting selector state
+  const [targetGroupId, setTargetGroupId] = useState<string>(groupId || '');
+  const [availableGroups, setAvailableGroups] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (!groupId) {
+      fetchGroups({ limit: 50 })
+        .then((res) => {
+          if (res?.groups) {
+            setAvailableGroups(res.groups.map((g) => ({ id: g.id, name: g.name })));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [groupId]);
 
   const isAdminOrMod =
     user?.role === UserRole.SUPER_ADMIN ||
@@ -158,7 +176,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       return;
     }
 
-    if (mediaList.length >= 4) {
+    if (mediaList.length >= MAX_TOTAL_MEDIA) {
       setErrorMessage(t('composerVideoDisabledTooltip'));
       return;
     }
@@ -382,8 +400,8 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       });
     }
 
-    if (validMedia.length > 4) {
-      setErrorMessage('You can attach a maximum of 4 media items per post.');
+    if (validMedia.length > MAX_TOTAL_MEDIA) {
+      setErrorMessage(`You can attach a maximum of ${MAX_TOTAL_MEDIA} media items per post.`);
       return;
     }
 
@@ -397,11 +415,13 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       return;
     }
 
+    const effectiveGroupId = groupId || targetGroupId || undefined;
+
     const validation = createPostSchema.safeParse({
       title: title.trim() || undefined,
       content: content.trim(),
       type: postType,
-      groupId: groupId || undefined,
+      groupId: effectiveGroupId,
       media: validMedia,
     });
 
@@ -426,6 +446,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       setYoutubeUrlInput('');
       setYoutubeInputOpen(false);
       setYoutubeInputError(null);
+      setTargetGroupId(groupId || '');
       onPostCreated(created);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : t('publishPostFailed'));
@@ -473,6 +494,39 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       )}
 
       <Box component="form" onSubmit={handleSubmit} noValidate>
+        {/* Target Destination / Group Selector */}
+        {!groupId && availableGroups.length > 0 && (
+          <Box mb={2}>
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="लक्ष्य दर्शक / Target Destination"
+              value={targetGroupId}
+              onChange={(e) => setTargetGroupId(e.target.value)}
+              disabled={isSubmitting}
+              helperText="सार्वजनिक फ़ीड या विशिष्ट समूह में पोस्ट करें / Post to Public Community Feed or a specific group"
+            >
+              <MenuItem value="">
+                <Box display="flex" alignItems="center" gap={1}>
+                  <span>🌐</span>
+                  <Typography variant="body2" fontWeight={600}>
+                    सार्वजनिक फ़ीड (सभी के लिए) / Public Feed
+                  </Typography>
+                </Box>
+              </MenuItem>
+              {availableGroups.map((grp) => (
+                <MenuItem key={grp.id} value={grp.id}>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <span>👥</span>
+                    <Typography variant="body2">{grp.name}</Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
+        )}
+
         <TextField
           fullWidth
           size="small"
@@ -816,6 +870,25 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
 
+                {/* Photo Sequence Badge */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 4,
+                    left: 4,
+                    bgcolor: 'rgba(0,0,0,0.7)',
+                    color: 'white',
+                    borderRadius: 1,
+                    px: 0.6,
+                    py: 0.2,
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    lineHeight: 1,
+                  }}
+                >
+                  #{index + 1}
+                </Box>
+
                 {item.isUploading && (
                   <Box
                     sx={{
@@ -924,7 +997,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
                   size="small"
                   startIcon={<AddPhotoAlternateIcon />}
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isSubmitting || mediaList.length >= MAX_IMAGES || (mediaList.length + (attachedVideo || attachedYoutubeVideo ? 1 : 0) >= 4)}
+                  disabled={isSubmitting || mediaList.length >= MAX_IMAGES || (mediaList.length + (attachedVideo || attachedYoutubeVideo ? 1 : 0) >= MAX_TOTAL_MEDIA)}
                   sx={{ borderRadius: 2 }}
                 >
                   {t('composerPhoto', { current: mediaList.length, max: MAX_IMAGES })}
@@ -947,7 +1020,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
               title={
                 attachedVideo
                   ? t('composerVideoAttachedTooltip')
-                  : attachedYoutubeVideo || mediaList.length >= 4
+                  : attachedYoutubeVideo || mediaList.length >= MAX_TOTAL_MEDIA
                   ? t('composerVideoDisabledTooltip')
                   : t('composerVideoTooltip')
               }
@@ -959,7 +1032,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
                   size="small"
                   startIcon={<VideocamIcon />}
                   onClick={() => videoFileInputRef.current?.click()}
-                  disabled={isSubmitting || !!attachedVideo || !!attachedYoutubeVideo || mediaList.length >= 4}
+                  disabled={isSubmitting || !!attachedVideo || !!attachedYoutubeVideo || mediaList.length >= MAX_TOTAL_MEDIA}
                   sx={{ borderRadius: 2 }}
                 >
                   {attachedVideo ? t('composerVideoAttached') : t('composerVideo')}

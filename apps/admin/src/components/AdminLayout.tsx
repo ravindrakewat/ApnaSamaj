@@ -34,6 +34,7 @@ import {
   Shield as ShieldIcon,
   Assessment as AssessmentIcon,
   Gavel as GavelIcon,
+  Groups as GroupsIcon,
 } from '@mui/icons-material';
 import { UserRole } from '@apnasamaj/shared-types';
 import { useAuth } from '../context/AuthContext';
@@ -84,6 +85,7 @@ export const AdminLayout: React.FC = () => {
 
   const allNavItems = [
     { text: 'Dashboard', path: '/', icon: <DashboardIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
+    { text: 'Group Governance', path: '/groups', icon: <GroupsIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
     { text: 'Member Management', path: '/members', icon: <PeopleIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
     { text: 'Moderator Management', path: '/moderators', icon: <AdminPanelSettings />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN] },
     { text: 'Moderation Queue', path: '/moderation', icon: <ShieldIcon />, roles: [UserRole.SUPER_ADMIN, UserRole.COMMUNITY_ADMIN, UserRole.MODERATOR] },

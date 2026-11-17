@@ -1,4 +1,8 @@
-import { BulkImportPreviewSummary, BulkImportRowError } from '@apnasamaj/shared-types';
+import {
+  BulkImportPreviewSummary,
+  BulkImportRowError,
+  AdminUserListItem,
+} from '@apnasamaj/shared-types';
 
 /**
  * Sanitizes a string value to protect against CSV / Spreadsheet formula injection.
@@ -94,10 +98,52 @@ export function generateImportErrorReportCsv(
 }
 
 /**
- * Initiates a browser download for generated CSV text content.
+ * Generates an RFC-4180 compliant CSV export for community member records.
+ * Ensures zero sensitive data exposure (no passwords, reset tokens, or private secrets).
+ */
+export function generateMemberListCsv(members: AdminUserListItem[]): string {
+  const headers = [
+    'Member Name',
+    'Mobile Number',
+    'Role',
+    'Status',
+    'Phone Verified',
+    'Gender',
+    'City',
+    'State',
+    'Sub-Caste',
+    'Gotra',
+    'Joined Date',
+  ];
+
+  const rows = members.map((m) => [
+    m.profile?.fullName || '',
+    m.phone || '',
+    m.role || '',
+    m.status || '',
+    m.isPhoneVerified ? 'Yes' : 'No',
+    m.profile?.gender || '',
+    m.profile?.city || '',
+    m.profile?.state || '',
+    m.profile?.subCaste || '',
+    m.profile?.gotra || '',
+    m.createdAt ? new Date(m.createdAt).toLocaleDateString() : '',
+  ]);
+
+  const csvLines = [
+    headers.map(sanitizeCsvCell).join(','),
+    ...rows.map((row) => row.map(sanitizeCsvCell).join(',')),
+  ];
+
+  return csvLines.join('\r\n');
+}
+
+/**
+ * Initiates a browser download for generated CSV text content with UTF-8 BOM.
  */
 export function triggerCsvDownload(csvContent: string, filename: string): void {
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  // \uFEFF UTF-8 BOM ensures Hindi and special unicode characters open cleanly in Excel
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
