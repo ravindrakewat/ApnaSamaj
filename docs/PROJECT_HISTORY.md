@@ -73,11 +73,14 @@ The following milestone checkpoint commits have been independently inspected in 
 | `f824592` | `f824592910344a61d423c6d82741f55528a0627c` | `feat(mobile): add chat search and media gallery` | Batch 8.9 Chat Search & Media Gallery | **Confirmed** | **Confirmed (Pushed)** |
 | `9b3997f` | `9b3997f820649a00fe10bd4eee7bb51807868d9a` | `feat(mobile): add chat search and media gallery` | Batch 8.9 Follow-up Sync | **Confirmed** | **Confirmed (Pushed)** |
 | `886cb64` | `886cb643e086b23c05d046773e49f6bc1fc70bc7` | `fix(chat): resolve web attachment upload, local media preview streaming, and EAS config` | Web Upload, Local Media Preview, Expo Fonts & EAS Build Fix | **Confirmed** | **Confirmed (Pushed)** |
+| `cab1e79` | `cab1e79ceee76d33aa384e5ff07dd6eeb6f1ee18` | `feat(mobile): add whatsapp-style youtube video link previews in chat and fullscreen exit controls` | Batch 10.3.1 YouTube Chat Preview & Video Controls | **Confirmed** | **Confirmed (Pushed)** |
+| `26de7a2` | `26de7a25af628225cc77fa3359c5211553ddb487` | `docs: record batch 10.3.1 push in project history` | Batch 10.3.1 Checkpoint Commit | **Confirmed** | **Confirmed (Pushed)** |
 | `9761a65` | `9761a65fa5f8b6dc83b9032d0a1ddc6b90e7ddb4` | `chore: sync complete Apna Samaj monorepo for multi-system development` | Batch 10.3.2 Real FCM Push Notifications & Multi-System Checkpoint | **Confirmed** | **Confirmed (Pushed)** |
+| `8f5ec42` | `8f5ec429e74b442fd8b5c9bc3238f496c9e55663` | `docs: record multi-system sync checkpoint commit in project history` | Multi-System Sync Checkpoint | **Confirmed** | **Confirmed (Pushed)** |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current Feature/Fix Commit:** `9761a65fa5f8b6dc83b9032d0a1ddc6b90e7ddb4` (`9761a65`)
+- **Current Feature/Fix Commit:** `8f5ec429e74b442fd8b5c9bc3238f496c9e55663` (`8f5ec42`)
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
 - **Upstream Sync Status:** Synchronized. `main` is up to date with `origin/main`.
 
@@ -272,10 +275,10 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Latest Push Commit:** `9761a65fa5f8b6dc83b9032d0a1ddc6b90e7ddb4` (`9761a65`)
-- **Upstream Tracking:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`) — Synchronized at `9761a65`
-- **Actual Working Tree State:** Clean working tree. Batch 10.3.2 and environment setup templates committed and pushed to `origin/main`.
-- **Latest Completed Batch:** **Batch 10.3.2 (Mobile Track) — Complete Real Mobile Push Notifications (FCM)**.
+- **Latest Push Commit:** `8f5ec429e74b442fd8b5c9bc3238f496c9e55663` (`8f5ec42`)
+- **Upstream Tracking:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`) — Synchronized at `8f5ec42`
+- **Actual Working Tree State:** Clean working tree. EAS preview APK build configuration and app.json googleServicesFile cleanup committed and pushed.
+- **Latest Completed Batch:** **Batch 10.3.2 (Mobile Track) — Complete Real Mobile Push Notifications (FCM) & EAS APK Configuration**.
 - **Current In-Progress Batch:** Completed. Awaiting next user instruction.
 - **Exact Next Recommended Batch:** **Batch 10.3.3 (Mobile Track) — Mobile Media & Image Caching Optimization**.
 
