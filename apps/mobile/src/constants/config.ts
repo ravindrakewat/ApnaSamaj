@@ -8,7 +8,8 @@ import Constants from 'expo-constants';
 function resolveDefaultApiBaseUrl(): string {
   // 1. Explicit environment variable override
   if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+    const configured = process.env.EXPO_PUBLIC_API_URL.trim().replace(/\/+$/, '');
+    return configured.endsWith('/api/v1') ? configured : `${configured}/api/v1`;
   }
 
   // 2. Physical Android / iOS device over LAN via Expo Go
@@ -21,12 +22,18 @@ function resolveDefaultApiBaseUrl(): string {
     }
   }
 
-  // 3. Android Emulator fallback (maps to host loopback 127.0.0.1)
+  // 3. Standalone production / release build fallback (when not running in local dev Metro server)
+  const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production';
+  if (!isDev) {
+    return 'https://api.samaz.in/api/v1';
+  }
+
+  // 4. Android Emulator fallback in local development (maps to host loopback 127.0.0.1)
   if (Platform.OS === 'android') {
     return 'http://10.0.2.2:4000/api/v1';
   }
 
-  // 4. iOS Simulator / Web fallback
+  // 5. iOS Simulator / Web fallback in local development
   return 'http://localhost:4000/api/v1';
 }
 

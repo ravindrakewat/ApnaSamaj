@@ -13,13 +13,17 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://apnasamaj-api.onrender.com/api/v1",
+        "EXPO_PUBLIC_API_URL": "https://api.samaz.in/api/v1",
         "EXPO_PUBLIC_DEFAULT_COMMUNITY_SLUG": "kewat"
       }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.samaz.in/api/v1",
+        "EXPO_PUBLIC_DEFAULT_COMMUNITY_SLUG": "kewat"
       }
     }
   },
