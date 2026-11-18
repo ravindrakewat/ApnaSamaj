@@ -22,6 +22,8 @@ import {
   Refresh as RefreshIcon,
   Wifi as WifiIcon,
   WifiOff as WifiOffIcon,
+  ArrowBack as ArrowBackIcon,
+  Groups as GroupsIcon,
 } from '@mui/icons-material';
 import {
   GroupDetails,
@@ -45,6 +47,9 @@ export interface GroupChatTabProps {
   group: GroupDetails;
   onJoinGroup: () => Promise<void>;
   actionLoading: boolean;
+  onBack?: () => void;
+  headerExtra?: React.ReactNode;
+  sx?: any;
 }
 
 function formatMessageTime(isoString: string): string {
@@ -83,6 +88,9 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
   group,
   onJoinGroup,
   actionLoading,
+  onBack,
+  headerExtra,
+  sx,
 }) => {
   const { user } = useAuth();
 
@@ -432,8 +440,17 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
           borderRadius: 3,
           bgcolor: 'background.paper',
           border: '1px dashed rgba(0,0,0,0.15)',
+          position: 'relative',
+          ...sx,
         }}
       >
+        {onBack && (
+          <Box sx={{ position: 'absolute', top: 12, left: 12, display: { xs: 'block', md: 'none' } }}>
+            <IconButton size="small" onClick={onBack}>
+              <ArrowBackIcon />
+            </IconButton>
+          </Box>
+        )}
         <LockIcon sx={{ fontSize: 52, color: 'text.secondary', mb: 1.5, opacity: 0.6 }} />
         <Typography variant="h6" fontWeight="bold" gutterBottom>
           Private Group Chat
@@ -456,6 +473,7 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
         border: '1px solid rgba(0,0,0,0.08)',
         overflow: 'hidden',
         bgcolor: '#f8fafc',
+        ...sx,
       }}
     >
       {/* Chat Header Status Bar */}
@@ -473,20 +491,44 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
         }}
       >
         <Box display="flex" alignItems="center" gap={1.25}>
-          <ChatIcon color="primary" fontSize="small" />
-          <Typography variant="subtitle2" fontWeight="bold">
-            {group.name} Chat
-          </Typography>
-          <Chip
-            size="small"
-            label={`${group.membersCount} member${group.membersCount === 1 ? '' : 's'}`}
-            variant="outlined"
-            sx={{ height: 20, fontSize: '0.68rem' }}
-          />
+          {onBack && (
+            <IconButton
+              size="small"
+              onClick={onBack}
+              sx={{ display: { xs: 'inline-flex', md: 'none' }, mr: 0.5 }}
+            >
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          )}
+          <Avatar
+            src={group.coverUrl || undefined}
+            alt={group.name}
+            sx={{ width: 34, height: 34, bgcolor: 'secondary.light', color: 'secondary.contrastText' }}
+          >
+            <GroupsIcon sx={{ fontSize: 20 }} />
+          </Avatar>
+          <Box>
+            <Box display="flex" alignItems="center" gap={0.75}>
+              <Typography variant="subtitle2" fontWeight="bold">
+                {group.name}
+              </Typography>
+              <Chip
+                size="small"
+                label="Group"
+                variant="outlined"
+                color="secondary"
+                sx={{ height: 18, fontSize: '0.62rem' }}
+              />
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              {group.membersCount} member{group.membersCount === 1 ? '' : 's'} • {group.privacy}
+            </Typography>
+          </Box>
         </Box>
 
         {/* Real-time Connection Indicator */}
         <Box display="flex" alignItems="center" gap={1}>
+          {headerExtra}
           {isConnected ? (
             <Chip
               icon={<WifiIcon sx={{ fontSize: '13px !important', color: '#2e7d32' }} />}

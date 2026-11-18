@@ -284,17 +284,18 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **Batch 11.7** | Admin Content Specialization & Export | Built RFC-4180 Member Directory CSV Export utility (`generateMemberListCsv`) in `apps/admin/src/utils/csv-export.ts` with formula injection prevention (`sanitizeCsvCell`) and `\uFEFF` UTF-8 BOM encoding for Devanagari script integrity. Preserved zero sensitive data exposure (no passwords, reset tokens, or auth secrets). Added "Export CSV" button to `MemberManagementPage.tsx`. Added specialized moderation queue filters and visual card badges in `ModerationQueuePage.tsx` for `रोजगार / Employment` and `सरकारी योजनाएं / Schemes`. | docs/BATCH_11_7_ADMIN_CONTENT_EXPORT_REPORT.md | Verified Pass (3/3 tests passed, 0 typecheck errors, clean Vite build) | 435f983 | Confirmed (Pushed) |
 | **Batch 11.8** | Admin System Broadcast Notifications | Created `apps/admin/src/services/admin.notifications.service.ts` supporting audience targeting (`ALL_MEMBERS`, `VERIFIED_ONLY`, `ADMINS_MODS`), action deep-links, and high priority flags. Built `BroadcastNotificationDialog.tsx` with live preview card simulating mobile and web notifications. Mounted `Broadcast Notice / प्रसारण भेजें` button in `DashboardPage.tsx` welcome banner with dispatch feedback. | docs/BATCH_11_8_ADMIN_BROADCAST_REPORT.md | Verified Pass (4/4 tests passed, 0 typecheck errors, clean Vite build) | 435f983 | Confirmed (Pushed) |
 | **Batch 11.9** | Final Git Review, Verification & Production Push | Executed pre-commit security review, multi-tenant safety verification, 0-error typecheck across 9 workspaces, passing test suites (60/60 assertions), and clean Web and Admin production builds. Confirmed production API configuration at `https://api.samaz.in`. Staged and committed 54 approved Phase 11 files with zero secrets. Pushed commit `435f983` to `origin/main`, triggering automatic Vercel production deployment. | docs/BATCH_11_9_FINAL_GIT_AND_PRODUCTION_READINESS_AUDIT.md | Verified Pass (Monorepo typecheck 0 errors, 60/60 tests passed, Vite builds clean) | 435f983 | Confirmed (Pushed) |
+| **Batch 11.9.1** | Web Navbar Localization Fix & Unified WhatsApp-Style Chat Inbox | Fixed hardcoded Hindi labels in `Navbar.tsx` for Chat (`{t('chat')}`), Employment (`{t('employment')}`), and Schemes (`{t('schemes')}`); added keys to `nav.json` with 100% key parity; implemented unified WhatsApp-style chat inbox in `ChatPage.tsx` combining direct conversations and community groups into a single chronological stream; added quick filter chips (`All`, `Direct`, `Groups`); embedded `GroupChatTab` in right pane for seamless in-chat group messaging without page redirection; added test suites in `multilingual-foundation.test.ts` (26/26 pass) and `web-chat-experience.test.ts` (17/17 pass); clean monorepo typecheck across all 9 workspaces and production Vite build. | docs/PROJECT_HISTORY.md | Verified Pass (43/43 tests, 0 typecheck errors, clean Vite build) | Pending | Ready for Push |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Latest Push Commit:** `435f983151857129ce87f0f274988232de6359dd` (`435f983`)
-- **Upstream Tracking:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`) — Synchronized at `435f983`
-- **Actual Working Tree State:** Clean working tree. Phase 11.1–11.9 committed and pushed to `origin/main`. Vercel deployment triggered on `main`.
-- **Latest Completed Batch:** **Batch 11.9 — Final Git Review, Verification & Production Push**.
-- **Current In-Progress Batch:** Completed. Awaiting next user instruction.
+- **Latest Push Commit:** `764cd56` (`docs: record batch 11.9 git commit and push in project history`)
+- **Upstream Tracking:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
+- **Actual Working Tree State:** Staged Batch 11.9.1 files ready for commit and push.
+- **Latest Completed Batch:** **Batch 11.9.1 — Web Navbar Localization Fix & Unified WhatsApp-Style Chat Inbox**.
+- **Current In-Progress Batch:** Completed. Ready to push to GitHub.
 - **Exact Next Recommended Batch:** **Batch 12.0 — Post-Deployment Live Verification & Performance Check**.
 
 ---

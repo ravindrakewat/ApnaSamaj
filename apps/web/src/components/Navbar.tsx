@@ -62,13 +62,13 @@ export const Navbar: React.FC = () => {
   const navLinks = [
     { label: t('home'), path: '/', icon: <HomeIcon fontSize="small" />, authOnly: false },
     { label: t('feed'), path: '/feed', icon: <DynamicFeedIcon fontSize="small" />, authOnly: true },
-    { label: 'चैट / Chat', path: '/chat', icon: <ChatIcon fontSize="small" />, authOnly: true },
+    { label: t('chat'), path: '/chat', icon: <ChatIcon fontSize="small" />, authOnly: true },
     { label: t('groups'), path: '/groups', icon: <GroupsIcon fontSize="small" />, authOnly: true },
     { label: t('directory'), path: '/directory', icon: <PeopleIcon fontSize="small" />, authOnly: true },
     { label: t('matrimonial'), path: '/matrimonial', icon: <FavoriteIcon fontSize="small" />, authOnly: true },
-    { label: 'रोजगार / Jobs', path: '/employment', icon: <WorkOutlineIcon fontSize="small" />, authOnly: true },
-    { label: 'योजनाएं / Schemes', path: '/government-schemes', icon: <AccountBalanceIcon fontSize="small" />, authOnly: true },
-    { label: 'सूचनाएं / Notifications', path: '/notifications', icon: <NotificationsIcon fontSize="small" />, authOnly: true },
+    { label: t('employment'), path: '/employment', icon: <WorkOutlineIcon fontSize="small" />, authOnly: true },
+    { label: t('schemes'), path: '/government-schemes', icon: <AccountBalanceIcon fontSize="small" />, authOnly: true },
+    { label: t('notifications'), path: '/notifications', icon: <NotificationsIcon fontSize="small" />, authOnly: true },
     { label: t('profile'), path: '/profile', icon: <AccountCircleIcon fontSize="small" />, authOnly: true },
     { label: t('appeals'), path: '/appeals', icon: <GavelIcon fontSize="small" />, authOnly: true },
   ];
@@ -124,7 +124,7 @@ export const Navbar: React.FC = () => {
                     startIcon={<ChatIcon />}
                     sx={{ fontWeight: location.pathname.startsWith('/chat') ? 600 : 400 }}
                   >
-                    चैट
+                    {t('chat')}
                   </Button>
 
                   <Button
@@ -164,7 +164,7 @@ export const Navbar: React.FC = () => {
                     startIcon={<WorkOutlineIcon />}
                     sx={{ fontWeight: location.pathname.startsWith('/employment') ? 600 : 400 }}
                   >
-                    रोजगार
+                    {t('employment')}
                   </Button>
 
                   <Button
@@ -174,7 +174,7 @@ export const Navbar: React.FC = () => {
                     startIcon={<AccountBalanceIcon />}
                     sx={{ fontWeight: location.pathname.startsWith('/government-schemes') ? 600 : 400 }}
                   >
-                    योजनाएं
+                    {t('schemes')}
                   </Button>
 
                   <Button

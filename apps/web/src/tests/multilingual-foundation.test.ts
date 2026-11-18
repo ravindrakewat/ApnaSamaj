@@ -263,9 +263,13 @@ async function runAllTests() {
   test('Hindi navigation labels preserve original UI strings', () => {
     assert.equal(resources.hi.nav.home, 'होम');
     assert.equal(resources.hi.nav.feed, 'समाज अपडेट्स');
+    assert.equal(resources.hi.nav.chat, 'चैट');
     assert.equal(resources.hi.nav.groups, 'समूह');
     assert.equal(resources.hi.nav.directory, 'सदस्य');
     assert.equal(resources.hi.nav.matrimonial, 'विवाह परिचय');
+    assert.equal(resources.hi.nav.employment, 'रोजगार');
+    assert.equal(resources.hi.nav.schemes, 'योजनाएं');
+    assert.equal(resources.hi.nav.notifications, 'सूचनाएं');
     assert.equal(resources.hi.nav.profile, 'मेरी प्रोफ़ाइल');
     assert.equal(resources.hi.nav.appeals, 'अपील');
     assert.equal(resources.hi.nav.login, 'लॉगिन');
@@ -277,9 +281,13 @@ async function runAllTests() {
   test('English navigation labels provide natural, clear translations', () => {
     assert.equal(resources.en.nav.home, 'Home');
     assert.equal(resources.en.nav.feed, 'Community Updates');
+    assert.equal(resources.en.nav.chat, 'Chat');
     assert.equal(resources.en.nav.groups, 'Groups');
     assert.equal(resources.en.nav.directory, 'Directory');
     assert.equal(resources.en.nav.matrimonial, 'Matrimonial');
+    assert.equal(resources.en.nav.employment, 'Employment');
+    assert.equal(resources.en.nav.schemes, 'Schemes');
+    assert.equal(resources.en.nav.notifications, 'Notifications');
     assert.equal(resources.en.nav.profile, 'My Profile');
     assert.equal(resources.en.nav.appeals, 'Appeals');
     assert.equal(resources.en.nav.login, 'Login');

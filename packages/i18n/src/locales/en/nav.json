@@ -1,9 +1,13 @@
 {
   "home": "Home",
   "feed": "Community Updates",
+  "chat": "Chat",
   "groups": "Groups",
   "directory": "Directory",
   "matrimonial": "Matrimonial",
+  "employment": "Employment",
+  "schemes": "Schemes",
+  "notifications": "Notifications",
   "profile": "My Profile",
   "appeals": "Appeals",
   "login": "Login",

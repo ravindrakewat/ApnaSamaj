@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -75,6 +75,9 @@ import {
   ChatMediaGalleryItem,
   ChatReactionEventPayload,
   ChatMessageDeletedEvent,
+  GroupListItem,
+  GroupDetails,
+  GroupPrivacy,
 } from '@apnasamaj/shared-types';
 import { parseYouTubeUrl } from '@apnasamaj/validation';
 import { useAuth } from '../context/AuthContext';
@@ -91,6 +94,8 @@ import {
   getDirectMediaGalleryApi,
   createOrGetDirectConversation,
 } from '../services/chat.service';
+import { fetchGroups, fetchGroupBySlug, joinGroupApi } from '../services/groups.service';
+import { GroupChatTab } from '../components/chat/GroupChatTab';
 import { connectChatSocket, getChatSocket } from '../services/chat.socket';
 import { resolveAttachmentDisplayUrl, extractYouTubeVideoDetails } from '../utils/attachment';
 
@@ -142,12 +147,21 @@ export const ChatPage: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
   const { conversationId } = useParams<{ conversationId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const groupSlugFromUrl = searchParams.get('group');
 
-  // State: Inbox Conversations
-  const [inboxTab, setInboxTab] = useState<number>(0); // 0: Direct, 1: Groups
+  // State: Unified Inbox (Direct + Community Groups)
+  type InboxFilter = 'ALL' | 'DIRECT' | 'GROUPS';
+  const [inboxFilter, setInboxFilter] = useState<InboxFilter>('ALL');
   const [conversations, setConversations] = useState<DirectConversationItem[]>([]);
+  const [groups, setGroups] = useState<GroupListItem[]>([]);
   const [inboxLoading, setInboxLoading] = useState<boolean>(true);
   const [inboxSearch, setInboxSearch] = useState<string>('');
+
+  // State: Active Group Chat
+  const [selectedGroup, setSelectedGroup] = useState<GroupDetails | null>(null);
+  const [loadingGroup, setLoadingGroup] = useState<boolean>(false);
+  const [groupActionLoading, setGroupActionLoading] = useState<boolean>(false);
 
   // State: Active Conversation Messages
   const [messages, setMessages] = useState<DirectMessageItem[]>([]);
@@ -197,15 +211,23 @@ export const ChatPage: React.FC = () => {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // ---------------------------------------------------------------------------
-  // 1. Load Direct Conversations Inbox
+  // 1. Load Unified Inbox (Direct + Community Groups)
   // ---------------------------------------------------------------------------
   const loadInbox = useCallback(async () => {
     setInboxLoading(true);
     try {
-      const data = await fetchDirectInbox({ limit: 50 });
-      setConversations(data.conversations || []);
+      const [directRes, groupsRes] = await Promise.allSettled([
+        fetchDirectInbox({ limit: 50 }),
+        fetchGroups({ limit: 50 }),
+      ]);
+      if (directRes.status === 'fulfilled') {
+        setConversations(directRes.value.conversations || []);
+      }
+      if (groupsRes.status === 'fulfilled') {
+        setGroups(groupsRes.value.groups || []);
+      }
     } catch (err: unknown) {
-      console.error('[ChatPage] Failed to fetch direct inbox:', err);
+      console.error('[ChatPage] Failed to fetch unified inbox:', err);
     } finally {
       setInboxLoading(false);
     }
@@ -214,6 +236,33 @@ export const ChatPage: React.FC = () => {
   useEffect(() => {
     loadInbox();
   }, [loadInbox]);
+
+  useEffect(() => {
+    if (groupSlugFromUrl) {
+      setLoadingGroup(true);
+      fetchGroupBySlug(groupSlugFromUrl)
+        .then((g) => setSelectedGroup(g))
+        .catch((err) => console.error('[ChatPage] Failed to load group details:', err))
+        .finally(() => setLoadingGroup(false));
+    } else {
+      setSelectedGroup(null);
+    }
+  }, [groupSlugFromUrl]);
+
+  const handleJoinActiveGroup = async () => {
+    if (!selectedGroup) return;
+    setGroupActionLoading(true);
+    try {
+      await joinGroupApi(selectedGroup.id);
+      const updated = await fetchGroupBySlug(selectedGroup.slug);
+      setSelectedGroup(updated);
+      loadInbox();
+    } catch (err) {
+      console.error('[ChatPage] Failed to join group:', err);
+    } finally {
+      setGroupActionLoading(false);
+    }
+  };
 
   // ---------------------------------------------------------------------------
   // 2. Load Messages for Active Conversation
@@ -315,10 +364,15 @@ export const ChatPage: React.FC = () => {
       }
     };
 
+    const handleGroupActivity = () => {
+      loadInbox();
+    };
+
     socket.on('direct:new_message', handleNewMessage);
     socket.on('direct:reaction_updated', handleReactionUpdate);
     socket.on('direct:message_deleted', handleMessageDeleted);
     socket.on('direct:user_typing', handleUserTyping);
+    socket.on('new_message', handleGroupActivity);
 
     return () => {
       if (conversationId) {
@@ -328,6 +382,7 @@ export const ChatPage: React.FC = () => {
       socket.off('direct:reaction_updated', handleReactionUpdate);
       socket.off('direct:message_deleted', handleMessageDeleted);
       socket.off('direct:user_typing', handleUserTyping);
+      socket.off('new_message', handleGroupActivity);
     };
   }, [conversationId, user?.id, loadInbox]);
 
@@ -574,16 +629,71 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  // Filter inbox by search input
-  const filteredConversations = useMemo(() => {
-    if (!inboxSearch.trim()) return conversations;
+  interface UnifiedChatItem {
+    type: 'direct' | 'group';
+    id: string;
+    slug?: string;
+    name: string;
+    avatarUrl: string | null;
+    coverUrl?: string | null;
+    lastMessage: string;
+    timestamp: string;
+    unreadCount?: number;
+    privacy?: GroupPrivacy;
+    membersCount?: number;
+  }
+
+  // Construct unified WhatsApp-style chat list (Direct chats + Community groups)
+  const unifiedList: UnifiedChatItem[] = useMemo(() => {
+    const list: UnifiedChatItem[] = [];
+
+    // Map direct conversations
+    if (inboxFilter === 'ALL' || inboxFilter === 'DIRECT') {
+      conversations.forEach((c) => {
+        list.push({
+          type: 'direct',
+          id: c.id,
+          name: c.otherUser.fullName,
+          avatarUrl: c.otherUser.avatarUrl,
+          lastMessage:
+            c.lastMessage?.content ||
+            (c.lastMessage?.attachments?.length ? '📎 Media attachment' : 'Tap to chat'),
+          timestamp: c.lastMessage?.createdAt || c.updatedAt,
+          unreadCount: c.unreadCount || 0,
+        });
+      });
+    }
+
+    // Map community groups
+    if (inboxFilter === 'ALL' || inboxFilter === 'GROUPS') {
+      groups.forEach((g) => {
+        list.push({
+          type: 'group',
+          id: g.id,
+          slug: g.slug,
+          name: g.name,
+          avatarUrl: g.coverUrl,
+          coverUrl: g.coverUrl,
+          privacy: g.privacy,
+          membersCount: g.membersCount,
+          lastMessage: `${g.membersCount || 0} members • Group Chat`,
+          timestamp: g.createdAt,
+        });
+      });
+    }
+
+    // Sort descending by timestamp (latest activity first, like WhatsApp)
+    list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    // Search query filter
+    if (!inboxSearch.trim()) return list;
     const q = inboxSearch.toLowerCase();
-    return conversations.filter(
-      (c) =>
-        c.otherUser.fullName.toLowerCase().includes(q) ||
-        (c.lastMessage?.content && c.lastMessage.content.toLowerCase().includes(q))
+    return list.filter(
+      (item) =>
+        item.name.toLowerCase().includes(q) ||
+        item.lastMessage.toLowerCase().includes(q)
     );
-  }, [conversations, inboxSearch]);
+  }, [conversations, groups, inboxFilter, inboxSearch]);
 
   return (
     <Box sx={{ height: 'calc(100vh - 65px)', display: 'flex', bgcolor: 'background.default' }}>
@@ -593,7 +703,7 @@ export const ChatPage: React.FC = () => {
       <Box
         sx={{
           width: { xs: '100%', md: 360 },
-          display: { xs: conversationId ? 'none' : 'flex', md: 'flex' },
+          display: { xs: conversationId || selectedGroup || loadingGroup ? 'none' : 'flex', md: 'flex' },
           flexDirection: 'column',
           borderRight: 1,
           borderColor: 'divider',
@@ -604,7 +714,7 @@ export const ChatPage: React.FC = () => {
         <Box sx={{ p: 2, pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
             <Typography variant="h6" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <ChatIcon color="primary" /> संदेश / Messages
+              <ChatIcon color="primary" /> संदेश व चैट / Chats
             </Typography>
             <Tooltip title="Refresh">
               <IconButton size="small" onClick={loadInbox}>
@@ -613,23 +723,41 @@ export const ChatPage: React.FC = () => {
             </Tooltip>
           </Box>
 
-          <Tabs
-            value={inboxTab}
-            onChange={(_, val) => {
-              setInboxTab(val);
-              if (val === 1) navigate('/groups');
-            }}
-            variant="fullWidth"
-            sx={{ mb: 1.5, minHeight: 36 }}
-          >
-            <Tab label="Direct" sx={{ minHeight: 36, textTransform: 'none', fontWeight: 600 }} />
-            <Tab label="Groups" sx={{ minHeight: 36, textTransform: 'none', fontWeight: 600 }} />
-          </Tabs>
+          {/* WhatsApp-Style Filter Pills */}
+          <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
+            <Chip
+              label={`All (${conversations.length + groups.length})`}
+              size="small"
+              clickable
+              color={inboxFilter === 'ALL' ? 'primary' : 'default'}
+              variant={inboxFilter === 'ALL' ? 'filled' : 'outlined'}
+              onClick={() => setInboxFilter('ALL')}
+              sx={{ fontWeight: 600, fontSize: '0.8rem' }}
+            />
+            <Chip
+              label={`Direct (${conversations.length})`}
+              size="small"
+              clickable
+              color={inboxFilter === 'DIRECT' ? 'primary' : 'default'}
+              variant={inboxFilter === 'DIRECT' ? 'filled' : 'outlined'}
+              onClick={() => setInboxFilter('DIRECT')}
+              sx={{ fontWeight: 600, fontSize: '0.8rem' }}
+            />
+            <Chip
+              label={`Groups (${groups.length})`}
+              size="small"
+              clickable
+              color={inboxFilter === 'GROUPS' ? 'primary' : 'default'}
+              variant={inboxFilter === 'GROUPS' ? 'filled' : 'outlined'}
+              onClick={() => setInboxFilter('GROUPS')}
+              sx={{ fontWeight: 600, fontSize: '0.8rem' }}
+            />
+          </Box>
 
           <TextField
             fullWidth
             size="small"
-            placeholder="Search conversations..."
+            placeholder="Search chats or groups..."
             value={inboxSearch}
             onChange={(e) => setInboxSearch(e.target.value)}
             InputProps={{
@@ -646,10 +774,10 @@ export const ChatPage: React.FC = () => {
             <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}>
               <CircularProgress size={30} />
             </Box>
-          ) : filteredConversations.length === 0 ? (
+          ) : unifiedList.length === 0 ? (
             <Box sx={{ p: 4, textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                कोई संदेश नहीं है / No conversations found
+                कोई संदेश या समूह नहीं है / No chats or groups found
               </Typography>
               <Button variant="outlined" size="small" onClick={() => navigate('/directory')}>
                 सदस्य डायरेक्टरी देखें / Member Directory
@@ -657,55 +785,133 @@ export const ChatPage: React.FC = () => {
             </Box>
           ) : (
             <List disablePadding>
-              {filteredConversations.map((conv) => {
-                const isSelected = conv.id === conversationId;
-                return (
-                  <ListItem key={conv.id} disablePadding divider>
-                    <ListItemButton
-                      selected={isSelected}
-                      onClick={() => navigate(`/chat/${conv.id}`)}
-                      sx={{ py: 1.5, px: 2 }}
-                    >
-                      <ListItemAvatar>
-                        <Badge badgeContent={conv.unreadCount} color="error" max={99}>
-                          <Avatar
-                            src={conv.otherUser.avatarUrl || undefined}
-                            sx={{ bgcolor: 'primary.main', fontWeight: 600 }}
-                          >
-                            {conv.otherUser.fullName.charAt(0).toUpperCase()}
-                          </Avatar>
-                        </Badge>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="subtitle2" fontWeight={conv.unreadCount > 0 ? 700 : 500} noWrap>
-                              {conv.otherUser.fullName}
-                            </Typography>
-                            {conv.lastMessage && (
-                              <Typography variant="caption" color="text.secondary">
-                                {formatChatTime(conv.lastMessage.createdAt)}
+              {unifiedList.map((item) => {
+                if (item.type === 'direct') {
+                  const isSelected = item.id === conversationId;
+                  return (
+                    <ListItem key={`direct_${item.id}`} disablePadding divider>
+                      <ListItemButton
+                        selected={isSelected}
+                        onClick={() => {
+                          setSelectedGroup(null);
+                          setSearchParams({});
+                          navigate(`/chat/${item.id}`);
+                        }}
+                        sx={{ py: 1.5, px: 2 }}
+                      >
+                        <ListItemAvatar>
+                          <Badge badgeContent={item.unreadCount} color="error" max={99}>
+                            <Avatar
+                              src={item.avatarUrl || undefined}
+                              sx={{ bgcolor: 'primary.main', fontWeight: 600 }}
+                            >
+                              {item.name.charAt(0).toUpperCase()}
+                            </Avatar>
+                          </Badge>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="subtitle2" fontWeight={item.unreadCount && item.unreadCount > 0 ? 700 : 500} noWrap>
+                                {item.name}
                               </Typography>
-                            )}
-                          </Box>
-                        }
-                        secondary={
-                          <Typography
-                            variant="body2"
-                            color={conv.unreadCount > 0 ? 'text.primary' : 'text.secondary'}
-                            fontWeight={conv.unreadCount > 0 ? 600 : 400}
-                            noWrap
+                              {item.timestamp && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {formatChatTime(item.timestamp)}
+                                </Typography>
+                              )}
+                            </Box>
+                          }
+                          secondary={
+                            <Typography
+                              variant="body2"
+                              color={item.unreadCount && item.unreadCount > 0 ? 'text.primary' : 'text.secondary'}
+                              fontWeight={item.unreadCount && item.unreadCount > 0 ? 600 : 400}
+                              noWrap
+                            >
+                              {item.lastMessage}
+                            </Typography>
+                          }
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                } else {
+                  const isSelected = selectedGroup?.slug === item.slug || (!selectedGroup && groupSlugFromUrl === item.slug);
+                  return (
+                    <ListItem key={`group_${item.id}`} disablePadding divider>
+                      <ListItemButton
+                        selected={isSelected}
+                        onClick={() => {
+                          if (item.slug) {
+                            navigate('/chat');
+                            setSearchParams({ group: item.slug });
+                          }
+                        }}
+                        sx={{ py: 1.5, px: 2 }}
+                      >
+                        <ListItemAvatar>
+                          <Badge
+                            overlap="circular"
+                            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                            badgeContent={
+                              <Box
+                                sx={{
+                                  width: 16,
+                                  height: 16,
+                                  borderRadius: '50%',
+                                  bgcolor: 'secondary.main',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#fff',
+                                  border: '1.5px solid #fff',
+                                }}
+                              >
+                                <GroupsIcon sx={{ fontSize: 10 }} />
+                              </Box>
+                            }
                           >
-                            {conv.lastMessage
-                              ? conv.lastMessage.content ||
-                                (conv.lastMessage.attachments?.length ? '📎 Media attachment' : '')
-                              : 'Tap to chat'}
-                          </Typography>
-                        }
-                      />
-                    </ListItemButton>
-                  </ListItem>
-                );
+                            <Avatar
+                              src={item.avatarUrl || undefined}
+                              sx={{ bgcolor: 'secondary.light', color: 'secondary.contrastText', fontWeight: 600 }}
+                            >
+                              <GroupsIcon fontSize="small" />
+                            </Avatar>
+                          </Badge>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, maxWidth: 180 }}>
+                                <Typography variant="subtitle2" fontWeight={600} noWrap>
+                                  {item.name}
+                                </Typography>
+                                <Chip
+                                  label="Group"
+                                  size="small"
+                                  variant="outlined"
+                                  color="secondary"
+                                  sx={{ height: 16, fontSize: '0.6rem', px: 0.2 }}
+                                />
+                              </Box>
+                              {item.timestamp && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {formatChatTime(item.timestamp)}
+                                </Typography>
+                              )}
+                            </Box>
+                          }
+                          secondary={
+                            <Typography variant="body2" color="text.secondary" noWrap>
+                              {item.lastMessage}
+                            </Typography>
+                          }
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                }
               })}
             </List>
           )}
@@ -713,18 +919,51 @@ export const ChatPage: React.FC = () => {
       </Box>
 
       {/* ----------------------------------------------------------------- */}
-      {/* RIGHT PANE: ACTIVE CONVERSATION CHAT STREAM                       */}
+      {/* RIGHT PANE: ACTIVE CONVERSATION OR GROUP CHAT STREAM              */}
       {/* ----------------------------------------------------------------- */}
       <Box
         sx={{
           flexGrow: 1,
-          display: { xs: conversationId ? 'flex' : 'none', md: 'flex' },
+          display: { xs: conversationId || selectedGroup || loadingGroup ? 'flex' : 'none', md: 'flex' },
           flexDirection: 'column',
           height: '100%',
           bgcolor: '#f1f5f9',
         }}
       >
-        {conversationId ? (
+        {loadingGroup ? (
+          <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <CircularProgress size={36} />
+          </Box>
+        ) : selectedGroup ? (
+          <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <GroupChatTab
+              group={selectedGroup}
+              onJoinGroup={handleJoinActiveGroup}
+              actionLoading={groupActionLoading}
+              onBack={() => {
+                setSelectedGroup(null);
+                setSearchParams({});
+              }}
+              headerExtra={
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => navigate(`/groups/${selectedGroup.slug}`)}
+                  sx={{ textTransform: 'none', fontSize: '0.75rem', height: 26, borderRadius: 1.5 }}
+                >
+                  View Group Info
+                </Button>
+              }
+              sx={{
+                height: '100%',
+                borderRadius: 0,
+                border: 'none',
+                boxShadow: 'none',
+                bgcolor: 'transparent',
+              }}
+            />
+          </Box>
+        ) : conversationId ? (
           <>
             {/* Top Bar / Header */}
             <Paper
@@ -1187,7 +1426,7 @@ export const ChatPage: React.FC = () => {
               किसी बातचीत का चयन करें / Select a conversation
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 360, mt: 1 }}>
-              Choose a contact from the left list, or find members in the directory to start a new private conversation.
+              Choose a contact or group from the left list, or find members in the directory to start a new private conversation.
             </Typography>
           </Box>
         )}

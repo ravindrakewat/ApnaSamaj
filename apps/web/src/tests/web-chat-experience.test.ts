@@ -79,6 +79,76 @@ async function runWebChatTests() {
   assertTest(validScopes.includes('ME'), 'Supports Delete for Me');
   assertTest(validScopes.includes('EVERYONE'), 'Supports Delete for Everyone');
 
+  // ---------------------------------------------------------------------------
+  // 5. Unified WhatsApp-Style Inbox (Direct + Groups) Sorting & Filtering
+  // ---------------------------------------------------------------------------
+  console.log('\n--- Test Suite 5: Unified WhatsApp-Style Inbox (Direct + Groups) ---');
+
+  interface MockDirectConv {
+    id: string;
+    name: string;
+    updatedAt: string;
+    lastMessage?: string;
+  }
+  interface MockGroupItem {
+    id: string;
+    slug: string;
+    name: string;
+    createdAt: string;
+  }
+
+  const mockDirects: MockDirectConv[] = [
+    { id: 'c1', name: 'Ravindra Kewat', updatedAt: '2026-11-18T10:00:00Z', lastMessage: 'Shorts link' },
+    { id: 'c2', name: 'Kamal Kumar', updatedAt: '2026-11-18T08:00:00Z', lastMessage: 'Tap to chat' },
+  ];
+
+  const mockGroups: MockGroupItem[] = [
+    { id: 'g1', slug: 'indore-youth', name: 'Indore Youth Samaj', createdAt: '2026-11-18T11:30:00Z' },
+    { id: 'g2', slug: 'bhopal-samaj', name: 'Bhopal Samaj Kalyan', createdAt: '2026-11-18T06:00:00Z' },
+  ];
+
+  type InboxFilter = 'ALL' | 'DIRECT' | 'GROUPS';
+
+  function buildUnifiedList(directs: MockDirectConv[], groups: MockGroupItem[], filter: InboxFilter, search: string) {
+    const list: Array<{ type: 'direct' | 'group'; id: string; name: string; timestamp: string }> = [];
+
+    if (filter === 'ALL' || filter === 'DIRECT') {
+      directs.forEach((d) => list.push({ type: 'direct', id: d.id, name: d.name, timestamp: d.updatedAt }));
+    }
+    if (filter === 'ALL' || filter === 'GROUPS') {
+      groups.forEach((g) => list.push({ type: 'group', id: g.id, name: g.name, timestamp: g.createdAt }));
+    }
+
+    list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter((i) => i.name.toLowerCase().includes(q));
+  }
+
+  // 1. ALL filter combines directs and groups sorted by timestamp
+  const allList = buildUnifiedList(mockDirects, mockGroups, 'ALL', '');
+  assertTest(allList.length === 4, 'ALL filter returns combined list of directs and groups (total 4)');
+  assertTest(allList[0].name === 'Indore Youth Samaj', 'Latest item is top (Indore Youth Samaj at 11:30)');
+  assertTest(allList[1].name === 'Ravindra Kewat', 'Second item is Ravindra Kewat (at 10:00)');
+  assertTest(allList[2].name === 'Kamal Kumar', 'Third item is Kamal Kumar (at 08:00)');
+  assertTest(allList[3].name === 'Bhopal Samaj Kalyan', 'Fourth item is Bhopal Samaj Kalyan (at 06:00)');
+
+  // 2. DIRECT filter returns only personal contacts
+  const directOnly = buildUnifiedList(mockDirects, mockGroups, 'DIRECT', '');
+  assertTest(directOnly.length === 2 && directOnly.every((i) => i.type === 'direct'), 'DIRECT filter returns only personal chats');
+
+  // 3. GROUPS filter returns only community groups
+  const groupsOnly = buildUnifiedList(mockDirects, mockGroups, 'GROUPS', '');
+  assertTest(groupsOnly.length === 2 && groupsOnly.every((i) => i.type === 'group'), 'GROUPS filter returns only groups');
+
+  // 4. Search query filters across both types
+  const searchYouth = buildUnifiedList(mockDirects, mockGroups, 'ALL', 'youth');
+  assertTest(searchYouth.length === 1 && searchYouth[0].name === 'Indore Youth Samaj', 'Search query correctly finds group');
+
+  const searchRavindra = buildUnifiedList(mockDirects, mockGroups, 'ALL', 'ravindra');
+  assertTest(searchRavindra.length === 1 && searchRavindra[0].name === 'Ravindra Kewat', 'Search query correctly finds member');
+
   console.log('\n================================================================');
   console.log('   All Batch 11.1 Web Direct Chat tests passed cleanly!         ');
   console.log('================================================================\n');

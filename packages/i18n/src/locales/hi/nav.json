@@ -1,9 +1,13 @@
 {
   "home": "होम",
   "feed": "समाज अपडेट्स",
+  "chat": "चैट",
   "groups": "समूह",
   "directory": "सदस्य",
   "matrimonial": "विवाह परिचय",
+  "employment": "रोजगार",
+  "schemes": "योजनाएं",
+  "notifications": "सूचनाएं",
   "profile": "मेरी प्रोफ़ाइल",
   "appeals": "अपील",
   "login": "लॉगिन",
