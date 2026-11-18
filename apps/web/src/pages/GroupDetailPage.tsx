@@ -95,7 +95,7 @@ export const GroupDetailPage: React.FC = () => {
   const [loadingGroup, setLoadingGroup] = useState<boolean>(true);
   const [groupError, setGroupError] = useState<string | null>(null);
 
-  // Tabs state (0: Discussions, 1: Members, 2: Chat)
+  // Tabs state (0: Chat, 1: Members, 2: Discussions)
   const [activeTab, setActiveTab] = useState<number>(0);
 
   // Posts State
@@ -691,7 +691,9 @@ export const GroupDetailPage: React.FC = () => {
           textColor="primary"
         >
           <Tab
-            label={t('tabDiscussionsWithCount', { count: group.postsCount })}
+            icon={<ChatIcon sx={{ fontSize: '18px !important' }} />}
+            iconPosition="start"
+            label={t('tabChat')}
             sx={{ textTransform: 'none', fontWeight: 'bold' }}
           />
           <Tab
@@ -699,9 +701,7 @@ export const GroupDetailPage: React.FC = () => {
             sx={{ textTransform: 'none', fontWeight: 'bold' }}
           />
           <Tab
-            icon={<ChatIcon sx={{ fontSize: '18px !important' }} />}
-            iconPosition="start"
-            label={t('tabChat')}
+            label={t('tabDiscussionsWithCount', { count: group.postsCount })}
             sx={{ textTransform: 'none', fontWeight: 'bold' }}
           />
         </Tabs>
@@ -714,125 +714,13 @@ export const GroupDetailPage: React.FC = () => {
         </Alert>
       )}
 
-      {/* Tab 0: Discussions */}
+      {/* Tab 0: Live Group Chat */}
       {activeTab === 0 && (
-        <Box>
-          {isPrivateAndNonMember ? (
-            <Paper
-              sx={{
-                p: 5,
-                textAlign: 'center',
-                borderRadius: 3,
-                bgcolor: 'background.paper',
-                border: '1px dashed rgba(0,0,0,0.15)',
-              }}
-            >
-              <LockIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.6 }} />
-              <Typography variant="h6" fontWeight="bold" gutterBottom>
-                {t('privateContentTitle')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 450, mx: 'auto' }}>
-                {t('privateContentDesc')}
-              </Typography>
-            </Paper>
-          ) : (
-            <>
-              {/* Post Composer (Only active for members) */}
-              {group.isMember ? (
-                <Box mb={4}>
-                  <CreatePostComposer groupId={group.id} onPostCreated={handlePostCreated} />
-                </Box>
-              ) : (
-                <Paper
-                  sx={{
-                    p: 2.5,
-                    mb: 3,
-                    borderRadius: 2.5,
-                    bgcolor: 'rgba(25, 118, 210, 0.04)',
-                    border: '1px solid rgba(25, 118, 210, 0.15)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 1.5,
-                  }}
-                >
-                  <Typography variant="body2" color="text.secondary">
-                    {t('joinPromptToPost')}
-                  </Typography>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    onClick={handleJoinGroup}
-                    disabled={actionLoading}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    {t('joinToPost')}
-                  </Button>
-                </Paper>
-              )}
-
-              {/* Discussions List */}
-              {postsError && (
-                <Alert severity="error" sx={{ mb: 3 }}>
-                  {postsError}
-                </Alert>
-              )}
-
-              {loadingPosts && (
-                <Box display="flex" justifyContent="center" py={4}>
-                  <CircularProgress size={32} />
-                </Box>
-              )}
-
-              {!loadingPosts && posts.length === 0 && (
-                <Paper
-                  sx={{
-                    py: 6,
-                    px: 3,
-                    textAlign: 'center',
-                    borderRadius: 3,
-                    border: '1px dashed rgba(0,0,0,0.12)',
-                  }}
-                >
-                  <DynamicFeedIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.5 }} />
-                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                    {t('noDiscussionsTitle')}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('noDiscussionsDesc')}
-                  </Typography>
-                </Paper>
-              )}
-
-              {!loadingPosts && posts.length > 0 && (
-                <Box>
-                  {posts.map((post) => (
-                    <PostCard
-                      key={post.id}
-                      post={post}
-                      onPostUpdated={handlePostUpdated}
-                      onPostDeleted={handlePostDeleted}
-                    />
-                  ))}
-
-                  {totalPostsPages > 1 && (
-                    <Box display="flex" justifyContent="center" mt={4} mb={2}>
-                      <Pagination
-                        count={totalPostsPages}
-                        page={postsPage}
-                        onChange={(_, val) => setPostsPage(val)}
-                        color="primary"
-                        shape="rounded"
-                        aria-label={t('paginationAria')}
-                      />
-                    </Box>
-                  )}
-                </Box>
-              )}
-            </>
-          )}
-        </Box>
+        <GroupChatTab
+          group={group}
+          onJoinGroup={handleJoinGroup}
+          actionLoading={actionLoading}
+        />
       )}
 
       {/* Tab 1: Members (Dedicated Paginated Roster with Filtering & Direct Onboarding) */}
@@ -1122,13 +1010,125 @@ export const GroupDetailPage: React.FC = () => {
         </Box>
       )}
 
-      {/* Tab 2: Live Group Chat */}
+      {/* Tab 2: Discussions */}
       {activeTab === 2 && (
-        <GroupChatTab
-          group={group}
-          onJoinGroup={handleJoinGroup}
-          actionLoading={actionLoading}
-        />
+        <Box>
+          {isPrivateAndNonMember ? (
+            <Paper
+              sx={{
+                p: 5,
+                textAlign: 'center',
+                borderRadius: 3,
+                bgcolor: 'background.paper',
+                border: '1px dashed rgba(0,0,0,0.15)',
+              }}
+            >
+              <LockIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.6 }} />
+              <Typography variant="h6" fontWeight="bold" gutterBottom>
+                {t('privateContentTitle')}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 450, mx: 'auto' }}>
+                {t('privateContentDesc')}
+              </Typography>
+            </Paper>
+          ) : (
+            <>
+              {/* Post Composer (Only active for members) */}
+              {group.isMember ? (
+                <Box mb={4}>
+                  <CreatePostComposer groupId={group.id} onPostCreated={handlePostCreated} />
+                </Box>
+              ) : (
+                <Paper
+                  sx={{
+                    p: 2.5,
+                    mb: 3,
+                    borderRadius: 2.5,
+                    bgcolor: 'rgba(25, 118, 210, 0.04)',
+                    border: '1px solid rgba(25, 118, 210, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 1.5,
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    {t('joinPromptToPost')}
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={handleJoinGroup}
+                    disabled={actionLoading}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {t('joinToPost')}
+                  </Button>
+                </Paper>
+              )}
+
+              {/* Discussions List */}
+              {postsError && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                  {postsError}
+                </Alert>
+              )}
+
+              {loadingPosts && (
+                <Box display="flex" justifyContent="center" py={4}>
+                  <CircularProgress size={32} />
+                </Box>
+              )}
+
+              {!loadingPosts && posts.length === 0 && (
+                <Paper
+                  sx={{
+                    py: 6,
+                    px: 3,
+                    textAlign: 'center',
+                    borderRadius: 3,
+                    border: '1px dashed rgba(0,0,0,0.12)',
+                  }}
+                >
+                  <DynamicFeedIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.5 }} />
+                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                    {t('noDiscussionsTitle')}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {t('noDiscussionsDesc')}
+                  </Typography>
+                </Paper>
+              )}
+
+              {!loadingPosts && posts.length > 0 && (
+                <Box>
+                  {posts.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      onPostUpdated={handlePostUpdated}
+                      onPostDeleted={handlePostDeleted}
+                    />
+                  ))}
+
+                  {totalPostsPages > 1 && (
+                    <Box display="flex" justifyContent="center" mt={4} mb={2}>
+                      <Pagination
+                        count={totalPostsPages}
+                        page={postsPage}
+                        onChange={(_, val) => setPostsPage(val)}
+                        color="primary"
+                        shape="rounded"
+                        aria-label={t('paginationAria')}
+                      />
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </>
+          )}
+        </Box>
       )}
 
       {/* Leave Group Confirmation Dialog */}

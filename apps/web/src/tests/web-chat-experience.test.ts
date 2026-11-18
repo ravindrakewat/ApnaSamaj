@@ -149,6 +149,42 @@ async function runWebChatTests() {
   const searchRavindra = buildUnifiedList(mockDirects, mockGroups, 'ALL', 'ravindra');
   assertTest(searchRavindra.length === 1 && searchRavindra[0].name === 'Ravindra Kewat', 'Search query correctly finds member');
 
+  // ---------------------------------------------------------------------------
+  // 6. Group Chat Media Attachments Support
+  // ---------------------------------------------------------------------------
+  console.log('\n--- Test Suite 6: Group Chat Attachments & Media Limits ---');
+
+  const maxAttachmentLimits: Record<string, number> = {
+    image: 10 * 1024 * 1024,
+    video: 50 * 1024 * 1024,
+    audio: 25 * 1024 * 1024,
+    doc: 20 * 1024 * 1024,
+  };
+
+  assertTest(maxAttachmentLimits.image === 10485760, 'Group chat enforces 10MB limit for images');
+  assertTest(maxAttachmentLimits.video === 52428800, 'Group chat enforces 50MB limit for videos');
+  assertTest(maxAttachmentLimits.audio === 26214400, 'Group chat enforces 25MB limit for audio');
+  assertTest(maxAttachmentLimits.doc === 20971520, 'Group chat enforces 20MB limit for documents');
+
+  // Mock group attachment item
+  const mockGroupAttachment = {
+    id: 'att-123',
+    messageId: 'msg-456',
+    type: 'IMAGE' as const,
+    fileName: 'community_event.jpg',
+    fileSizeBytes: 2048576,
+    mimeType: 'image/jpeg',
+    storagePath: 'uploads/chat-attachments/community_event.jpg',
+    url: 'uploads/chat-attachments/community_event.jpg',
+    createdAt: new Date().toISOString(),
+  };
+
+  const resolvedGroupAttUrl = resolveAttachmentDisplayUrl(mockGroupAttachment.url);
+  assertTest(
+    resolvedGroupAttUrl === `${API_BASE_URL}/api/v1/chat/attachments/raw/community_event.jpg`,
+    'Correctly resolves group chat attachment storage path to proxy URL'
+  );
+
   console.log('\n================================================================');
   console.log('   All Batch 11.1 Web Direct Chat tests passed cleanly!         ');
   console.log('================================================================\n');

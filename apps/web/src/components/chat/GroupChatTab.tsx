@@ -12,6 +12,12 @@ import {
   Chip,
   Tooltip,
   Divider,
+  Dialog,
+  DialogContent,
+  Card,
+  CardMedia,
+  CardContent,
+  LinearProgress,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -24,17 +30,32 @@ import {
   WifiOff as WifiOffIcon,
   ArrowBack as ArrowBackIcon,
   Groups as GroupsIcon,
+  AttachFile as AttachFileIcon,
+  Close as CloseIcon,
+  InsertDriveFile as DocIcon,
+  OpenInNew as OpenInNewIcon,
+  PlayArrow as PlayIcon,
 } from '@mui/icons-material';
 import {
   GroupDetails,
   GroupPrivacy,
   ChatMessageItem,
+  ChatAttachmentItem,
+  ChatAttachmentInput,
   NewChatMessageEvent,
   UserTypingEvent,
 } from '@apnasamaj/shared-types';
 import { useAuth } from '../../context/AuthContext';
-import { fetchGroupMessages, sendGroupMessageApi } from '../../services/chat.service';
+import {
+  fetchGroupMessages,
+  sendGroupMessageApi,
+  uploadGroupAttachmentApi,
+} from '../../services/chat.service';
 import { connectChatSocket, getChatSocket } from '../../services/chat.socket';
+import {
+  resolveAttachmentDisplayUrl,
+  extractYouTubeVideoDetails,
+} from '../../utils/attachment';
 
 export interface ExtendedChatMessage extends ChatMessageItem {
   isOptimistic?: boolean;
@@ -84,6 +105,12 @@ function formatMessageDateHeader(isoString: string): string {
   }
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export const GroupChatTab: React.FC<GroupChatTabProps> = ({
   group,
   onJoinGroup,
@@ -113,6 +140,14 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
   const [inputContent, setInputContent] = useState<string>('');
   const [sendError, setSendError] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+
+  // Attachment & Media State
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // DOM Refs
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -325,10 +360,47 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
     }
   };
 
-  // 5. Send message handler
+  // 4.1 Attachment selection & validation
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const maxLimits: Record<string, number> = {
+      image: 10 * 1024 * 1024,
+      video: 50 * 1024 * 1024,
+      audio: 25 * 1024 * 1024,
+      doc: 20 * 1024 * 1024,
+    };
+
+    let limit = maxLimits.doc;
+    if (file.type.startsWith('image/')) limit = maxLimits.image;
+    else if (file.type.startsWith('video/')) limit = maxLimits.video;
+    else if (file.type.startsWith('audio/')) limit = maxLimits.audio;
+
+    if (file.size > limit) {
+      const limitMb = Math.round(limit / (1024 * 1024));
+      setSendError(`File size exceeds the ${limitMb}MB limit for this media type.`);
+      event.target.value = '';
+      return;
+    }
+
+    setSelectedFile(file);
+    setSendError(null);
+    event.target.value = '';
+  };
+
+  const handleClearSelectedFile = () => {
+    setSelectedFile(null);
+    setUploadProgress(0);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // 5. Send message handler (Supports text and attachments)
   const handleSendMessage = async () => {
     const trimmed = inputContent.trim();
-    if (!trimmed) return;
+    if (!trimmed && !selectedFile) return;
 
     if (trimmed.length > 2000) {
       setSendError('Message content cannot exceed 2000 characters.');
@@ -350,6 +422,36 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
     }
 
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const fileToUpload = selectedFile;
+
+    // Reset composer immediately
+    setInputContent('');
+    setSelectedFile(null);
+    setSendError(null);
+
+    let optimisticAttachments: ChatAttachmentItem[] | undefined = undefined;
+    if (fileToUpload) {
+      let attType: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT' = 'DOCUMENT';
+      if (fileToUpload.type.startsWith('image/')) attType = 'IMAGE';
+      else if (fileToUpload.type.startsWith('video/')) attType = 'VIDEO';
+      else if (fileToUpload.type.startsWith('audio/')) attType = 'AUDIO';
+
+      const blobUrl = URL.createObjectURL(fileToUpload);
+      optimisticAttachments = [
+        {
+          id: `temp_att_${Date.now()}`,
+          chatMessageId: tempId,
+          type: attType,
+          fileName: fileToUpload.name,
+          fileSizeBytes: fileToUpload.size,
+          mimeType: fileToUpload.type,
+          storagePath: blobUrl,
+          url: blobUrl,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    }
+
     const optimisticMsg: ExtendedChatMessage = {
       id: tempId,
       groupId: group.id,
@@ -362,20 +464,55 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
         fullName: user?.fullName || 'You',
         avatarUrl: null,
       },
+      attachments: optimisticAttachments,
       isOptimistic: true,
       tempId,
     };
 
     setMessages((prev) => [...prev, optimisticMsg]);
-    setInputContent('');
-    setSendError(null);
     setTimeout(() => scrollToBottom('smooth'), 50);
+
+    // If there is an attachment to upload, perform upload first
+    let attachmentInput: ChatAttachmentInput | undefined = undefined;
+    if (fileToUpload) {
+      setIsUploading(true);
+      setUploadProgress(25);
+      try {
+        setUploadProgress(50);
+        const uploaded = await uploadGroupAttachmentApi(group.id, fileToUpload);
+        setUploadProgress(100);
+        attachmentInput = {
+          id: uploaded.id,
+          type: uploaded.type,
+          fileName: uploaded.fileName,
+          mimeType: uploaded.mimeType,
+          fileSizeBytes: uploaded.fileSizeBytes,
+          storagePath: uploaded.storagePath,
+        };
+      } catch (uploadErr) {
+        const errorMsg = uploadErr instanceof Error ? uploadErr.message : 'Failed to upload attachment.';
+        setSendError(errorMsg);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.tempId === tempId
+              ? { ...m, isOptimistic: false, isError: true, errorMessage: errorMsg }
+              : m
+          )
+        );
+        setIsUploading(false);
+        setUploadProgress(0);
+        return;
+      } finally {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }
+    }
 
     const socket = getChatSocket();
     if (socket && socket.connected) {
       socket.emit(
         'send_message',
-        { groupId: group.id, content: trimmed, tempId },
+        { groupId: group.id, content: trimmed, attachment: attachmentInput, tempId },
         (res: { success: boolean; message?: ChatMessageItem; error?: string }) => {
           if (res?.success && res.message) {
             setMessages((prev) =>
@@ -400,7 +537,7 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
     } else {
       // HTTP fallback
       try {
-        const saved = await sendGroupMessageApi(group.id, trimmed, tempId);
+        const saved = await sendGroupMessageApi(group.id, trimmed, tempId, attachmentInput);
         setMessages((prev) =>
           prev.map((m) => (m.tempId === tempId ? { ...saved, isOptimistic: false } : m))
         );
@@ -759,9 +896,177 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
                         wordBreak: 'break-word',
                       }}
                     >
-                      <Typography variant="body2" sx={{ lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
-                        {msg.content}
-                      </Typography>
+                      {/* Attachments rendering */}
+                      {msg.attachments?.map((att) => {
+                        const displayUrl = resolveAttachmentDisplayUrl(att.url || att.storagePath);
+
+                        if (att.type === 'IMAGE') {
+                          return (
+                            <Box
+                              key={att.id}
+                              sx={{
+                                mb: 1,
+                                cursor: 'pointer',
+                                borderRadius: 2,
+                                overflow: 'hidden',
+                                bgcolor: isSelf ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.04)',
+                              }}
+                              onClick={() => setLightboxUrl(displayUrl)}
+                            >
+                              <img
+                                src={displayUrl}
+                                alt={att.fileName}
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: 280,
+                                  display: 'block',
+                                  objectFit: 'cover',
+                                  borderRadius: 8,
+                                }}
+                              />
+                            </Box>
+                          );
+                        }
+
+                        if (att.type === 'VIDEO') {
+                          return (
+                            <Box key={att.id} sx={{ mb: 1, borderRadius: 2, overflow: 'hidden' }}>
+                              <video
+                                controls
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: 280,
+                                  display: 'block',
+                                  borderRadius: 8,
+                                }}
+                              >
+                                <source src={displayUrl} type={att.mimeType || 'video/mp4'} />
+                                Your browser does not support video playback.
+                              </video>
+                            </Box>
+                          );
+                        }
+
+                        if (att.type === 'AUDIO') {
+                          return (
+                            <Box key={att.id} sx={{ mb: 1, minWidth: 220 }}>
+                              <audio controls style={{ width: '100%', height: 36 }}>
+                                <source src={displayUrl} type={att.mimeType || 'audio/webm'} />
+                              </audio>
+                            </Box>
+                          );
+                        }
+
+                        // Default: Document / File
+                        return (
+                          <Box
+                            key={att.id}
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              p: 1,
+                              mb: 1,
+                              bgcolor: isSelf ? 'rgba(255,255,255,0.15)' : '#f8fafc',
+                              borderRadius: 1.5,
+                            }}
+                          >
+                            <DocIcon sx={{ color: isSelf ? '#ffffff' : 'primary.main' }} />
+                            <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+                              <Typography
+                                variant="caption"
+                                fontWeight="bold"
+                                noWrap
+                                display="block"
+                                sx={{ color: isSelf ? '#ffffff' : 'inherit' }}
+                              >
+                                {att.fileName}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                sx={{ opacity: 0.8, color: isSelf ? '#ffffff' : 'inherit' }}
+                              >
+                                {formatFileSize(att.fileSizeBytes)}
+                              </Typography>
+                            </Box>
+                            <IconButton
+                              size="small"
+                              component="a"
+                              href={displayUrl}
+                              target="_blank"
+                              download
+                              sx={{ color: isSelf ? '#ffffff' : 'inherit' }}
+                            >
+                              <OpenInNewIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        );
+                      })}
+
+                      {/* YouTube Link Preview Card */}
+                      {(() => {
+                        const yt = extractYouTubeVideoDetails(msg.content);
+                        if (!yt) return null;
+                        return (
+                          <Card
+                            sx={{
+                              mb: 1,
+                              maxWidth: 320,
+                              bgcolor: isSelf ? 'rgba(255,255,255,0.15)' : '#f8fafc',
+                              color: isSelf ? '#fff' : 'inherit',
+                              border: '1px solid rgba(0,0,0,0.08)',
+                            }}
+                          >
+                            <Box sx={{ position: 'relative' }}>
+                              <CardMedia
+                                component="img"
+                                height="140"
+                                image={yt.thumbnailUrl}
+                                alt="YouTube thumbnail"
+                              />
+                              <Box
+                                sx={{
+                                  position: 'absolute',
+                                  top: '50%',
+                                  left: '50%',
+                                  transform: 'translate(-50%, -50%)',
+                                  bgcolor: 'rgba(0,0,0,0.7)',
+                                  borderRadius: '50%',
+                                  p: 1,
+                                  display: 'flex',
+                                }}
+                              >
+                                <PlayIcon sx={{ color: '#fff', fontSize: 28 }} />
+                              </Box>
+                            </Box>
+                            <CardContent sx={{ p: 1, '&:last-child': { pb: 1 } }}>
+                              <Typography variant="caption" fontWeight="bold" noWrap display="block">
+                                YouTube Video
+                              </Typography>
+                              <Button
+                                size="small"
+                                href={yt.cleanUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                sx={{
+                                  color: isSelf ? '#fff' : 'primary.main',
+                                  p: 0,
+                                  fontSize: '0.75rem',
+                                  textTransform: 'none',
+                                }}
+                              >
+                                Watch on YouTube ↗
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        );
+                      })()}
+
+                      {Boolean(msg.content) && (
+                        <Typography variant="body2" sx={{ lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                          {msg.content}
+                        </Typography>
+                      )}
 
                       {/* Timestamp & Status Icon */}
                       <Box
@@ -823,6 +1128,44 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
         </Box>
       )}
 
+      {/* Selected File Preview Chip / Progress */}
+      {selectedFile && (
+        <Box
+          sx={{
+            px: 2,
+            pt: 1,
+            pb: 0.5,
+            bgcolor: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Chip
+            icon={<DocIcon fontSize="small" />}
+            label={`${selectedFile.name} (${formatFileSize(selectedFile.size)})`}
+            onDelete={isUploading ? undefined : handleClearSelectedFile}
+            color="primary"
+            variant="outlined"
+            size="small"
+            sx={{ maxWidth: 360 }}
+          />
+          {isUploading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1, maxWidth: 220 }}>
+              <LinearProgress
+                variant="determinate"
+                value={uploadProgress}
+                sx={{ flexGrow: 1, height: 6, borderRadius: 3 }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {uploadProgress}%
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      )}
+
       <Divider />
 
       {/* Message Composer */}
@@ -836,6 +1179,33 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
           gap: 1.5,
         }}
       >
+        {/* Attachment Picker */}
+        <input
+          ref={fileInputRef}
+          id="group-chat-file-input"
+          type="file"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+          disabled={!canSend || isUploading}
+        />
+        <Tooltip title={!canSend ? 'Membership required to attach files' : 'Attach photo, video or document'}>
+          <label htmlFor="group-chat-file-input">
+            <IconButton
+              component="span"
+              disabled={!canSend || isUploading}
+              size="small"
+              sx={{
+                color: selectedFile ? 'primary.main' : 'text.secondary',
+                bgcolor: selectedFile ? 'rgba(25, 118, 210, 0.08)' : undefined,
+                cursor: canSend && !isUploading ? 'pointer' : 'default',
+              }}
+            >
+              <AttachFileIcon />
+            </IconButton>
+          </label>
+        </Tooltip>
+
         <TextField
           fullWidth
           size="small"
@@ -849,7 +1219,7 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
           value={inputContent}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          disabled={!canSend}
+          disabled={!canSend || isUploading}
           multiline
           maxRows={3}
           inputProps={{ maxLength: 2000 }}
@@ -866,22 +1236,87 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
             <IconButton
               color="primary"
               onClick={handleSendMessage}
-              disabled={!canSend || !inputContent.trim()}
+              disabled={!canSend || (!inputContent.trim() && !selectedFile) || isUploading}
               sx={{
-                bgcolor: canSend && inputContent.trim() ? 'primary.main' : undefined,
-                color: canSend && inputContent.trim() ? '#ffffff' : undefined,
+                bgcolor:
+                  canSend && (inputContent.trim() || selectedFile) && !isUploading
+                    ? 'primary.main'
+                    : undefined,
+                color:
+                  canSend && (inputContent.trim() || selectedFile) && !isUploading
+                    ? '#ffffff'
+                    : undefined,
                 '&:hover': {
-                  bgcolor: canSend && inputContent.trim() ? 'primary.dark' : undefined,
+                  bgcolor:
+                    canSend && (inputContent.trim() || selectedFile) && !isUploading
+                      ? 'primary.dark'
+                      : undefined,
                 },
                 width: 40,
                 height: 40,
               }}
             >
-              <SendIcon fontSize="small" />
+              {isUploading ? (
+                <CircularProgress size={20} color="inherit" />
+              ) : (
+                <SendIcon fontSize="small" />
+              )}
             </IconButton>
           </span>
         </Tooltip>
       </Box>
+
+      {/* Lightbox Dialog for Full-Resolution Image Previews */}
+      <Dialog
+        open={Boolean(lightboxUrl)}
+        onClose={() => setLightboxUrl(null)}
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            bgcolor: 'transparent',
+            boxShadow: 'none',
+            overflow: 'hidden',
+          },
+        }}
+      >
+        <DialogContent
+          sx={{
+            p: 0,
+            position: 'relative',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <IconButton
+            onClick={() => setLightboxUrl(null)}
+            sx={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              bgcolor: 'rgba(0,0,0,0.6)',
+              color: '#ffffff',
+              '&:hover': { bgcolor: 'rgba(0,0,0,0.85)' },
+              zIndex: 10,
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+          {lightboxUrl && (
+            <img
+              src={lightboxUrl}
+              alt="Full Preview"
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '90vh',
+                objectFit: 'contain',
+                borderRadius: 8,
+                display: 'block',
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Paper>
   );
 };
