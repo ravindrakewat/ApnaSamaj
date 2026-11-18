@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
+import { ApnaSamajLogo } from '../components/ApnaSamajLogo';
 import {
   Container,
   Paper,
@@ -86,17 +87,8 @@ export const LoginPage: React.FC = () => {
       <Paper elevation={3} sx={{ p: { xs: 3, sm: 4 }, borderRadius: 3 }}>
         {/* Header */}
         <Box textAlign="center" mb={3}>
-          <Box
-            sx={{
-              display: 'inline-flex',
-              p: 1.5,
-              borderRadius: '50%',
-              bgcolor: 'primary.light',
-              color: 'primary.main',
-              mb: 1.5,
-            }}
-          >
-            <LockOutlinedIcon sx={{ fontSize: 32 }} />
+          <Box sx={{ display: 'inline-flex', mb: 2 }}>
+            <ApnaSamajLogo size={64} showText={false} />
           </Box>
           <Typography variant="h5" component="h1" fontWeight="bold">
             Member Login

@@ -4,6 +4,7 @@ import {
   StyleSheet,
   Pressable,
   ViewStyle,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -145,9 +146,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 icon
               )
             ) : (
-              <Typography variant="md" weight="bold" color="#FFFFFF" style={styles.defaultBrandLetter}>
-                अ
-              </Typography>
+              <Image
+                source={require('../../assets/images/favicon.png')}
+                style={{ width: 34, height: 34, borderRadius: 9 }}
+                resizeMode="cover"
+              />
             )}
           </View>
         ) : null}

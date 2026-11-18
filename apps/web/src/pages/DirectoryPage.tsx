@@ -313,7 +313,17 @@ export const DirectoryPage: React.FC = () => {
       </Paper>
 
       {/* Two-Tier Search and Filters Section */}
-      <Paper elevation={1} sx={{ p: 3, mb: 4, borderRadius: 2.5 }}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: 3,
+          mb: 4,
+          borderRadius: 3.5,
+          border: '1px solid',
+          borderColor: 'divider',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.03)',
+        }}
+      >
         {/* Tier 1: Search Text & Reset Action */}
         <Box
           display="flex"

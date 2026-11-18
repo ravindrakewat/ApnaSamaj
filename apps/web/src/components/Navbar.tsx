@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { ApnaSamajLogo } from './ApnaSamajLogo';
 import {
   AppBar,
   Toolbar,
@@ -80,18 +81,10 @@ export const Navbar: React.FC = () => {
           <Toolbar disableGutters sx={{ justifyContent: 'space-between', minHeight: 64 }}>
             {/* Logo / Brand */}
             <Box
-              sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
+              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', py: 0.5 }}
               onClick={() => navigate('/')}
             >
-              <GroupsIcon color="primary" sx={{ fontSize: 32 }} />
-              <Box>
-                <Typography variant="h6" fontWeight="bold" color="primary" sx={{ lineHeight: 1.2 }}>
-                  Apna Samaj
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {t('brandSubtitle')}
-                </Typography>
-              </Box>
+              <ApnaSamajLogo size={40} subtextColor="text.secondary" />
             </Box>
 
             {/* Desktop Navigation Links (Visible on md and up) */}
@@ -272,11 +265,8 @@ export const Navbar: React.FC = () => {
         }}
       >
         <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <GroupsIcon color="primary" />
-            <Typography variant="subtitle1" fontWeight="bold">
-              Apna Samaj
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => { navigate('/'); setMobileDrawerOpen(false); }}>
+            <ApnaSamajLogo size={32} />
           </Box>
           <IconButton size="small" onClick={() => setMobileDrawerOpen(false)}>
             <CloseIcon fontSize="small" />

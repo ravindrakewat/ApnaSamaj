@@ -6,6 +6,7 @@ import {
   ScrollView,
   Platform,
   Pressable,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -134,11 +135,11 @@ export default function LoginScreen() {
 
         {/* Brand Hero Banner */}
         <View style={styles.brandContainer}>
-          <View style={[styles.brandIcon, { backgroundColor: theme.colors.primary }]}>
-            <Typography variant="display" weight="bold" color="#FFFFFF">
-              अ
-            </Typography>
-          </View>
+          <Image
+            source={require('../../assets/images/icon.png')}
+            style={{ width: 80, height: 80, borderRadius: 20, marginBottom: 12 }}
+            resizeMode="contain"
+          />
           <Typography
             variant="title"
             weight="bold"

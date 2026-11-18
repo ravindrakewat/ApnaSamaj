@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { Typography } from './Typography';
 import { useTheme } from '../hooks/useTheme';
 import { useLocalization } from '../hooks/useLocalization';
@@ -12,11 +12,11 @@ export const SplashScreen: React.FC = () => {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <View style={styles.centerBox}>
         {/* Brand Icon / Symbol */}
-        <View style={[styles.iconPlaceholder, { backgroundColor: theme.colors.primary }]}>
-          <Typography variant="title" weight="bold" color={theme.colors.textInverse}>
-            अ
-          </Typography>
-        </View>
+        <Image
+          source={require('../../assets/images/icon.png')}
+          style={{ width: 84, height: 84, borderRadius: 22, marginBottom: 16 }}
+          resizeMode="contain"
+        />
 
         <Typography
           variant="title"

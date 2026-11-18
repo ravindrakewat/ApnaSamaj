@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E3A8A" />
+      <stop offset="50%" stop-color="#1E40AF" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+
+    <!-- Ring Gradient -->
+    <linearGradient id="goldRing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="45%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#EA580C" />
+    </linearGradient>
+
+    <!-- Center Figure Gradient -->
+    <linearGradient id="centerFigGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+
+    <!-- Left Figure Gradient -->
+    <linearGradient id="leftFigGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+
+    <!-- Right Figure Gradient -->
+    <linearGradient id="rightFigGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FB923C" />
+      <stop offset="100%" stop-color="#DC2626" />
+    </linearGradient>
+
+    <!-- Base Laurel / Arch Gradient -->
+    <linearGradient id="laurelGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="50%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Rounded Squircle / Shield Container -->
+  <rect x="16" y="16" width="480" height="480" rx="120" fill="url(#bgGrad)" />
+
+  <!-- Decorative Outer Glow Ring -->
+  <circle cx="256" cy="256" r="216" fill="none" stroke="url(#goldRing)" stroke-width="5" opacity="0.4" stroke-dasharray="16 10" />
+  <circle cx="256" cy="256" r="202" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.15" />
+
+  <!-- Sunburst / Rays of Knowledge at Center Top -->
+  <g opacity="0.25" stroke="#FDE047" stroke-width="2.5" stroke-linecap="round">
+    <line x1="256" y1="76" x2="256" y2="94" />
+    <line x1="210" y1="88" x2="220" y2="104" />
+    <line x1="302" y1="88" x2="292" y2="104" />
+    <line x1="172" y1="118" x2="186" y2="130" />
+    <line x1="340" y1="118" x2="326" y2="130" />
+  </g>
+
+  <!-- Rising Sun / Lotus Center Top Emblem -->
+  <g filter="url(#glow)">
+    <circle cx="256" cy="112" r="16" fill="url(#goldRing)" />
+    <!-- Lotus Petals -->
+    <path d="M256,92 C244,106 244,118 256,128 C268,118 268,106 256,92 Z" fill="#FEF08A" />
+    <path d="M242,100 C234,110 236,122 248,126 C244,116 244,106 242,100 Z" fill="#F59E0B" />
+    <path d="M270,100 C278,110 276,122 264,126 C268,116 268,106 270,100 Z" fill="#F59E0B" />
+  </g>
+
+  <!-- Central Unity Figures -->
+  <!-- 1. Center Figure (Noble & Empowering) -->
+  <circle cx="256" cy="178" r="30" fill="url(#centerFigGrad)" filter="url(#glow)" />
+  <path d="M214,284 C214,242 232,224 256,224 C280,224 298,242 298,284 C298,294 290,302 280,302 L232,302 C222,302 214,294 214,284 Z" fill="url(#centerFigGrad)" />
+
+  <!-- 2. Left Figure (Leaning Inward, Interlinked Arm) -->
+  <circle cx="178" cy="206" r="24" fill="url(#leftFigGrad)" />
+  <path d="M140,296 C140,260 156,244 178,244 C195,244 207,254 214,270 C208,282 208,294 210,302 L158,302 C148,302 140,298 140,296 Z" fill="url(#leftFigGrad)" />
+
+  <!-- 3. Right Figure (Leaning Inward, Interlinked Arm) -->
+  <circle cx="334" cy="206" r="24" fill="url(#rightFigGrad)" />
+  <path d="M372,296 C372,260 356,244 334,244 C317,244 305,254 298,270 C304,282 304,294 302,302 L354,302 C364,302 372,298 372,296 Z" fill="url(#rightFigGrad)" />
+
+  <!-- Protective Interlocking Arch & Hands (Community Bond) -->
+  <path d="M148,300 C180,332 332,332 364,300 C370,294 380,298 376,306 C340,350 172,350 136,306 C132,298 142,294 148,300 Z" fill="url(#goldRing)" filter="url(#glow)" />
+
+  <!-- Supportive Base Ribbon / Harmony Arch -->
+  <path d="M168,362 C224,382 288,382 344,362 C352,359 360,366 356,374 C328,402 184,402 156,374 C152,366 160,359 168,362 Z" fill="url(#laurelGrad)" opacity="0.9" />
+
+  <!-- Core Motto Stars / Dots -->
+  <circle cx="256" cy="386" r="4.5" fill="#FDE047" />
+  <circle cx="236" cy="384" r="3" fill="#FFFFFF" opacity="0.8" />
+  <circle cx="276" cy="384" r="3" fill="#FFFFFF" opacity="0.8" />
+
+  <!-- Text / Wordmark for Apna Samaj -->
+  <text x="256" y="440" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="34" fill="#FFFFFF" letter-spacing="1.5">
+    APNA SAMAJ
+  </text>
+  <text x="256" y="468" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="16" fill="#FBBF24" letter-spacing="3">
+    अपना समाज
+  </text>
+</svg>

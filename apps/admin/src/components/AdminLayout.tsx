@@ -113,13 +113,24 @@ export const AdminLayout: React.FC = () => {
           color: 'secondary.contrastText',
         }}
       >
-        <AdminPanelSettings fontSize="large" />
+        <Box
+          component="img"
+          src="/favicon.svg"
+          alt="Apna Samaj Logo"
+          sx={{
+            width: 38,
+            height: 38,
+            borderRadius: '9px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+            flexShrink: 0,
+          }}
+        />
         <Box>
           <Typography variant="h6" fontWeight="bold" lineHeight={1.2}>
             Apna Samaj
           </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.85 }}>
-            Control Center
+          <Typography variant="caption" sx={{ opacity: 0.85, fontWeight: 500 }}>
+            प्रशासन • Admin Portal
           </Typography>
         </Box>
       </Box>

@@ -107,20 +107,17 @@ export const LoginPage: React.FC = () => {
           {/* Header & Branding */}
           <Box display="flex" flexDirection="column" alignItems="center" mb={3}>
             <Box
+              component="img"
+              src="/favicon.svg"
+              alt="Apna Samaj Logo"
               sx={{
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
-                bgcolor: 'secondary.light',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                width: 64,
+                height: 64,
+                borderRadius: '16px',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
                 mb: 1.5,
-                color: 'secondary.contrastText',
               }}
-            >
-              <AdminPanelSettings fontSize="large" />
-            </Box>
+            />
             <Typography variant="h4" component="h1" fontWeight="bold" color="secondary" gutterBottom>
               Apna Samaj
             </Typography>

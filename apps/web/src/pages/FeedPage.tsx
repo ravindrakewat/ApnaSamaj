@@ -359,7 +359,17 @@ export const FeedPage: React.FC = () => {
       <CreatePostComposer onPostCreated={handlePostCreated} />
 
       {/* Search and Filters Bar */}
-      <Paper elevation={1} sx={{ p: 2.5, mb: 3, borderRadius: 3 }}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2.5,
+          mb: 3,
+          borderRadius: 3.5,
+          border: '1px solid',
+          borderColor: 'divider',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
+        }}
+      >
         <Box display="flex" flexDirection="column" gap={2}>
           {/* Search Input Bar */}
           <TextField

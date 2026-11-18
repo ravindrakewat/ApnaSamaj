@@ -1129,7 +1129,21 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   return (
     <>
-      <Card ref={cardRef} elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
+      <Card
+        ref={cardRef}
+        elevation={0}
+        sx={{
+          borderRadius: 3.5,
+          mb: 3,
+          border: '1px solid',
+          borderColor: 'divider',
+          boxShadow: '0 2px 12px rgba(0, 0, 0, 0.04)',
+          transition: 'all 0.25s ease-in-out',
+          '&:hover': {
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)',
+          },
+        }}
+      >
         <CardHeader
           avatar={
             <Avatar

@@ -9,6 +9,7 @@ import {
   Modal,
   Alert,
   TextInput,
+  Image,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -532,11 +533,11 @@ export default function SocialFeedHomeScreen() {
         ]}
       >
         <View style={styles.brandRow}>
-          <View style={[styles.brandIcon, { backgroundColor: theme.colors.primary }]}>
-            <Typography variant="md" weight="bold" color={theme.colors.textInverse}>
-              अ
-            </Typography>
-          </View>
+          <Image
+            source={require('../../assets/images/favicon.png')}
+            style={{ width: 34, height: 34, borderRadius: 9, marginRight: 8 }}
+            resizeMode="cover"
+          />
           <View style={styles.brandTextCol}>
             <Typography variant="md" weight="bold" color={theme.colors.primary} style={styles.brandTitle}>
               {language === 'hi' ? 'अपना समाज' : 'Apna Samaj'}

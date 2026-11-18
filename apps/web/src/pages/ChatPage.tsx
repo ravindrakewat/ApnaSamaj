@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { ApnaSamajLogo } from '../components/ApnaSamajLogo';
 import {
   Box,
   Paper,
@@ -1421,13 +1422,26 @@ export const ChatPage: React.FC = () => {
           </>
         ) : (
           <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 4, textAlign: 'center' }}>
-            <ChatIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-            <Typography variant="h6" fontWeight="bold" color="text.secondary">
-              किसी बातचीत का चयन करें / Select a conversation
+            <Box sx={{ mb: 2.5, opacity: 0.9 }}>
+              <ApnaSamajLogo size={76} showText={false} />
+            </Box>
+            <Typography variant="h6" fontWeight="bold" color="text.primary">
+              किसी बातचीत या समूह का चयन करें
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 360, mt: 1 }}>
-              Choose a contact or group from the left list, or find members in the directory to start a new private conversation.
+            <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
+              Select a conversation or group
             </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 400, mb: 3 }}>
+              बाएं सूची में से किसी सदस्य या ग्रुप पर क्लिक करें, अथवा डायरेक्टरी से नए समाजजनों को संदेश भेजें।
+            </Typography>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => navigate('/directory')}
+              sx={{ borderRadius: 2, textTransform: 'none', px: 2.5 }}
+            >
+              सदस्य डायरेक्टरी देखें / Member Directory
+            </Button>
           </Box>
         )}
       </Box>

@@ -473,7 +473,18 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     !isSubmitting;
 
   return (
-    <Paper elevation={2} sx={{ p: { xs: 2.5, sm: 3 }, borderRadius: 3, mb: 4 }}>
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 2.5, sm: 3 },
+        borderRadius: 3.5,
+        mb: 3.5,
+        border: '1px solid',
+        borderColor: 'divider',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
+        bgcolor: 'background.paper',
+      }}
+    >
       <Box display="flex" alignItems="center" gap={1.5} mb={2}>
         <Avatar sx={{ bgcolor: 'primary.main', width: 44, height: 44, fontWeight: 'bold' }}>
           {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'M'}
@@ -502,11 +513,11 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
               select
               size="small"
               fullWidth
-              label="लक्ष्य दर्शक / Target Destination"
+              label="कहाँ पोस्ट करें? / Post To"
               value={targetGroupId}
               onChange={(e) => setTargetGroupId(e.target.value)}
               disabled={isSubmitting}
-              helperText="सार्वजनिक फ़ीड या विशिष्ट समूह में पोस्ट करें / Post to Public Community Feed or a specific group"
+              helperText="सार्वजनिक फ़ीड (सभी के लिए) या अपने किसी ग्रुप में पोस्ट करें / Post to Public Feed or your group"
             >
               <MenuItem value="">
                 <Box display="flex" alignItems="center" gap={1}>
@@ -1116,7 +1127,15 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
             color="primary"
             disabled={!canSubmit}
             startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : <SendIcon />}
-            sx={{ px: 3, py: 1, borderRadius: 2, fontWeight: 600 }}
+            sx={{
+              px: 3.5,
+              py: 1,
+              borderRadius: 2.5,
+              fontWeight: 700,
+              textTransform: 'none',
+              boxShadow: canSubmit ? '0 4px 14px rgba(37, 99, 235, 0.35)' : 'none',
+              transition: 'all 0.2s ease-in-out',
+            }}
           >
             {isSubmitting ? t('publishing') : t('publishPost')}
           </Button>

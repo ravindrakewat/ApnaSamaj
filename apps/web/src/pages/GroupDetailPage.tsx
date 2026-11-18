@@ -505,12 +505,14 @@ export const GroupDetailPage: React.FC = () => {
 
       {/* Hero Group Card */}
       <Paper
-        elevation={2}
+        elevation={0}
         sx={{
-          borderRadius: 3,
+          borderRadius: 3.5,
           overflow: 'hidden',
           mb: 4,
-          border: '1px solid rgba(0,0,0,0.08)',
+          border: '1px solid',
+          borderColor: 'divider',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
         }}
       >
         {/* Banner Cover Image */}

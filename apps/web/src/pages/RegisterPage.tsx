@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { ApnaSamajLogo } from '../components/ApnaSamajLogo';
 import {
   Container,
   Paper,
@@ -116,17 +117,8 @@ export const RegisterPage: React.FC = () => {
       <Paper elevation={3} sx={{ p: { xs: 3, sm: 5 }, borderRadius: 3 }}>
         {/* Header */}
         <Box textAlign="center" mb={3}>
-          <Box
-            sx={{
-              display: 'inline-flex',
-              p: 1.5,
-              borderRadius: '50%',
-              bgcolor: 'primary.light',
-              color: 'primary.main',
-              mb: 1.5,
-            }}
-          >
-            <HowToRegIcon sx={{ fontSize: 36 }} />
+          <Box sx={{ display: 'inline-flex', mb: 2 }}>
+            <ApnaSamajLogo size={64} showText={false} />
           </Box>
           <Typography variant="h5" component="h1" fontWeight="bold">
             Create Member Account
