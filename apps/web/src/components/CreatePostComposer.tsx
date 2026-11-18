@@ -406,11 +406,12 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     }
 
     const isTitleRequired = postType === PostType.ANNOUNCEMENT || postType === PostType.EVENT;
-    if (isTitleRequired && !title.trim()) {
+    const effectiveTitle = postType === PostType.GENERAL ? undefined : title.trim() || undefined;
+    if (isTitleRequired && !effectiveTitle) {
       setErrorMessage(t('titleRequiredError'));
       return;
     }
-    if (title.length > 150) {
+    if (effectiveTitle && effectiveTitle.length > 150) {
       setErrorMessage(t('titleMaxLengthError'));
       return;
     }
@@ -418,7 +419,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     const effectiveGroupId = groupId || targetGroupId || undefined;
 
     const validation = createPostSchema.safeParse({
-      title: title.trim() || undefined,
+      title: effectiveTitle,
       content: content.trim(),
       type: postType,
       groupId: effectiveGroupId,
@@ -459,7 +460,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
   const isTitleRequired = postType === PostType.ANNOUNCEMENT || postType === PostType.EVENT;
   const isTitleValid = !isTitleRequired || title.trim().length > 0;
   const hasTextOrMedia =
-    title.trim().length > 0 ||
+    (postType !== PostType.GENERAL && title.trim().length > 0) ||
     content.trim().length > 0 ||
     mediaList.length > 0 ||
     !!attachedYoutubeVideo ||
@@ -527,29 +528,31 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
           </Box>
         )}
 
-        <TextField
-          fullWidth
-          size="small"
-          label={t('postTitleLabel')}
-          placeholder={
-            postType === PostType.ANNOUNCEMENT
-              ? t('postTitleAnnouncementPlaceholder')
-              : postType === PostType.EVENT
-              ? t('postTitleEventPlaceholder')
-              : t('postTitlePlaceholder')
-          }
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          disabled={isSubmitting}
-          required={isTitleRequired}
-          inputProps={{ maxLength: 150 }}
-          helperText={
-            isTitleRequired
-              ? `${t('postTitleRequiredHint')} · ${t('postTitleCharsLeft', { count: 150 - title.length })}`
-              : `${t('postTitleOptionalHint')} · ${t('postTitleCharsLeft', { count: 150 - title.length })}`
-          }
-          sx={{ mb: 2 }}
-        />
+        {postType !== PostType.GENERAL && (
+          <TextField
+            fullWidth
+            size="small"
+            label={t('postTitleLabel')}
+            placeholder={
+              postType === PostType.ANNOUNCEMENT
+                ? t('postTitleAnnouncementPlaceholder')
+                : postType === PostType.EVENT
+                ? t('postTitleEventPlaceholder')
+                : t('postTitlePlaceholder')
+            }
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            disabled={isSubmitting}
+            required={isTitleRequired}
+            inputProps={{ maxLength: 150 }}
+            helperText={
+              isTitleRequired
+                ? `${t('postTitleRequiredHint')} · ${t('postTitleCharsLeft', { count: 150 - title.length })}`
+                : `${t('postTitleOptionalHint')} · ${t('postTitleCharsLeft', { count: 150 - title.length })}`
+            }
+            sx={{ mb: 2 }}
+          />
+        )}
 
         <TextField
           multiline
@@ -1067,7 +1070,13 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
               select
               size="small"
               value={postType}
-              onChange={(e) => setPostType(e.target.value as PostType)}
+              onChange={(e) => {
+                const newType = e.target.value as PostType;
+                setPostType(newType);
+                if (newType === PostType.GENERAL) {
+                  setTitle('');
+                }
+              }}
               disabled={isSubmitting}
               sx={{ minWidth: 160 }}
             >

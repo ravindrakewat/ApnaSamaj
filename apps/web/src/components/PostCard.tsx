@@ -740,17 +740,18 @@ export const PostCard: React.FC<PostCardProps> = ({
     }));
 
     const isTitleRequired = editType === PostType.ANNOUNCEMENT || editType === PostType.EVENT;
-    if (isTitleRequired && !editTitle.trim()) {
+    const effectiveEditTitle = editType === PostType.GENERAL ? null : (editTitle.trim() || null);
+    if (isTitleRequired && !effectiveEditTitle) {
       setUpdateError(t('titleRequiredError'));
       return;
     }
-    if (editTitle.length > 150) {
+    if (effectiveEditTitle && effectiveEditTitle.length > 150) {
       setUpdateError(t('titleMaxLengthError'));
       return;
     }
 
     const validation = updatePostSchema.safeParse({
-      title: editTitle.trim() || null,
+      title: effectiveEditTitle,
       content: editContent.trim(),
       type: editType,
       media: mediaPayload,
@@ -1728,29 +1729,31 @@ export const PostCard: React.FC<PostCardProps> = ({
             {isModerator && <MenuItem value={PostType.ANNOUNCEMENT}>{t('postTypeAnnouncement')}</MenuItem>}
           </TextField>
 
-          <TextField
-            fullWidth
-            size="small"
-            label={t('postTitleLabel')}
-            placeholder={
-              editType === PostType.ANNOUNCEMENT
-                ? t('postTitleAnnouncementPlaceholder')
-                : editType === PostType.EVENT
-                ? t('postTitleEventPlaceholder')
-                : t('postTitlePlaceholder')
-            }
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            disabled={isUpdating || isUploadingEditMedia}
-            required={editType === PostType.ANNOUNCEMENT || editType === PostType.EVENT}
-            inputProps={{ maxLength: 150 }}
-            helperText={
-              (editType === PostType.ANNOUNCEMENT || editType === PostType.EVENT)
-                ? `${t('postTitleRequiredHint')} · ${t('postTitleCharsLeft', { count: 150 - editTitle.length })}`
-                : `${t('postTitleOptionalHint')} · ${t('postTitleCharsLeft', { count: 150 - editTitle.length })}`
-            }
-            sx={{ mb: 2 }}
-          />
+          {editType !== PostType.GENERAL && (
+            <TextField
+              fullWidth
+              size="small"
+              label={t('postTitleLabel')}
+              placeholder={
+                editType === PostType.ANNOUNCEMENT
+                  ? t('postTitleAnnouncementPlaceholder')
+                  : editType === PostType.EVENT
+                  ? t('postTitleEventPlaceholder')
+                  : t('postTitlePlaceholder')
+              }
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              disabled={isUpdating || isUploadingEditMedia}
+              required={editType === PostType.ANNOUNCEMENT || editType === PostType.EVENT}
+              inputProps={{ maxLength: 150 }}
+              helperText={
+                (editType === PostType.ANNOUNCEMENT || editType === PostType.EVENT)
+                  ? `${t('postTitleRequiredHint')} · ${t('postTitleCharsLeft', { count: 150 - editTitle.length })}`
+                  : `${t('postTitleOptionalHint')} · ${t('postTitleCharsLeft', { count: 150 - editTitle.length })}`
+              }
+              sx={{ mb: 2 }}
+            />
+          )}
 
           <TextField
             fullWidth

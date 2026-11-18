@@ -417,7 +417,7 @@ export default function CreatePostScreen() {
   const titleCharsRemaining = 150 - title.length;
 
   const hasAnyContentOrMedia =
-    title.trim().length > 0 ||
+    (selectedCategory !== 'GENERAL' && title.trim().length > 0) ||
     content.trim().length > 0 ||
     mediaList.length > 0 ||
     Boolean(attachedVideo) ||
@@ -426,7 +426,7 @@ export default function CreatePostScreen() {
   const canPublish =
     hasAnyContentOrMedia &&
     (!isTitleRequired || title.trim().length > 0) &&
-    title.length <= 150 &&
+    (selectedCategory === 'GENERAL' || title.length <= 150) &&
     !isAnyMediaUploading &&
     !hasMediaError &&
     !isSubmitting;
@@ -449,10 +449,11 @@ export default function CreatePostScreen() {
     if (isSubmittingRef.current || !canPublish) return;
 
     // Validate fields
-    const titleVal = validatePostTitle(title, selectedCategory, language);
+    const effectiveTitle = selectedCategory === 'GENERAL' ? '' : title.trim();
+    const titleVal = validatePostTitle(effectiveTitle, selectedCategory, language);
     const contentVal = validatePostContent(
       content,
-      title,
+      effectiveTitle,
       mediaList.length > 0 || Boolean(attachedVideo) || Boolean(attachedYoutubeVideo),
       language
     );
@@ -516,7 +517,7 @@ export default function CreatePostScreen() {
       }
 
       // 2. Map category to backend database PostType and structured title prefix
-      let finalTitle: string | undefined = title.trim() || undefined;
+      let finalTitle: string | undefined = selectedCategory === 'GENERAL' ? undefined : (title.trim() || undefined);
       let finalType: PostType = 'GENERAL';
 
       if (selectedCategory === 'ANNOUNCEMENT') {
@@ -814,6 +815,9 @@ export default function CreatePostScreen() {
                 key={cat.key}
                 onPress={() => {
                   setSelectedCategory(cat.key);
+                  if (cat.key === 'GENERAL') {
+                    setTitle('');
+                  }
                   setTitleError(undefined);
                 }}
                 style={[
@@ -954,83 +958,85 @@ export default function CreatePostScreen() {
           </View>
         )}
 
-        {/* 4. Title Input Section */}
-        <View style={[styles.cardSection, { backgroundColor: theme.colors.surface, borderColor: titleError ? theme.colors.error : isTitleFocused ? theme.colors.primary : theme.colors.border }]}>
-          <View style={styles.fieldHeaderRow}>
-            <View style={styles.fieldLabelContainer}>
-              <Typography variant="xs" weight="bold" color={theme.colors.textPrimary}>
-                {isHindi ? 'शीर्षक' : 'Title'}
-              </Typography>
-              <View
-                style={[
-                  styles.requiredBadgePill,
-                  { backgroundColor: isTitleRequired ? '#FEE2E2' : '#F1F5F9' },
-                ]}
-              >
-                <Typography
-                  variant="xs"
-                  weight="bold"
-                  color={isTitleRequired ? '#DC2626' : theme.colors.textMuted}
-                  style={{ fontSize: 10 }}
+        {/* 4. Title Input Section (Hidden for General Post) */}
+        {selectedCategory !== 'GENERAL' && (
+          <View style={[styles.cardSection, { backgroundColor: theme.colors.surface, borderColor: titleError ? theme.colors.error : isTitleFocused ? theme.colors.primary : theme.colors.border }]}>
+            <View style={styles.fieldHeaderRow}>
+              <View style={styles.fieldLabelContainer}>
+                <Typography variant="xs" weight="bold" color={theme.colors.textPrimary}>
+                  {isHindi ? 'शीर्षक' : 'Title'}
+                </Typography>
+                <View
+                  style={[
+                    styles.requiredBadgePill,
+                    { backgroundColor: isTitleRequired ? '#FEE2E2' : '#F1F5F9' },
+                  ]}
                 >
-                  {isTitleRequired
-                    ? isHindi ? 'आवश्यक *' : 'Required *'
-                    : isHindi ? 'वैकल्पिक' : 'Optional'}
+                  <Typography
+                    variant="xs"
+                    weight="bold"
+                    color={isTitleRequired ? '#DC2626' : theme.colors.textMuted}
+                    style={{ fontSize: 10 }}
+                  >
+                    {isTitleRequired
+                      ? isHindi ? 'आवश्यक *' : 'Required *'
+                      : isHindi ? 'वैकल्पिक' : 'Optional'}
+                  </Typography>
+                </View>
+              </View>
+
+              <Typography
+                variant="xs"
+                weight="medium"
+                color={titleCharsRemaining < 20 ? theme.colors.error : theme.colors.textMuted}
+              >
+                {title.length}/150
+              </Typography>
+            </View>
+
+            <TextInput
+              placeholder={
+                selectedCategory === 'ANNOUNCEMENT'
+                  ? isHindi ? 'सूचना का मुख्य विषय दर्ज करें *' : 'Enter announcement title *'
+                  : selectedCategory === 'EVENT'
+                  ? isHindi ? 'आयोजन का नाम दर्ज करें *' : 'Enter event title *'
+                  : selectedCategory === 'EMPLOYMENT'
+                  ? isHindi ? 'नौकरी / पद का नाम दर्ज करें *' : 'Enter job position / title *'
+                  : selectedCategory === 'GOVERNMENT_SCHEME'
+                  ? isHindi ? 'सरकारी योजना का नाम दर्ज करें *' : 'Enter government scheme name *'
+                  : selectedCategory === 'MATRIMONIAL'
+                  ? isHindi ? 'वैवाहिक सूचना शीर्षक दर्ज करें *' : 'Enter matrimonial notice title *'
+                  : isHindi ? 'पोस्ट का शीर्षक (वैकल्पिक)' : 'Post title (optional)'
+              }
+              placeholderTextColor={theme.colors.textMuted}
+              value={title}
+              onFocus={() => setIsTitleFocused(true)}
+              onBlur={() => setIsTitleFocused(false)}
+              onChangeText={(text) => {
+                if (text.length <= 150) {
+                  setTitle(text);
+                  if (titleError) setTitleError(undefined);
+                }
+              }}
+              style={[
+                styles.titleInputField,
+                { color: theme.colors.textPrimary },
+              ]}
+              maxLength={150}
+            />
+
+            {titleError && (
+              <View style={styles.inlineErrorRow}>
+                <Typography variant="xs" color={theme.colors.error} style={{ marginRight: 4 }}>
+                  ⚠️
+                </Typography>
+                <Typography variant="xs" weight="medium" color={theme.colors.error}>
+                  {titleError}
                 </Typography>
               </View>
-            </View>
-
-            <Typography
-              variant="xs"
-              weight="medium"
-              color={titleCharsRemaining < 20 ? theme.colors.error : theme.colors.textMuted}
-            >
-              {title.length}/150
-            </Typography>
+            )}
           </View>
-
-          <TextInput
-            placeholder={
-              selectedCategory === 'ANNOUNCEMENT'
-                ? isHindi ? 'सूचना का मुख्य विषय दर्ज करें *' : 'Enter announcement title *'
-                : selectedCategory === 'EVENT'
-                ? isHindi ? 'आयोजन का नाम दर्ज करें *' : 'Enter event title *'
-                : selectedCategory === 'EMPLOYMENT'
-                ? isHindi ? 'नौकरी / पद का नाम दर्ज करें *' : 'Enter job position / title *'
-                : selectedCategory === 'GOVERNMENT_SCHEME'
-                ? isHindi ? 'सरकारी योजना का नाम दर्ज करें *' : 'Enter government scheme name *'
-                : selectedCategory === 'MATRIMONIAL'
-                ? isHindi ? 'वैवाहिक सूचना शीर्षक दर्ज करें *' : 'Enter matrimonial notice title *'
-                : isHindi ? 'पोस्ट का शीर्षक (वैकल्पिक)' : 'Post title (optional)'
-            }
-            placeholderTextColor={theme.colors.textMuted}
-            value={title}
-            onFocus={() => setIsTitleFocused(true)}
-            onBlur={() => setIsTitleFocused(false)}
-            onChangeText={(text) => {
-              if (text.length <= 150) {
-                setTitle(text);
-                if (titleError) setTitleError(undefined);
-              }
-            }}
-            style={[
-              styles.titleInputField,
-              { color: theme.colors.textPrimary },
-            ]}
-            maxLength={150}
-          />
-
-          {titleError && (
-            <View style={styles.inlineErrorRow}>
-              <Typography variant="xs" color={theme.colors.error} style={{ marginRight: 4 }}>
-                ⚠️
-              </Typography>
-              <Typography variant="xs" weight="medium" color={theme.colors.error}>
-                {titleError}
-              </Typography>
-            </View>
-          )}
-        </View>
+        )}
 
         {/* 5. Description Input Section */}
         <View style={[styles.cardSection, { backgroundColor: theme.colors.surface, borderColor: contentError ? theme.colors.error : isContentFocused ? theme.colors.primary : theme.colors.border }]}>

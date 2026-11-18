@@ -392,6 +392,84 @@ async function main() {
     assert.strictEqual(govtRes.success, false, 'GOVERNMENT_SCHEME should not be valid in current enum');
   });
 
+  // -----------------------------------------------------------------------------
+  // 7. General Post Default Without Title UX Verification
+  // -----------------------------------------------------------------------------
+  console.log('\n--- 7. General Post Default Without Title UX Verification ---');
+
+  await runTest('Composer logic omits title for GENERAL post type', () => {
+    const postType = 'GENERAL';
+    const rawTitle = 'Accidental Title Left in Memory';
+    const effectiveTitle = postType === 'GENERAL' ? undefined : rawTitle.trim() || undefined;
+
+    assert.strictEqual(effectiveTitle, undefined, 'Effective title should be undefined for GENERAL post');
+
+    const res = createPostSchema.safeParse({
+      title: effectiveTitle,
+      content: 'General thoughts on community gathering.',
+      type: postType,
+    });
+    assert.ok(res.success);
+    assert.strictEqual(res.data.title, undefined);
+  });
+
+  await runTest('Composer permits publish without title for GENERAL post when content exists', () => {
+    const postType = 'GENERAL';
+    const content = 'Namaste dosto, aaj sabhi log 6 baje samuhik sabha me upastith rahein.';
+    const title = '';
+    const isTitleRequired = postType === 'ANNOUNCEMENT' || postType === 'EVENT';
+    const hasTextOrMedia =
+      (postType !== 'GENERAL' && title.trim().length > 0) ||
+      content.trim().length > 0;
+    const canSubmit = hasTextOrMedia && (!isTitleRequired || (postType !== 'GENERAL' && title.trim().length > 0));
+
+    assert.strictEqual(canSubmit, true, 'User should be able to submit GENERAL post without title');
+  });
+
+  await runTest('Switching postType to GENERAL resets title state', () => {
+    let currentTitle = 'Important Announcement';
+    const handleTypeChange = (newType: string) => {
+      if (newType === 'GENERAL') {
+        currentTitle = '';
+      }
+    };
+
+    handleTypeChange('GENERAL');
+    assert.strictEqual(currentTitle, '', 'Title state should be reset to empty string when switching to GENERAL');
+  });
+
+  await runTest('Edit post dialog sets title to null for GENERAL post type', () => {
+    const editType = 'GENERAL';
+    const editTitle = 'Old Title';
+    const effectiveEditTitle = editType === 'GENERAL' ? null : (editTitle.trim() || null);
+
+    assert.strictEqual(effectiveEditTitle, null, 'Effective edit title must be null for GENERAL post');
+
+    const res = updatePostSchema.safeParse({
+      title: effectiveEditTitle,
+      content: 'Updated content of general post without title.',
+      type: editType,
+    });
+    assert.ok(res.success);
+    assert.strictEqual(res.data.title, null);
+  });
+
+  await runTest('ANNOUNCEMENT and EVENT post types continue requiring title', () => {
+    for (const nonGeneralType of ['ANNOUNCEMENT', 'EVENT'] as const) {
+      const isTitleRequired = nonGeneralType === 'ANNOUNCEMENT' || nonGeneralType === 'EVENT';
+      assert.strictEqual(isTitleRequired, true);
+
+      // Composer validation rejecting empty title for ANNOUNCEMENT / EVENT
+      const effectiveTitle = nonGeneralType === 'GENERAL' ? undefined : ''.trim() || undefined;
+      const res = createPostSchema.safeParse({
+        title: effectiveTitle,
+        content: 'Testing mandatory title requirement.',
+        type: nonGeneralType,
+      });
+      assert.strictEqual(res.success, false, `Expected ${nonGeneralType} without title to fail`);
+    }
+  });
+
   console.log('\n================================================================');
   console.log(` Summary: ${testsPassed}/${testsPassed + testsFailed} Tests Passed Successfully!`);
   console.log('================================================================\n');

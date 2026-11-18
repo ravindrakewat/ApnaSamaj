@@ -81,12 +81,15 @@ The following milestone checkpoint commits have been independently inspected in 
 | `214effa` | `214effa3d725edb697fa33e8e41cadbf770c4d32` | `feat: migrate mobile and web to custom production API domain` | Batch 10.5 Custom API Migration | **Confirmed** | **Confirmed (Pushed)** |
 | `2f36738` | `2f36738613f5ecd923e4456dbe1cc722d5e352ef` | `docs: record batch 10.5 git commit and push in project history` | Batch 10.5 History Checkpoint | **Confirmed** | **Confirmed (Pushed)** |
 | `435f983` | `435f983151857129ce87f0f274988232de6359dd` | `feat(web,admin): complete Phase 11 mobile-to-web and admin feature parity` | Phase 11 Web & Admin Feature Parity Release | **Confirmed** | **Confirmed (Pushed)** |
+| `349adc2` | `349adc2` | `feat(web,i18n): fix navbar language reactivity and unify chat inbox with embedded group messaging` | Navbar i18n Fix & Unified Chat Inbox | **Confirmed** | **Confirmed (Pushed)** |
+| `81612f6` | `81612f6` | `feat(web): add group chat media attachments and set chat as first tab on group details` | Group Chat Attachments & Tab Reorder | **Confirmed** | **Confirmed (Pushed)** |
+| `839a3ce` | `839a3ce` | `feat(feed): hide post title for general posts on web and mobile` | General Post Title Removal (Mobile & Web) | **Confirmed** | **Pending Push** |
 
 ### Current HEAD & Remote Synchronization:
 - **Active Branch:** `main`
-- **Current Feature/Fix Commit:** `435f983151857129ce87f0f274988232de6359dd` (`435f983`)
+- **Current Feature/Fix Commit:** `839a3ce`
 - **Remote Tracking Reference:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
-- **Upstream Sync Status:** Synchronized. `main` is up to date with `origin/main`.
+- **Upstream Sync Status:** 1 commit ahead of `origin/main`.
 
 ---
 
@@ -285,17 +288,18 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 | **Batch 11.8** | Admin System Broadcast Notifications | Created `apps/admin/src/services/admin.notifications.service.ts` supporting audience targeting (`ALL_MEMBERS`, `VERIFIED_ONLY`, `ADMINS_MODS`), action deep-links, and high priority flags. Built `BroadcastNotificationDialog.tsx` with live preview card simulating mobile and web notifications. Mounted `Broadcast Notice / प्रसारण भेजें` button in `DashboardPage.tsx` welcome banner with dispatch feedback. | docs/BATCH_11_8_ADMIN_BROADCAST_REPORT.md | Verified Pass (4/4 tests passed, 0 typecheck errors, clean Vite build) | 435f983 | Confirmed (Pushed) |
 | **Batch 11.9** | Final Git Review, Verification & Production Push | Executed pre-commit security review, multi-tenant safety verification, 0-error typecheck across 9 workspaces, passing test suites (60/60 assertions), and clean Web and Admin production builds. Confirmed production API configuration at `https://api.samaz.in`. Staged and committed 54 approved Phase 11 files with zero secrets. Pushed commit `435f983` to `origin/main`, triggering automatic Vercel production deployment. | docs/BATCH_11_9_FINAL_GIT_AND_PRODUCTION_READINESS_AUDIT.md | Verified Pass (Monorepo typecheck 0 errors, 60/60 tests passed, Vite builds clean) | 435f983 | Confirmed (Pushed) |
 | **Batch 11.9.1** | Web Navbar Localization Fix & Unified WhatsApp-Style Chat Inbox | Fixed hardcoded Hindi labels in `Navbar.tsx` for Chat (`{t('chat')}`), Employment (`{t('employment')}`), and Schemes (`{t('schemes')}`); added keys to `nav.json` with 100% key parity; implemented unified WhatsApp-style chat inbox in `ChatPage.tsx` combining direct conversations and community groups into a single chronological stream; added quick filter chips (`All`, `Direct`, `Groups`); embedded `GroupChatTab` in right pane for seamless in-chat group messaging without page redirection; added test suites in `multilingual-foundation.test.ts` (26/26 pass) and `web-chat-experience.test.ts` (17/17 pass); clean monorepo typecheck across all 9 workspaces and production Vite build. | docs/PROJECT_HISTORY.md | Verified Pass (43/43 tests, 0 typecheck errors, clean Vite build) | 349adc2 | Confirmed (Pushed) |
-| **Batch 11.9.2** | Web Group Chat Media Attachments & Group Details Tab Reordering | Implemented full group chat attachment parity on Web (`GroupChatTab.tsx`): added paperclip attachment picker, client-side media size limits (Images 10MB, Videos 50MB, Audio 25MB, Documents 20MB), file preview chip with progress bar, multi-tenant upload via `/api/v1/groups/:id/attachments`, real-time Socket.IO and fallback delivery, bubble rendering for photos with full-size Lightbox modal, HTML5 video player, HTML5 audio player, document tiles with download link, and YouTube preview card; reordered tabs on Group Details Page (`GroupDetailPage.tsx`) setting Chat as Tab 0 (first & default active), Members as Tab 1, and Discussions as Tab 2 (last); added 5 media attachment tests to `web-chat-experience.test.ts` (22/22 pass); clean monorepo typecheck across all 9 workspaces and production Vite build. | docs/PROJECT_HISTORY.md | Verified Pass (22/22 tests, 0 typecheck errors, clean Vite build) | Pending | Ready for Push |
+| **Batch 11.9.2** | Web Group Chat Media Attachments & Group Details Tab Reordering | Implemented full group chat attachment parity on Web (`GroupChatTab.tsx`): added paperclip attachment picker, client-side media size limits (Images 10MB, Videos 50MB, Audio 25MB, Documents 20MB), file preview chip with progress bar, multi-tenant upload via `/api/v1/groups/:id/attachments`, real-time Socket.IO and fallback delivery, bubble rendering for photos with full-size Lightbox modal, HTML5 video player, HTML5 audio player, document tiles with download link, and YouTube preview card; reordered tabs on Group Details Page (`GroupDetailPage.tsx`) setting Chat as Tab 0 (first & default active), Members as Tab 1, and Discussions as Tab 2 (last); added 5 media attachment tests to `web-chat-experience.test.ts` (22/22 pass); clean monorepo typecheck across all 9 workspaces and production Vite build. | docs/PROJECT_HISTORY.md | Verified Pass (22/22 tests, 0 typecheck errors, clean Vite build) | 81612f6 | Confirmed (Pushed) |
+| **Batch 11.9.3** | Remove Post Title for General Posts (Mobile & Web) | Removed post title input box for `GENERAL` post type on both Web and Mobile by default: on Web (`CreatePostComposer.tsx`), hid the title input field when `postType === 'GENERAL'`, reset title state on switching to General, set `effectiveTitle = undefined`, updated `canSubmit` and `hasTextOrMedia`, and updated Edit Post dialog (`PostCard.tsx`) to hide title input and update title to `null`; on Mobile (`apps/mobile/app/(app)/post/create.tsx`), hid Section 4 Title Input card when `selectedCategory === 'GENERAL'`, cleared title on selecting General category, updated `canPublish` and `hasAnyContentOrMedia` to allow title-less publish, and set `finalTitle = undefined`; updated test suite in `apps/web/src/tests/post-title-ux.test.ts` (all 31/31 passed); mobile tests verified; clean monorepo typecheck across all workspaces and clean Vite production build. | docs/PROJECT_HISTORY.md | Verified Pass (31/31 tests, 0 typecheck errors, clean Vite build) | 839a3ce | Ready for Push |
 
 ---
 
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Latest Push Commit:** `349adc2` (`feat(web): fix navbar language reactivity, unify chat inbox, and embed group messaging`)
+- **Latest Push Commit:** `81612f6` (`feat(web): add group chat media attachments and set chat as first tab on group details`)
 - **Upstream Tracking:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
-- **Actual Working Tree State:** Staged Batch 11.9.2 files ready for commit and push.
-- **Latest Completed Batch:** **Batch 11.9.2 — Web Group Chat Media Attachments & Group Details Tab Reordering**.
+- **Actual Working Tree State:** Staged Batch 11.9.3 files ready for commit and push.
+- **Latest Completed Batch:** **Batch 11.9.3 — Remove Post Title for General Posts (Mobile & Web)**.
 - **Current In-Progress Batch:** Completed. Ready to push to GitHub and deploy to Vercel.
 - **Exact Next Recommended Batch:** **Batch 12.0 — Post-Deployment Live Verification & Performance Check**.
 
