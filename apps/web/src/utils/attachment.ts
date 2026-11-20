@@ -102,21 +102,35 @@ export function resolveAttachmentDisplayUrl(url?: string | null): string {
       }
     }
 
-    // If pointing to localhost:4000 in production, replace with API_BASE_URL
-    if (cleanUrl.includes('localhost:4000') && !API_BASE_URL.includes('localhost:4000')) {
-      return cleanUrl.replace(/https?:\/\/localhost:4000/, API_BASE_URL);
+    // If pointing to localhost (any port) in production, rewrite with API_BASE_URL
+    if (
+      /https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(cleanUrl) &&
+      !API_BASE_URL.includes('localhost') &&
+      !API_BASE_URL.includes('127.0.0.1')
+    ) {
+      return cleanUrl.replace(/https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, API_BASE_URL);
     }
 
     return cleanUrl;
   }
 
-  // 2. Relative raw chat attachment path
+  // 2. Relative storage paths (e.g. "direct/tenant/..." or "groups/tenant/...")
+  if (cleanUrl.startsWith('direct/') || cleanUrl.startsWith('groups/')) {
+    return `${API_BASE_URL}/api/v1/chat/attachments/raw/${cleanUrl}`;
+  }
+
+  // 3. Relative raw chat attachment path
   if (cleanUrl.startsWith('/uploads/chat-attachments/') || cleanUrl.startsWith('uploads/chat-attachments/')) {
     const rawPath = cleanUrl.replace(/^\/?uploads\/chat-attachments\//, '');
     return `${API_BASE_URL}/api/v1/chat/attachments/raw/${rawPath}`;
   }
 
-  // 3. Any other relative API path
+  // 4. Raw API endpoint path
+  if (cleanUrl.startsWith('/api/v1/chat/attachments/raw/')) {
+    return `${API_BASE_URL}${cleanUrl}`;
+  }
+
+  // 5. Any other relative API path
   if (cleanUrl.startsWith('/')) {
     return `${API_BASE_URL}${cleanUrl}`;
   }

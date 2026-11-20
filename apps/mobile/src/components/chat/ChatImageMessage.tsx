@@ -104,14 +104,15 @@ export const ChatImageMessage: React.FC<ChatImageMessageProps> = ({ attachment }
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 4,
     backgroundColor: '#E2E8F0',
     position: 'relative',
-    maxWidth: 240,
-    width: '100%',
-    aspectRatio: 4 / 3,
+    width: 260,
+    minWidth: 220,
+    maxWidth: '100%',
+    height: 195,
   },
   image: {
     width: '100%',

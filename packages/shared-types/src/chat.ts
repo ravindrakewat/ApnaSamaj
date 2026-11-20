@@ -47,7 +47,7 @@ export interface ChatAttachmentItem {
   fileSizeBytes: number;
   storagePath: string;
   url?: string;
-  duration?: number;
+  duration?: number | null;
   localUri?: string;
   createdAt: string;
 }
@@ -62,7 +62,7 @@ export interface ChatAttachmentInput {
   mimeType: string;
   fileSizeBytes: number;
   storagePath: string;
-  duration?: number;
+  duration?: number | null;
   localUri?: string;
 }
 

@@ -9,46 +9,78 @@ import { APP_CONFIG } from '../constants/config';
 export function resolveAttachmentDisplayUrl(url?: string | null): string {
   if (!url) return '';
 
-  // 1. If already a valid signed URL from Supabase, return directly
-  if (url.includes('/storage/v1/object/sign/')) {
-    return url;
+  const cleanUrl = url.trim();
+
+  // 1. Direct local file or blob/data schemes
+  if (
+    cleanUrl.startsWith('file:') ||
+    cleanUrl.startsWith('content:') ||
+    cleanUrl.startsWith('blob:') ||
+    cleanUrl.startsWith('data:')
+  ) {
+    return cleanUrl;
   }
 
-  // 2. If a legacy mock-storage URL was returned in dev/testing environments
-  if (url.includes('mock-storage.apnasamaj.local')) {
+  // 2. If already a valid signed URL from Supabase, return directly
+  if (cleanUrl.includes('/storage/v1/object/sign/')) {
+    return cleanUrl;
+  }
+
+  const apiOrigin = APP_CONFIG.apiBaseUrl.replace(/\/api\/v1\/?$/, '');
+
+  // 3. If a legacy mock-storage URL was returned in dev/testing environments
+  if (cleanUrl.includes('mock-storage.apnasamaj.local')) {
     // If it's a private chat attachment
-    if (url.includes('/chat-attachments/')) {
-      const rawPath = url.split('/chat-attachments/')[1]?.split('?')[0];
+    if (cleanUrl.includes('/chat-attachments/')) {
+      const rawPath = cleanUrl.split('/chat-attachments/')[1]?.split('?')[0];
       if (rawPath) {
-        return `${APP_CONFIG.apiBaseUrl}/chat/attachments/raw/${rawPath}`;
+        return `${apiOrigin}/api/v1/chat/attachments/raw/${rawPath}`;
       }
     }
 
     // For any other mock-storage path (e.g. community-media/posts/...)
-    const match = url.match(/mock-storage\.apnasamaj\.local\/[^/]+\/(.+)$/);
+    const match = cleanUrl.match(/mock-storage\.apnasamaj\.local\/[^/]+\/(.+)$/);
     if (match && match[1]) {
       const cleanPath = match[1].split('?')[0];
-      return `${APP_CONFIG.apiBaseUrl}/chat/attachments/raw/${cleanPath}`;
+      return `${apiOrigin}/api/v1/chat/attachments/raw/${cleanPath}`;
     }
   }
 
-  // 3. If an unauthenticated public Supabase URL was generated specifically for the PRIVATE chat-attachments bucket
-  // (Note: public buckets like community-media must NOT be rewritten to /chat/attachments/raw/ as that endpoint
-  // strictly serves private chat attachments from uploads/chat-attachments and returns 404 for post media)
-  if (url.includes('/storage/v1/object/public/chat-attachments/')) {
-    const rawPath = url.split('/storage/v1/object/public/chat-attachments/')[1]?.split('?')[0];
+  // 4. If an unauthenticated public Supabase URL was generated specifically for the PRIVATE chat-attachments bucket
+  if (cleanUrl.includes('/storage/v1/object/public/chat-attachments/')) {
+    const rawPath = cleanUrl.split('/storage/v1/object/public/chat-attachments/')[1]?.split('?')[0];
     if (rawPath) {
-      return `${APP_CONFIG.apiBaseUrl}/chat/attachments/raw/${rawPath}`;
+      return `${apiOrigin}/api/v1/chat/attachments/raw/${rawPath}`;
     }
   }
 
-  // 4. Rewrite localhost:4000 to active apiBaseUrl origin on mobile devices/emulators
-  if (url.includes('localhost:4000')) {
-    const apiOrigin = APP_CONFIG.apiBaseUrl.replace(/\/api\/v1\/?$/, '');
-    if (!apiOrigin.includes('localhost:4000')) {
-      return url.replace(/https?:\/\/localhost:4000/, apiOrigin);
+  // 5. Rewrite any localhost / 127.0.0.1 port to active apiOrigin on mobile devices/emulators
+  if (/https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(cleanUrl)) {
+    if (!apiOrigin.includes('localhost') && !apiOrigin.includes('127.0.0.1')) {
+      return cleanUrl.replace(/https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, apiOrigin);
     }
+    return cleanUrl;
   }
 
-  return url;
+  // 6. If already a valid absolute HTTP/HTTPS URL
+  if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+    return cleanUrl;
+  }
+
+  // 7. Relative storage paths (e.g. "direct/tenant/..." or "groups/tenant/...")
+  if (cleanUrl.startsWith('direct/') || cleanUrl.startsWith('groups/')) {
+    return `${apiOrigin}/api/v1/chat/attachments/raw/${cleanUrl}`;
+  }
+
+  // 8. Relative raw chat attachment path
+  if (cleanUrl.startsWith('/uploads/chat-attachments/') || cleanUrl.startsWith('uploads/chat-attachments/')) {
+    const rawPath = cleanUrl.replace(/^\/?uploads\/chat-attachments\//, '');
+    return `${apiOrigin}/api/v1/chat/attachments/raw/${rawPath}`;
+  }
+
+  if (cleanUrl.startsWith('/api/v1/chat/attachments/raw/')) {
+    return `${apiOrigin}${cleanUrl}`;
+  }
+
+  return cleanUrl;
 }

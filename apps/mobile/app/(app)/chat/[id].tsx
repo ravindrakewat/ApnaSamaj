@@ -450,6 +450,7 @@ export default function PersonalChatScreen() {
               style={[
                 styles.bubble,
                 isOwn ? styles.bubbleOwn : styles.bubbleOther,
+                item.attachments && item.attachments.length > 0 && styles.bubbleWithAttachment,
                 item.isError && styles.bubbleError,
               ]}
               accessibilityRole="button"
@@ -1040,6 +1041,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 1.5,
+  },
+  bubbleWithAttachment: {
+    minWidth: 270,
+    maxWidth: '88%',
   },
   bubbleOwn: {
     backgroundColor: '#E0F2FE', // Unified primary soft blue tint

@@ -884,6 +884,7 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
                       sx={{
                         p: 1.5,
                         px: 2,
+                        minWidth: msg.attachments && msg.attachments.length > 0 ? { xs: 260, sm: 300 } : 'auto',
                         borderRadius: 2.5,
                         borderBottomRightRadius: isSelf ? 0.75 : 2.5,
                         borderBottomLeftRadius: !isSelf ? 0.75 : 2.5,
@@ -917,8 +918,10 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
                                 src={displayUrl}
                                 alt={att.fileName}
                                 style={{
-                                  maxWidth: '100%',
-                                  maxHeight: 280,
+                                  width: '100%',
+                                  minWidth: 240,
+                                  maxWidth: 360,
+                                  maxHeight: 320,
                                   display: 'block',
                                   objectFit: 'cover',
                                   borderRadius: 8,
@@ -934,8 +937,10 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
                               <video
                                 controls
                                 style={{
-                                  maxWidth: '100%',
-                                  maxHeight: 280,
+                                  width: '100%',
+                                  minWidth: 240,
+                                  maxWidth: 360,
+                                  maxHeight: 320,
                                   display: 'block',
                                   borderRadius: 8,
                                 }}
@@ -1190,20 +1195,19 @@ export const GroupChatTab: React.FC<GroupChatTabProps> = ({
           disabled={!canSend || isUploading}
         />
         <Tooltip title={!canSend ? 'Membership required to attach files' : 'Attach photo, video or document'}>
-          <label htmlFor="group-chat-file-input">
+          <span>
             <IconButton
-              component="span"
+              onClick={() => fileInputRef.current?.click()}
               disabled={!canSend || isUploading}
               size="small"
               sx={{
                 color: selectedFile ? 'primary.main' : 'text.secondary',
                 bgcolor: selectedFile ? 'rgba(25, 118, 210, 0.08)' : undefined,
-                cursor: canSend && !isUploading ? 'pointer' : 'default',
               }}
             >
               <AttachFileIcon />
             </IconButton>
-          </label>
+          </span>
         </Tooltip>
 
         <TextField

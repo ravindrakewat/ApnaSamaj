@@ -65,6 +65,7 @@ import {
   DirectConversationItem,
   DirectMessageItem,
   ChatAttachmentItem,
+  ChatAttachmentInput,
   ChatAttachmentType,
   ChatMessageReplyPreview,
   ChatReactionSummary,
@@ -182,6 +183,7 @@ export const ChatPage: React.FC = () => {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [partnerIsTyping, setPartnerIsTyping] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State: Voice Recorder
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -433,11 +435,23 @@ export const ChatPage: React.FC = () => {
     socket.emit('direct:typing_stop', { conversationId });
 
     try {
+      const attachmentPayload: ChatAttachmentInput | undefined = attachment
+        ? {
+            id: attachment.id,
+            type: attachment.type,
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType,
+            fileSizeBytes: attachment.fileSizeBytes,
+            storagePath: attachment.storagePath,
+            duration: attachment.duration != null ? Math.round(attachment.duration) : undefined,
+          }
+        : undefined;
+
       const saved = await sendDirectMessageApi(
         conversationId,
         trimmed,
         tempId,
-        attachment as any,
+        attachmentPayload,
         replyTarget?.id
       );
 
@@ -1086,6 +1100,7 @@ export const ChatPage: React.FC = () => {
                         sx={{
                           p: 1.5,
                           maxWidth: { xs: '85%', sm: '70%', md: '60%' },
+                          minWidth: msg.attachments && msg.attachments.length > 0 ? { xs: 260, sm: 300 } : 'auto',
                           bgcolor: isSentByMe ? '#1976d2' : '#ffffff',
                           color: isSentByMe ? '#ffffff' : 'text.primary',
                           borderRadius: isSentByMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
@@ -1107,7 +1122,15 @@ export const ChatPage: React.FC = () => {
                                 <img
                                   src={displayUrl}
                                   alt={att.fileName}
-                                  style={{ maxWidth: '100%', maxHeight: 280, display: 'block', objectFit: 'cover' }}
+                                  style={{
+                                    width: '100%',
+                                    minWidth: 240,
+                                    maxWidth: 360,
+                                    maxHeight: 320,
+                                    display: 'block',
+                                    objectFit: 'cover',
+                                    borderRadius: 8,
+                                  }}
                                 />
                               </Box>
                             );
@@ -1116,7 +1139,17 @@ export const ChatPage: React.FC = () => {
                           if (att.type === 'VIDEO') {
                             return (
                               <Box key={att.id} sx={{ mb: 1, borderRadius: 2, overflow: 'hidden' }}>
-                                <video controls style={{ maxWidth: '100%', maxHeight: 280, display: 'block' }}>
+                                <video
+                                  controls
+                                  style={{
+                                    width: '100%',
+                                    minWidth: 240,
+                                    maxWidth: 360,
+                                    maxHeight: 320,
+                                    display: 'block',
+                                    borderRadius: 8,
+                                  }}
+                                >
                                   <source src={displayUrl} type={att.mimeType || 'video/mp4'} />
                                   Your browser does not support video playback.
                                 </video>
@@ -1370,6 +1403,7 @@ export const ChatPage: React.FC = () => {
             >
               {/* Attachment Picker */}
               <input
+                ref={fileInputRef}
                 id="chat-file-input"
                 type="file"
                 style={{ display: 'none' }}
@@ -1377,11 +1411,15 @@ export const ChatPage: React.FC = () => {
                 accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
               />
               <Tooltip title="Attach photo, video or document">
-                <label htmlFor="chat-file-input">
-                  <IconButton component="span" disabled={isUploading || isRecording}>
+                <span>
+                  <IconButton
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading || isRecording}
+                    size="small"
+                  >
                     <AttachFileIcon />
                   </IconButton>
-                </label>
+                </span>
               </Tooltip>
 
               {/* Text Input */}

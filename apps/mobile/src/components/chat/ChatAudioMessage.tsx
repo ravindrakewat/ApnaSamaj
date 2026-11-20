@@ -5,7 +5,7 @@ import { voicePlaybackService, PlaybackState } from '../../services/audio/voice-
 import { AudioWaveform } from './AudioWaveform';
 
 interface ChatAudioMessageProps {
-  attachment: ChatAttachmentItem & { localUri?: string; duration?: number };
+  attachment: ChatAttachmentItem & { localUri?: string; duration?: number | null };
   isCurrentUser: boolean;
   deliveryStatus?: 'pending' | 'sending' | 'sent' | 'read' | 'failed';
   onRetry?: () => void;

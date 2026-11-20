@@ -1269,14 +1269,22 @@ export async function uploadChatAttachment(
   };
 }
 
+function getPublicApiBaseUrl(): string {
+  if (process.env.PUBLIC_API_URL) return process.env.PUBLIC_API_URL.replace(/\/+$/, '');
+  if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, '');
+  if (config.nodeEnv === 'production') return 'https://api.samaz.in';
+  const apiPort = config.port || 4000;
+  return `http://localhost:${apiPort}`;
+}
+
 /**
  * Resolves a safe fallback attachment URL.
  * Chat attachments are stored in a strictly private bucket (CHAT_ATTACHMENTS_BUCKET),
  * so public URLs must never be returned. Returns the authorized local streaming endpoint.
  */
 export function resolveChatAttachmentUrl(storagePath: string): string {
-  const apiPort = config.port || 4000;
-  return `http://localhost:${apiPort}/api/v1/chat/attachments/raw/${storagePath}?token=local-dev-token&expires=3600`;
+  const baseUrl = getPublicApiBaseUrl();
+  return `${baseUrl}/api/v1/chat/attachments/raw/${storagePath}?token=local-dev-token&expires=3600`;
 }
 
 /**
@@ -1286,7 +1294,7 @@ export async function createTemporarySignedChatAttachmentUrl(
   storagePath: string,
   expiresInSeconds: number = 3600
 ): Promise<string> {
-  const apiPort = config.port || 4000;
+  const baseUrl = getPublicApiBaseUrl();
   if (config.supabaseUrl && config.supabaseSecretKey) {
     try {
       const supabase = getSupabaseClient();
@@ -1296,7 +1304,7 @@ export async function createTemporarySignedChatAttachmentUrl(
 
       if (error) {
         console.warn('[Storage Service] Supabase createSignedUrl notice:', error.message);
-        return `http://localhost:${apiPort}/api/v1/chat/attachments/raw/${storagePath}?token=mock-signed-token&expires=${expiresInSeconds}`;
+        return `${baseUrl}/api/v1/chat/attachments/raw/${storagePath}?token=mock-signed-token&expires=${expiresInSeconds}`;
       }
       if (data?.signedUrl) {
         return data.signedUrl;
@@ -1307,7 +1315,7 @@ export async function createTemporarySignedChatAttachmentUrl(
   }
 
   // Development / test fallback
-  return `http://localhost:${apiPort}/api/v1/chat/attachments/raw/${storagePath}?token=local-dev-token&expires=${expiresInSeconds}`;
+  return `${baseUrl}/api/v1/chat/attachments/raw/${storagePath}?token=local-dev-token&expires=${expiresInSeconds}`;
 }
 
 /**

@@ -18,7 +18,7 @@ export const chatAttachmentInputSchema = z.object({
   mimeType: z.string().min(1, 'MIME type is required').max(100),
   fileSizeBytes: z.number().int().positive().max(52428800, 'File size exceeds maximum allowed limit (50MB)'),
   storagePath: z.string().max(500),
-  duration: z.number().int().nonnegative().max(7200).optional(),
+  duration: z.number().nonnegative().max(7200).optional().nullable(),
   localUri: z.string().max(1000).optional(),
 });
 

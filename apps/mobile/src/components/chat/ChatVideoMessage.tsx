@@ -93,17 +93,18 @@ export const ChatVideoMessage: React.FC<ChatVideoMessageProps> = ({ attachment }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#F8FAFC',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#CBD5E1',
     overflow: 'hidden',
     marginBottom: 4,
-    maxWidth: 240,
-    width: '100%',
+    width: 260,
+    minWidth: 220,
+    maxWidth: '100%',
   },
   thumbnailPlaceholder: {
-    height: 110,
+    height: 150,
     backgroundColor: '#1E293B',
     justifyContent: 'center',
     alignItems: 'center',

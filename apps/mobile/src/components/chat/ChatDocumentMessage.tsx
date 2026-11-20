@@ -86,8 +86,9 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
     padding: 8,
     marginBottom: 4,
-    maxWidth: 240,
-    width: '100%',
+    width: 260,
+    minWidth: 220,
+    maxWidth: '100%',
   },
   iconBox: {
     width: 40,
