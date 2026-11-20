@@ -302,13 +302,16 @@ export default function PersonalChatScreen() {
     const attachmentToUpload = selectedAttachment;
     const textToSend = trimmed;
 
-    // Reset input fields immediately
-    setInputText('');
-    setSelectedAttachment(null);
-
     try {
       let uploadedAttachmentData = undefined;
-      if (attachmentToUpload && conversationId) {
+      if (attachmentToUpload) {
+        if (!conversationId) {
+          throw new Error(
+            language === 'hi'
+              ? 'बातचीत अभी लोड नहीं हुई है। कृपया प्रतीक्षा करें।'
+              : 'Conversation is not ready yet. Please wait.'
+          );
+        }
         setIsUploadingAttachment(true);
         uploadedAttachmentData = await chatApi.uploadDirectAttachment(conversationId, {
           uri: attachmentToUpload.uri,
@@ -319,11 +322,21 @@ export default function PersonalChatScreen() {
       }
 
       await sendMessage(textToSend, uploadedAttachmentData);
+
+      // Reset input fields upon success
+      setInputText('');
+      setSelectedAttachment(null);
     } catch (err: unknown) {
       console.warn('[PersonalChatScreen] Failed to send message:', err);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : language === 'hi'
+          ? 'संदेश भेजने में त्रुटि हुई।'
+          : 'Failed to send message.';
       Alert.alert(
         language === 'hi' ? 'त्रुटि' : 'Error',
-        language === 'hi' ? 'संदेश भेजने में त्रुटि हुई।' : 'Failed to send message.'
+        msg
       );
     } finally {
       setIsSending(false);

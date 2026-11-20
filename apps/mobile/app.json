@@ -17,7 +17,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.apnasamaj.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Apna Samaj requires microphone access to record and send voice notes in chat."
+        "NSMicrophoneUsageDescription": "Apna Samaj requires microphone access to record and send voice notes in chat.",
+        "NSPhotoLibraryUsageDescription": "Apna Samaj requires access to your photo library to share photos and videos in chat.",
+        "NSCameraUsageDescription": "Apna Samaj requires camera access to take and share photos in chat."
       }
     },
     "android": {
@@ -28,7 +30,12 @@
       "package": "com.apnasamaj.app",
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
       ]
     },
     "web": {
@@ -45,6 +52,13 @@
         {
           "icon": "./assets/images/icon.png",
           "color": "#0284c7"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Apna Samaj requires access to your photos to let you share images and videos in chat.",
+          "cameraPermission": "Apna Samaj requires camera access to let you capture and share photos in chat."
         }
       ]
     ],

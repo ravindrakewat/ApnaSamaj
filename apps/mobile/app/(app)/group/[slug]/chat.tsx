@@ -326,13 +326,16 @@ export default function GroupChatScreen() {
     const attachmentToUpload = selectedAttachment;
     const textToSend = trimmed;
 
-    // Reset input fields immediately
-    setInputText('');
-    setSelectedAttachment(null);
-
     try {
       let uploadedAttachmentData = undefined;
-      if (attachmentToUpload && group?.id) {
+      if (attachmentToUpload) {
+        if (!group?.id) {
+          throw new Error(
+            language === 'hi'
+              ? 'समूह विवरण लोड हो रहा है, कृपया प्रतीक्षा करें।'
+              : 'Group details are loading, please wait.'
+          );
+        }
         setIsUploadingAttachment(true);
         uploadedAttachmentData = await chatApi.uploadGroupAttachment(group.id, {
           uri: attachmentToUpload.uri,
@@ -343,8 +346,17 @@ export default function GroupChatScreen() {
       }
 
       await sendMessage(textToSend, uploadedAttachmentData);
+
+      // Reset input fields upon success
+      setInputText('');
+      setSelectedAttachment(null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'संदेश भेजने में विफल।';
+      const msg =
+        err instanceof Error
+          ? err.message
+          : language === 'hi'
+          ? 'संदेश भेजने में विफल।'
+          : 'Failed to send message.';
       Alert.alert(language === 'hi' ? 'त्रुटि' : 'Error', msg);
     } finally {
       setIsSending(false);

@@ -86,10 +86,12 @@ export async function appendAttachmentFileToFormData(
   }
 
   // 3. Native Android / iOS (or fallback)
+  const resolvedName = file.name && file.name.trim() ? file.name.trim() : `file_${Date.now()}`;
+  const resolvedType = file.type && file.type.trim() ? file.type.trim() : 'application/octet-stream';
   formData.append(fieldName, {
     uri: file.uri,
-    name: file.name,
-    type: file.type,
+    name: resolvedName,
+    type: resolvedType,
   } as any);
 }
 

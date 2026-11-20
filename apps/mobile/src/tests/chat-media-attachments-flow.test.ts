@@ -206,6 +206,31 @@ export async function runChatMediaAttachmentsFlowTests(): Promise<void> {
     });
 
     // -------------------------------------------------------------
+    // Test 2.4: Native Fallbacks for Missing Name or Type
+    // -------------------------------------------------------------
+    await test('appendAttachmentFileToFormData safely provides fallbacks for empty filename and type', async () => {
+      class MockRNFormData {
+        _parts: Array<[string, any]> = [];
+        append(name: string, val: any) {
+          this._parts.push([name, val]);
+        }
+      }
+      const mockRN = new MockRNFormData() as any;
+      const nativeFile: UploadAttachmentFile = {
+        uri: 'file:///data/user/0/com.apnasamaj.app/cache/raw_photo',
+        name: '',
+        type: '',
+      };
+
+      await appendAttachmentFileToFormData(mockRN, 'file', nativeFile);
+      assert.strictEqual(mockRN._parts.length, 1);
+      const [field, descriptor] = mockRN._parts[0];
+      assert.strictEqual(field, 'file');
+      assert.ok(descriptor.name && descriptor.name.startsWith('file_'), 'Filename fallback must be generated');
+      assert.strictEqual(descriptor.type, 'application/octet-stream', 'MIME type fallback must default safely');
+    });
+
+    // -------------------------------------------------------------
     // Test 3: Get Attachment Signed URL API
     // -------------------------------------------------------------
     await test('chatApi.getAttachmentUrl retrieves refreshed signed URL', async () => {

@@ -37,141 +37,246 @@ export const ChatAttachmentButton: React.FC<ChatAttachmentButtonProps> = ({
 
   const isHindi = language === 'hi';
 
-  const handlePickImage = async () => {
+  const closeAndRun = (action: () => Promise<void>) => {
     setIsModalOpen(false);
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(
-          isHindi ? 'अनुमति अस्वीकृत' : 'Permission Denied',
-          isHindi
-            ? 'फ़ोटो भेजने के लिए मीडिया लाइब्रेरी की अनुमति आवश्यक है।'
-            : 'Media library permission is required to send images.'
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 0.8,
+    setTimeout(() => {
+      action().catch((err: unknown) => {
+        console.warn('[ChatAttachmentButton] Action error:', err);
       });
-
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return;
-      }
-
-      const asset = result.assets[0];
-      const fileSize = asset.fileSize || 0;
-      if (fileSize > 10 * 1024 * 1024) {
-        Alert.alert(
-          isHindi ? 'फ़ाइल बहुत बड़ी है' : 'File Too Large',
-          isHindi ? 'फ़ोटो का आकार 10MB से अधिक नहीं होना चाहिए।' : 'Image size must not exceed 10MB.'
-        );
-        return;
-      }
-
-      onSelect({
-        uri: asset.uri,
-        name: asset.fileName || `image-${Date.now()}.jpg`,
-        type: asset.mimeType || 'image/jpeg',
-        size: fileSize,
-        category: 'IMAGE',
-        file: (asset as any).file,
-      });
-    } catch (err: unknown) {
-      console.warn('[ChatAttachmentButton] Image pick error:', err);
-    }
+    }, 250);
   };
 
-  const handlePickVideo = async () => {
-    setIsModalOpen(false);
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
+  const handlePickImage = () => {
+    closeAndRun(async () => {
+      try {
+        if (Platform.OS === 'ios') {
+          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert(
+              isHindi ? 'अनुमति अस्वीकृत' : 'Permission Denied',
+              isHindi
+                ? 'फ़ोटो भेजने के लिए मीडिया लाइब्रेरी की अनुमति आवश्यक है।'
+                : 'Media library permission is required to send images.'
+            );
+            return;
+          }
+        } else if (Platform.OS === 'android') {
+          try {
+            const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+            if (!current.granted && current.canAskAgain) {
+              await ImagePicker.requestMediaLibraryPermissionsAsync();
+            }
+          } catch {
+            // Android 13+ system photo picker does not require storage permissions
+          }
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.8,
+        });
+
+        if (result.canceled || !result.assets || result.assets.length === 0) {
+          return;
+        }
+
+        const asset = result.assets[0];
+        const fileSize = asset.fileSize || 0;
+        if (fileSize > 10 * 1024 * 1024) {
+          Alert.alert(
+            isHindi ? 'फ़ाइल बहुत बड़ी है' : 'File Too Large',
+            isHindi ? 'फ़ोटो का आकार 10MB से अधिक नहीं होना चाहिए।' : 'Image size must not exceed 10MB.'
+          );
+          return;
+        }
+
+        let name = asset.fileName || '';
+        let type = asset.mimeType || '';
+
+        if (!name) {
+          const uriParts = (asset.uri || '').split('/');
+          const lastPart = uriParts[uriParts.length - 1]?.split('?')[0];
+          name = lastPart && lastPart.includes('.') ? lastPart : `image-${Date.now()}.jpg`;
+        }
+        if (!type) {
+          const ext = name.toLowerCase().split('.').pop();
+          if (ext === 'png') type = 'image/png';
+          else if (ext === 'webp') type = 'image/webp';
+          else type = 'image/jpeg';
+        }
+
+        onSelect({
+          uri: asset.uri,
+          name,
+          type,
+          size: fileSize,
+          category: 'IMAGE',
+          file: (asset as any).file,
+        });
+      } catch (err: unknown) {
+        console.warn('[ChatAttachmentButton] Image pick error:', err);
         Alert.alert(
-          isHindi ? 'अनुमति अस्वीकृत' : 'Permission Denied',
-          isHindi
-            ? 'वीडियो भेजने के लिए मीडिया लाइब्रेरी की अनुमति आवश्यक है।'
-            : 'Media library permission is required to send videos.'
+          isHindi ? 'त्रुटि' : 'Error',
+          isHindi ? 'फ़ोटो चुनने में विफल। कृपया पुन: प्रयास करें।' : 'Failed to select image. Please try again.'
         );
-        return;
       }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['videos'],
-        allowsEditing: false,
-        quality: 0.8,
-      });
-
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return;
-      }
-
-      const asset = result.assets[0];
-      const fileSize = asset.fileSize || 0;
-      if (fileSize > 50 * 1024 * 1024) {
-        Alert.alert(
-          isHindi ? 'फ़ाइल बहुत बड़ी है' : 'File Too Large',
-          isHindi ? 'वीडियो का आकार 50MB से अधिक नहीं होना चाहिए।' : 'Video size must not exceed 50MB.'
-        );
-        return;
-      }
-
-      onSelect({
-        uri: asset.uri,
-        name: asset.fileName || `video-${Date.now()}.mp4`,
-        type: asset.mimeType || 'video/mp4',
-        size: fileSize,
-        category: 'VIDEO',
-        file: (asset as any).file,
-      });
-    } catch (err: unknown) {
-      console.warn('[ChatAttachmentButton] Video pick error:', err);
-    }
+    });
   };
 
-  const handlePickDocument = async () => {
-    setIsModalOpen(false);
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: [
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/vnd.ms-excel',
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ],
-        copyToCacheDirectory: true,
-      });
+  const handlePickVideo = () => {
+    closeAndRun(async () => {
+      try {
+        if (Platform.OS === 'ios') {
+          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert(
+              isHindi ? 'अनुमति अस्वीकृत' : 'Permission Denied',
+              isHindi
+                ? 'वीडियो भेजने के लिए मीडिया लाइब्रेरी की अनुमति आवश्यक है।'
+                : 'Media library permission is required to send videos.'
+            );
+            return;
+          }
+        } else if (Platform.OS === 'android') {
+          try {
+            const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+            if (!current.granted && current.canAskAgain) {
+              await ImagePicker.requestMediaLibraryPermissionsAsync();
+            }
+          } catch {
+            // Android 13+ system photo picker does not require storage permissions
+          }
+        }
 
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return;
-      }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['videos'],
+          allowsEditing: false,
+          quality: 0.8,
+        });
 
-      const doc = result.assets[0];
-      const fileSize = doc.size || 0;
-      if (fileSize > 20 * 1024 * 1024) {
+        if (result.canceled || !result.assets || result.assets.length === 0) {
+          return;
+        }
+
+        const asset = result.assets[0];
+        const fileSize = asset.fileSize || 0;
+        if (fileSize > 50 * 1024 * 1024) {
+          Alert.alert(
+            isHindi ? 'फ़ाइल बहुत बड़ी है' : 'File Too Large',
+            isHindi ? 'वीडियो का आकार 50MB से अधिक नहीं होना चाहिए।' : 'Video size must not exceed 50MB.'
+          );
+          return;
+        }
+
+        let name = asset.fileName || '';
+        let type = asset.mimeType || '';
+
+        if (!name) {
+          const uriParts = (asset.uri || '').split('/');
+          const lastPart = uriParts[uriParts.length - 1]?.split('?')[0];
+          name = lastPart && lastPart.includes('.') ? lastPart : `video-${Date.now()}.mp4`;
+        }
+        if (!type) {
+          const ext = name.toLowerCase().split('.').pop();
+          if (ext === 'mov') type = 'video/quicktime';
+          else type = 'video/mp4';
+        }
+
+        onSelect({
+          uri: asset.uri,
+          name,
+          type,
+          size: fileSize,
+          category: 'VIDEO',
+          file: (asset as any).file,
+        });
+      } catch (err: unknown) {
+        console.warn('[ChatAttachmentButton] Video pick error:', err);
         Alert.alert(
-          isHindi ? 'फ़ाइल बहुत बड़ी है' : 'File Too Large',
-          isHindi
-            ? 'दस्तावेज़ का आकार 20MB से अधिक नहीं होना चाहिए।'
-            : 'Document size must not exceed 20MB.'
+          isHindi ? 'त्रुटि' : 'Error',
+          isHindi ? 'वीडियो चुनने में विफल। कृपया पुन: प्रयास करें।' : 'Failed to select video. Please try again.'
         );
-        return;
       }
+    });
+  };
 
-      onSelect({
-        uri: doc.uri,
-        name: doc.name || `doc-${Date.now()}.pdf`,
-        type: doc.mimeType || 'application/pdf',
-        size: fileSize,
-        category: 'DOCUMENT',
-        file: (doc as any).file,
-      });
-    } catch (err: unknown) {
-      console.warn('[ChatAttachmentButton] Document pick error:', err);
-    }
+  const handlePickDocument = () => {
+    closeAndRun(async () => {
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            '*/*',
+          ],
+          copyToCacheDirectory: true,
+        });
+
+        if (result.canceled || !result.assets || result.assets.length === 0) {
+          return;
+        }
+
+        const doc = result.assets[0];
+        const fileSize = doc.size || 0;
+        if (fileSize > 20 * 1024 * 1024) {
+          Alert.alert(
+            isHindi ? 'फ़ाइल बहुत बड़ी है' : 'File Too Large',
+            isHindi
+              ? 'दस्तावेज़ का आकार 20MB से अधिक नहीं होना चाहिए।'
+              : 'Document size must not exceed 20MB.'
+          );
+          return;
+        }
+
+        let name = doc.name || '';
+        if (!name) {
+          const uriParts = (doc.uri || '').split('/');
+          const lastPart = uriParts[uriParts.length - 1]?.split('?')[0];
+          name = lastPart && lastPart.includes('.') ? lastPart : `document-${Date.now()}.pdf`;
+        }
+
+        let type = doc.mimeType || '';
+        const ext = name.toLowerCase().split('.').pop() || '';
+        if (!type || type === 'application/octet-stream' || type === '*/*') {
+          if (ext === 'pdf') type = 'application/pdf';
+          else if (ext === 'doc') type = 'application/msword';
+          else if (ext === 'docx') type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          else if (ext === 'xls') type = 'application/vnd.ms-excel';
+          else if (ext === 'xlsx') type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          else type = 'application/pdf';
+        }
+
+        const validDocExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'];
+        if (!validDocExts.includes(ext) && !type.includes('pdf') && !type.includes('msword') && !type.includes('officedocument') && !type.includes('excel')) {
+          Alert.alert(
+            isHindi ? 'असमर्थित फ़ाइल' : 'Unsupported File',
+            isHindi
+              ? 'कृपया PDF, Word, या Excel दस्तावेज़ चुनें।'
+              : 'Please choose a PDF, Word, or Excel document.'
+          );
+          return;
+        }
+
+        onSelect({
+          uri: doc.uri,
+          name,
+          type,
+          size: fileSize,
+          category: 'DOCUMENT',
+          file: (doc as any).file,
+        });
+      } catch (err: unknown) {
+        console.warn('[ChatAttachmentButton] Document pick error:', err);
+        Alert.alert(
+          isHindi ? 'त्रुटि' : 'Error',
+          isHindi ? 'दस्तावेज़ चुनने में विफल। कृपया पुन: प्रयास करें।' : 'Failed to select document. Please try again.'
+        );
+      }
+    });
   };
 
   return (

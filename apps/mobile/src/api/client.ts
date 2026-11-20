@@ -74,7 +74,14 @@ export class ApiClient {
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+      const isFormData =
+        Boolean(options.body) &&
+        (
+          (typeof FormData !== 'undefined' && options.body instanceof FormData) ||
+          typeof (options.body as any)?.append === 'function' ||
+          Array.isArray((options.body as any)?._parts) ||
+          (options.body as any)?.[Symbol.toStringTag] === 'FormData'
+        );
       const headers = await this.buildHeaders(options);
       if (isFormData) {
         delete headers['Content-Type'];
