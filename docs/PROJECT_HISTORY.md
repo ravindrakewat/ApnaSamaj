@@ -301,13 +301,13 @@ These rules are non-negotiable architectural invariants for the Apna Samaj platf
 ## F. Current Work & Repository State
 
 - **Current Branch:** `main`
-- **Latest Push Commit:** `846d223`
+- **Latest Push Commit:** `78f2e76`
 - **Upstream Tracking:** `origin/main` (`https://github.com/ravindrakewat/ApnaSamaj.git`)
-- **Actual Working Tree State:** Uncommitted changes for Batch 12.0.1 ready for user review.
+- **Actual Working Tree State:** Clean working tree.
 - **Latest Completed Batch:** **Batch 12.0.1 — Automatic Link Preview & Thumbnail Generation (Mobile + Website)**.
-- **Current In-Progress Batch:** Completed and verified locally. Awaiting user review before any Git commit, push, migration, or deployment.
-- **Latest Android APK:** `https://expo.dev/artifacts/eas/oFXpBCrozuiCuRpzY9YVmIN4IC2rtVTPkfZ1cA9hAnc.apk` (Build: `cc0f31ac-e8a3-48c4-84c4-51b86e4d7466`).
-- **Exact Next Recommended Batch:** User review and approval of Batch 12.0.1 followed by staging audit, commit, and deployment.
+- **Current In-Progress Batch:** Completed, committed (`78f2e76`), pushed to `origin/main`, deployed on Vercel/Render, and new Android APK generated.
+- **Latest Android APK:** `https://expo.dev/artifacts/eas/L7QAA6S1PCUFEySefk7LAT7W3R7ey1pDqQ000ZCLIYM.apk` (Build: `5b0e6b01-e188-4674-9e36-a5fbaac0c2ac`).
+- **Exact Next Recommended Batch:** **Batch 12.0.2 — Live Production User Feedback & Monitoring**.
 
 ---
 
