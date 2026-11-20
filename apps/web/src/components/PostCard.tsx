@@ -68,6 +68,7 @@ import {
   UserRole,
 } from '@apnasamaj/shared-types';
 import { updatePostSchema, createCommentSchema, parseYouTubeUrl } from '@apnasamaj/validation';
+import { LinkPreviewCard } from './LinkPreviewCard';
 import {
   updatePostApi,
   deletePostApi,
@@ -1325,6 +1326,13 @@ export const PostCard: React.FC<PostCardProps> = ({
             >
               {post.content}
             </Typography>
+          )}
+
+          {/* Link Preview Card */}
+          {post.linkPreview && (
+            <Box sx={{ mt: 1.5 }}>
+              <LinkPreviewCard preview={post.linkPreview} />
+            </Box>
           )}
 
           {/* Render Media Grid */}

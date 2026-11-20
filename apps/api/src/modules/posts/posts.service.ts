@@ -5,6 +5,7 @@ import {
   UserRole,
   PostType,
   PostMediaItem,
+  LinkPreviewMetadata,
   PostLikesResponseData,
   PostViewsResponseData,
   CommentItem,
@@ -106,6 +107,37 @@ interface PostWithAuthorAndMedia {
   likes?: { id: string }[];
 }
 
+export function extractLinkPreviewFromContent(rawContent: string): {
+  cleanContent: string;
+  linkPreview: LinkPreviewMetadata | null;
+} {
+  if (!rawContent || typeof rawContent !== 'string') {
+    return { cleanContent: rawContent || '', linkPreview: null };
+  }
+  const regex = /\n\n<!--apnasamaj:link-preview:([A-Za-z0-9+/=]+)-->/;
+  const match = rawContent.match(regex);
+  if (match && match[1]) {
+    try {
+      const jsonStr = Buffer.from(match[1], 'base64').toString('utf-8');
+      const preview = JSON.parse(jsonStr) as LinkPreviewMetadata;
+      const cleanContent = rawContent.replace(regex, '');
+      return { cleanContent, linkPreview: preview };
+    } catch {
+      // Ignore if base64/JSON decode fails
+    }
+  }
+  return { cleanContent: rawContent, linkPreview: null };
+}
+
+export function encodeLinkPreviewInContent(content: string, preview?: LinkPreviewMetadata | null): string {
+  const cleanContent = (content || '')
+    .replace(/\n\n<!--apnasamaj:link-preview:[A-Za-z0-9+/=]+-->/g, '')
+    .trimEnd();
+  if (!preview) return cleanContent;
+  const b64 = Buffer.from(JSON.stringify(preview)).toString('base64');
+  return `${cleanContent}\n\n<!--apnasamaj:link-preview:${b64}-->`;
+}
+
 function mapToPostItem(
   post: PostWithAuthorAndMedia,
   currentUserId?: string
@@ -116,6 +148,8 @@ function mapToPostItem(
       : currentUserId
         ? false
         : false;
+
+  const { cleanContent, linkPreview } = extractLinkPreviewFromContent(post.content);
 
   return {
     id: post.id,
@@ -131,7 +165,7 @@ function mapToPostItem(
       : null,
     type: post.type as unknown as PostType,
     title: post.title ?? null,
-    content: post.content,
+    content: cleanContent,
     isPinned: post.isPinned,
     media: (post.media || []).map((m): PostMediaItem => ({
       id: m.id,
@@ -142,6 +176,7 @@ function mapToPostItem(
       order: m.order,
       createdAt: m.createdAt.toISOString(),
     })),
+    linkPreview,
     likesCount: post._count?.likes ?? 0,
     commentsCount: post._count?.comments ?? 0,
     viewsCount: (post._count as any)?.views ?? 0,
@@ -460,12 +495,13 @@ export async function createPost(
 
   try {
     const post = await client.$transaction(async (tx) => {
+      const encodedContent = encodeLinkPreviewInContent(input.content || '', input.linkPreview);
       const newPost = await tx.post.create({
         data: {
           authorId,
           groupId: targetGroupId,
           title: input.title !== undefined ? (input.title?.trim() || null) : null,
-          content: input.content || '',
+          content: encodedContent,
           type: (input.type as unknown as DbPostType) || DbPostType.GENERAL,
         },
       });
@@ -720,7 +756,11 @@ export async function updatePost(
   }
 
   const updateData: { content?: string; type?: DbPostType; title?: string | null } = {};
-  if (input.content !== undefined) updateData.content = input.content;
+  if (input.content !== undefined || input.linkPreview !== undefined) {
+    const baseContent = input.content !== undefined ? input.content : extractLinkPreviewFromContent(post.content).cleanContent;
+    const effectivePreview = input.linkPreview !== undefined ? input.linkPreview : extractLinkPreviewFromContent(post.content).linkPreview;
+    updateData.content = encodeLinkPreviewInContent(baseContent, effectivePreview);
+  }
   if (input.type !== undefined) updateData.type = input.type as unknown as DbPostType;
   if (input.title !== undefined) updateData.title = input.title !== null ? (input.title?.trim() || null) : null;
 

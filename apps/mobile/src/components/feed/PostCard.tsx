@@ -21,6 +21,7 @@ import {
 } from '../../utils/video';
 import { NativeVideoPlayer } from '../video/NativeVideoPlayer';
 import { YouTubeVideoPlayer } from '../video/YouTubeVideoPlayer';
+import { LinkPreviewCard } from './LinkPreviewCard';
 
 export interface PostCardProps {
   post: PostItem;
@@ -226,6 +227,13 @@ export const PostCard: React.FC<PostCardProps> = ({
           {post.content}
         </Typography>
       </Pressable>
+
+      {/* 3b. Attached Link Preview Card */}
+      {post.linkPreview && (
+        <View style={styles.linkPreviewContainer}>
+          <LinkPreviewCard preview={post.linkPreview} />
+        </View>
+      )}
 
       {/* 4. Attached Images (Lightweight Single/Multi Preview) */}
       {images.length > 0 && (
@@ -648,5 +656,9 @@ const styles = StyleSheet.create({
     gap: 6,
     minHeight: 36,
     paddingHorizontal: 8,
+  },
+  linkPreviewContainer: {
+    marginTop: 8,
+    marginBottom: 4,
   },
 });

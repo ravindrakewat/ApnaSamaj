@@ -209,6 +209,121 @@ export const postMediaItemSchema = z
 
 export type PostMediaItemInput = z.infer<typeof postMediaItemSchema>;
 
+// --------------------------------------------------------
+// LINK PREVIEW SCHEMAS & UTILITIES
+// --------------------------------------------------------
+
+export const linkPreviewSchema = z.object({
+  url: z.string().url('Invalid URL format').max(2048),
+  normalizedUrl: z.string().url('Invalid normalized URL format').max(2048),
+  provider: z.enum(['youtube', 'amazon', 'general']),
+  title: z.string().trim().min(1, 'Title is required').max(300),
+  description: z.string().trim().max(1000).optional().nullable(),
+  thumbnailUrl: z.string().url().max(2048).optional().nullable(),
+  siteName: z.string().trim().max(100).optional().nullable(),
+  authorName: z.string().trim().max(150).optional().nullable(),
+  productId: z.string().trim().max(100).optional().nullable(),
+  mediaType: z.enum(['video', 'product', 'article', 'website']).optional().nullable(),
+  favIcon: z.string().url().max(2048).optional().nullable(),
+});
+
+export type LinkPreviewSchemaInput = z.infer<typeof linkPreviewSchema>;
+
+export const getLinkPreviewQuerySchema = z.object({
+  url: z.string().trim().min(1, 'URL is required').max(2048),
+});
+
+export type GetLinkPreviewQueryInput = z.infer<typeof getLinkPreviewQuerySchema>;
+
+/**
+ * Extracts all valid HTTP and HTTPS URLs from user text input.
+ * Strips terminal punctuation like trailing commas, periods, or brackets.
+ * Returns deduplicated URLs in order of appearance.
+ */
+export function extractUrlsFromText(text?: string | null): string[] {
+  if (!text || typeof text !== 'string') return [];
+  const urlRegex = /https?:\/\/[^\s<>"'{}|\\^`[\]]+/gi;
+  const matches = text.match(urlRegex) || [];
+  const seen = new Set<string>();
+  const cleanList: string[] = [];
+
+  for (const raw of matches) {
+    // Strip trailing punctuation often typed at the end of sentences
+    const cleaned = raw.replace(/[.,;:!?)\]>]+$/, '');
+    try {
+      const parsed = new URL(cleaned);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        if (!seen.has(cleaned)) {
+          seen.add(cleaned);
+          cleanList.push(cleaned);
+        }
+      }
+    } catch {
+      // Invalid URL format, ignore
+    }
+  }
+
+  return cleanList;
+}
+
+/**
+ * Identifies the provider for a given URL (YouTube, Amazon, or General Website).
+ */
+export function detectLinkProvider(urlStr: string): 'youtube' | 'amazon' | 'general' {
+  if (!urlStr || typeof urlStr !== 'string') return 'general';
+  try {
+    const parsed = new URL(urlStr.trim());
+    const host = parsed.hostname.toLowerCase();
+
+    // YouTube check
+    if (
+      host === 'youtube.com' ||
+      host === 'www.youtube.com' ||
+      host === 'm.youtube.com' ||
+      host === 'youtu.be' ||
+      host === 'www.youtu.be' ||
+      host === 'www.youtube-nocookie.com'
+    ) {
+      return 'youtube';
+    }
+
+    // Amazon check
+    if (
+      host === 'amazon.in' ||
+      host === 'www.amazon.in' ||
+      host === 'amazon.com' ||
+      host === 'www.amazon.com' ||
+      host === 'amzn.in' ||
+      host === 'amzn.to' ||
+      host === 'a.co'
+    ) {
+      return 'amazon';
+    }
+
+    return 'general';
+  } catch {
+    return 'general';
+  }
+}
+
+/**
+ * Extracts Amazon 10-character ASIN from standard product paths.
+ */
+export function extractAmazonAsin(urlStr: string): string | null {
+  if (!urlStr || typeof urlStr !== 'string') return null;
+  try {
+    const parsed = new URL(urlStr.trim());
+    // Match /dp/ASIN, /gp/product/ASIN, /gp/aw/d/ASIN, /d/ASIN
+    const match = parsed.pathname.match(/\/(?:dp|gp\/product|gp\/aw\/d|d)\/([A-Z0-9]{10})/i);
+    if (match && match[1]) {
+      return match[1].toUpperCase();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export const createPostSchema = z
   .object({
     title: z
@@ -229,14 +344,16 @@ export const createPostSchema = z
       .max(5, 'A maximum of 5 media attachments can be attached per post')
       .optional()
       .default([]),
+    linkPreview: linkPreviewSchema.optional().nullable(),
   })
   .refine(
     (data) =>
       (data.content && data.content.trim().length > 0) ||
       (data.title && data.title.trim().length > 0) ||
-      (data.media && data.media.length > 0),
+      (data.media && data.media.length > 0) ||
+      Boolean(data.linkPreview),
     {
-      message: 'Post must contain either text content or at least one media attachment',
+      message: 'Post must contain either text content, media attachment, or link preview',
       path: ['content'],
     }
   )
@@ -286,15 +403,17 @@ export const updatePostSchema = z
       .array(postMediaItemSchema)
       .max(5, 'A maximum of 5 media attachments can be attached per post')
       .optional(),
+    linkPreview: linkPreviewSchema.optional().nullable(),
   })
   .refine(
     (data) =>
       data.title !== undefined ||
       data.content !== undefined ||
       data.type !== undefined ||
-      data.media !== undefined,
+      data.media !== undefined ||
+      data.linkPreview !== undefined,
     {
-      message: 'At least one field (title, content, type, or media) must be provided for update',
+      message: 'At least one field (title, content, type, media, or linkPreview) must be provided for update',
     }
   )
   .refine(

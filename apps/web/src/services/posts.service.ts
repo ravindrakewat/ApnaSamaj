@@ -4,6 +4,7 @@ import {
   CreatePostRequest,
   UpdatePostRequest,
   UploadMediaResponseData,
+  LinkPreviewMetadata,
   PostType,
   PostLikesResponseData,
   PostViewsResponseData,
@@ -375,6 +376,22 @@ export async function reportPostApi(
 
   if (!response.success || !response.data) {
     throw new Error(response.error || 'Failed to submit post report.');
+  }
+
+  return response.data;
+}
+
+/**
+ * Generates rich link preview metadata for a given URL (YouTube, Amazon, or General Website).
+ */
+export async function fetchLinkPreviewApi(url: string): Promise<LinkPreviewMetadata> {
+  const response = await apiFetch<LinkPreviewMetadata>('/api/v1/link-preview', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Failed to fetch link preview.');
   }
 
   return response.data;

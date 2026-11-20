@@ -254,3 +254,18 @@ export const claimOtpVerifyRateLimiter = rateLimit({
     res.status(429).json(response);
   },
 });
+
+export const linkPreviewRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 30, // Limit each IP to 30 preview requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: 'Too many link preview requests. Please wait a moment before trying again.',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(429).json(response);
+  },
+});

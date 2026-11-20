@@ -14,13 +14,14 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { PostType, PostMediaInput, UserRole } from '@apnasamaj/shared-types';
+import { PostType, PostMediaInput, UserRole, LinkPreviewMetadata } from '@apnasamaj/shared-types';
 import {
   Typography,
   Card,
   Button,
   Badge,
 } from '../../../src/components';
+import { LinkPreviewCard } from '../../../src/components/feed/LinkPreviewCard';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useLocalization } from '../../../src/hooks/useLocalization';
 import { useAuth } from '../../../src/hooks/useAuth';
@@ -35,7 +36,7 @@ import {
   MAX_VIDEO_FILE_SIZE_BYTES,
   MAX_VIDEO_DURATION_SECONDS,
 } from '../../../src/utils/validation';
-import { parseYouTubeUrl, ParsedYouTubeVideo } from '@apnasamaj/validation';
+import { parseYouTubeUrl, ParsedYouTubeVideo, extractUrlsFromText } from '@apnasamaj/validation';
 
 export interface UploadedImageItem {
   id: string;
@@ -86,6 +87,16 @@ export default function CreatePostScreen() {
   const [mediaList, setMediaList] = useState<UploadedImageItem[]>([]);
   const [attachedVideo, setAttachedVideo] = useState<UploadedVideoItem | null>(null);
 
+  // Link Preview States
+  const [linkPreview, setLinkPreview] = useState<LinkPreviewMetadata | null>(null);
+  const [isFetchingPreview, setIsFetchingPreview] = useState<boolean>(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [detectedUrls, setDetectedUrls] = useState<string[]>([]);
+  const [selectedUrlForPreview, setSelectedUrlForPreview] = useState<string | null>(null);
+  const [userDismissedPreview, setUserDismissedPreview] = useState<boolean>(false);
+  const lastFetchedUrlRef = useRef<string | null>(null);
+  const debounceTimerRef = useRef<any>(null);
+
   // YouTube Attachment State
   const [youtubeInputOpen, setYoutubeInputOpen] = useState<boolean>(false);
   const [youtubeUrlInput, setYoutubeUrlInput] = useState<string>('');
@@ -121,7 +132,85 @@ export default function CreatePostScreen() {
     content.trim().length > 0 ||
     mediaList.length > 0 ||
     Boolean(attachedVideo) ||
-    Boolean(attachedYoutubeVideo);
+    Boolean(attachedYoutubeVideo) ||
+    Boolean(linkPreview);
+
+  // ---------------------------------------------------------------------------
+  // Link Preview Fetch & Management
+  // ---------------------------------------------------------------------------
+  const fetchPreviewForUrl = async (url: string) => {
+    if (!url) return;
+    setIsFetchingPreview(true);
+    setPreviewError(null);
+    lastFetchedUrlRef.current = url;
+
+    try {
+      const data = await postsApi.fetchLinkPreview(url);
+      setLinkPreview(data);
+      setUserDismissedPreview(false);
+    } catch (err: any) {
+      console.warn('[CreatePost] Failed to fetch link preview:', err);
+      setPreviewError(err?.message || (isHindi ? 'लिंक प्रीव्यू लोड नहीं हो सका' : 'Could not fetch link preview'));
+      setLinkPreview(null);
+    } finally {
+      setIsFetchingPreview(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      const urls = extractUrlsFromText(content);
+      setDetectedUrls(urls);
+
+      if (urls.length === 0) {
+        setLinkPreview(null);
+        setSelectedUrlForPreview(null);
+        setPreviewError(null);
+        setUserDismissedPreview(false);
+        lastFetchedUrlRef.current = null;
+        return;
+      }
+
+      const targetUrl =
+        selectedUrlForPreview && urls.includes(selectedUrlForPreview)
+          ? selectedUrlForPreview
+          : urls[0];
+
+      if (targetUrl !== selectedUrlForPreview) {
+        setSelectedUrlForPreview(targetUrl);
+      }
+
+      if (userDismissedPreview && targetUrl === lastFetchedUrlRef.current) {
+        return;
+      }
+
+      if (targetUrl !== lastFetchedUrlRef.current) {
+        fetchPreviewForUrl(targetUrl);
+      }
+    }, 500);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [content, selectedUrlForPreview, userDismissedPreview]);
+
+  const handleSelectUrlForPreview = (url: string) => {
+    setSelectedUrlForPreview(url);
+    setUserDismissedPreview(false);
+    fetchPreviewForUrl(url);
+  };
+
+  const handleRemovePreview = () => {
+    setLinkPreview(null);
+    setUserDismissedPreview(true);
+    setPreviewError(null);
+  };
 
   // ---------------------------------------------------------------------------
   // 1. Photo Picker & Upload
@@ -421,7 +510,8 @@ export default function CreatePostScreen() {
     content.trim().length > 0 ||
     mediaList.length > 0 ||
     Boolean(attachedVideo) ||
-    Boolean(attachedYoutubeVideo);
+    Boolean(attachedYoutubeVideo) ||
+    Boolean(linkPreview);
 
   const canPublish =
     hasAnyContentOrMedia &&
@@ -437,6 +527,12 @@ export default function CreatePostScreen() {
     setMediaList([]);
     setAttachedVideo(null);
     setAttachedYoutubeVideo(null);
+    setLinkPreview(null);
+    setPreviewError(null);
+    setDetectedUrls([]);
+    setSelectedUrlForPreview(null);
+    setUserDismissedPreview(false);
+    lastFetchedUrlRef.current = null;
     setSelectedCategory('GENERAL');
     setTitleError(undefined);
     setContentError(undefined);
@@ -547,6 +643,7 @@ export default function CreatePostScreen() {
         content: content.trim(),
         type: finalType,
         media: validMedia.length > 0 ? validMedia : undefined,
+        linkPreview: linkPreview || undefined,
       });
 
       // 4. Clear all form fields & attached media
@@ -555,6 +652,12 @@ export default function CreatePostScreen() {
       setMediaList([]);
       setAttachedVideo(null);
       setAttachedYoutubeVideo(null);
+      setLinkPreview(null);
+      setPreviewError(null);
+      setDetectedUrls([]);
+      setSelectedUrlForPreview(null);
+      setUserDismissedPreview(false);
+      lastFetchedUrlRef.current = null;
       setSelectedCategory('GENERAL');
       setTitleError(undefined);
       setContentError(undefined);
@@ -1098,6 +1201,81 @@ export default function CreatePostScreen() {
               {isHindi ? '💡 विनम्र व उपयोगी जानकारी साझा करें' : '💡 Share clear and helpful information'}
             </Typography>
           </View>
+
+          {/* Detected URLs Selection Chips (when post has multiple links) */}
+          {detectedUrls.length > 1 && (
+            <View style={styles.detectedUrlsContainer}>
+              <Typography variant="xs" color={theme.colors.textMuted} style={{ marginBottom: 6 }}>
+                {isHindi ? '🔗 प्रीव्यू के लिए लिंक चुनें:' : '🔗 Select URL for preview:'}
+              </Typography>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.urlsScroll}>
+                {detectedUrls.map((url, idx) => {
+                  const isSelected = url === selectedUrlForPreview;
+                  return (
+                    <Pressable
+                      key={`detected-url-${idx}`}
+                      onPress={() => handleSelectUrlForPreview(url)}
+                      style={[
+                        styles.urlChip,
+                        isSelected ? styles.urlChipSelected : styles.urlChipUnselected,
+                        { borderColor: isSelected ? theme.colors.primary : theme.colors.border },
+                      ]}
+                    >
+                      <Typography
+                        variant="xs"
+                        weight={isSelected ? 'bold' : 'regular'}
+                        color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
+                        numberOfLines={1}
+                        style={{ maxWidth: 220 }}
+                      >
+                        {url}
+                      </Typography>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Link Preview Loading Indicator */}
+          {isFetchingPreview && (
+            <View style={[styles.previewLoadingBox, { borderColor: theme.colors.border }]}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <Typography variant="xs" color={theme.colors.textMuted} style={{ marginLeft: 8 }}>
+                {isHindi ? 'लिंक प्रीव्यू लोड हो रहा है...' : 'Loading link preview...'}
+              </Typography>
+            </View>
+          )}
+
+          {/* Link Preview Error with Retry */}
+          {previewError && !isFetchingPreview && (
+            <View style={[styles.previewErrorBox, { borderColor: '#FCA5A5' }]}>
+              <Typography variant="xs" color={theme.colors.error} style={{ flex: 1 }}>
+                ⚠️ {previewError}
+              </Typography>
+              {selectedUrlForPreview && (
+                <Pressable
+                  onPress={() => fetchPreviewForUrl(selectedUrlForPreview)}
+                  style={styles.retryButton}
+                >
+                  <Typography variant="xs" weight="bold" color={theme.colors.primary}>
+                    {isHindi ? 'पुनः प्रयास' : 'Retry'}
+                  </Typography>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          {/* Render Link Preview Card */}
+          {linkPreview && !isFetchingPreview && (
+            <View style={styles.composerPreviewWrapper}>
+              <LinkPreviewCard
+                preview={linkPreview}
+                onRemove={handleRemovePreview}
+                isComposer={true}
+              />
+            </View>
+          )}
         </View>
 
         {/* 6. Media Attachment Section */}
@@ -1960,5 +2138,55 @@ const styles = StyleSheet.create({
   },
   bottomPublishButton: {
     minWidth: 160,
+  },
+  detectedUrlsContainer: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E2E8F0',
+  },
+  urlsScroll: {
+    flexDirection: 'row',
+  },
+  urlChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginRight: 8,
+    backgroundColor: '#F8FAFC',
+  },
+  urlChipSelected: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+  },
+  urlChipUnselected: {
+    backgroundColor: '#F8FAFC',
+  },
+  previewLoadingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+    backgroundColor: '#F8FAFC',
+  },
+  previewErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+    backgroundColor: '#FEF2F2',
+  },
+  retryButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  composerPreviewWrapper: {
+    marginTop: 8,
   },
 });

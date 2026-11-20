@@ -25,19 +25,21 @@ import CloseIcon from '@mui/icons-material/Close';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { PostItem, PostType, UserRole } from '@apnasamaj/shared-types';
+import { PostItem, PostType, UserRole, LinkPreviewMetadata } from '@apnasamaj/shared-types';
 import {
   createPostSchema,
   parseYouTubeUrl,
   ParsedYouTubeVideo,
+  extractUrlsFromText,
   MAX_VIDEO_FILE_SIZE_BYTES,
   MAX_VIDEO_DURATION_SECONDS,
   ALLOWED_VIDEO_MIME_TYPES,
 } from '@apnasamaj/validation';
 import { useTranslation } from '@apnasamaj/i18n';
-import { createPostApi, uploadPostMediaApi, uploadPostVideoApi } from '../services/posts.service';
+import { createPostApi, uploadPostMediaApi, uploadPostVideoApi, fetchLinkPreviewApi } from '../services/posts.service';
 import { fetchGroups } from '../services/groups.service';
 import { useAuth } from '../context/AuthContext';
+import { LinkPreviewCard } from './LinkPreviewCard';
 
 
 export interface UploadedVideoItem {
@@ -106,6 +108,87 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
   const [attachedYoutubeVideo, setAttachedYoutubeVideo] = useState<ParsedYouTubeVideo | null>(null);
   const [youtubeInputError, setYoutubeInputError] = useState<string | null>(null);
+
+  // Link Preview states
+  const [linkPreview, setLinkPreview] = useState<LinkPreviewMetadata | null>(null);
+  const [isFetchingPreview, setIsFetchingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [detectedUrls, setDetectedUrls] = useState<string[]>([]);
+  const [selectedUrlForPreview, setSelectedUrlForPreview] = useState<string | null>(null);
+  const dismissedUrlsRef = useRef<Set<string>>(new Set());
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced URL extraction & preview fetching
+  useEffect(() => {
+    const urls = extractUrlsFromText(content);
+    setDetectedUrls(urls);
+
+    if (urls.length === 0) {
+      if (linkPreview) setLinkPreview(null);
+      setPreviewError(null);
+      setSelectedUrlForPreview(null);
+      return;
+    }
+
+    // Pick active URL (either manually selected or the first non-dismissed URL)
+    const targetUrl = selectedUrlForPreview || urls.find((u) => !dismissedUrlsRef.current.has(u));
+
+    if (!targetUrl || dismissedUrlsRef.current.has(targetUrl)) {
+      return;
+    }
+
+    if (linkPreview?.url === targetUrl || linkPreview?.normalizedUrl === targetUrl) {
+      return;
+    }
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(async () => {
+      setIsFetchingPreview(true);
+      setPreviewError(null);
+      try {
+        const preview = await fetchLinkPreviewApi(targetUrl);
+        setLinkPreview(preview);
+      } catch (err: unknown) {
+        setPreviewError(err instanceof Error ? err.message : 'Failed to generate link preview.');
+      } finally {
+        setIsFetchingPreview(false);
+      }
+    }, 500);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [content, selectedUrlForPreview]);
+
+  const handleRemoveLinkPreview = () => {
+    if (linkPreview) {
+      dismissedUrlsRef.current.add(linkPreview.url);
+      dismissedUrlsRef.current.add(linkPreview.normalizedUrl);
+    }
+    setLinkPreview(null);
+    setPreviewError(null);
+  };
+
+  const handleRetryPreview = async () => {
+    const targetUrl = selectedUrlForPreview || detectedUrls[0];
+    if (!targetUrl) return;
+    dismissedUrlsRef.current.delete(targetUrl);
+    setIsFetchingPreview(true);
+    setPreviewError(null);
+    try {
+      const preview = await fetchLinkPreviewApi(targetUrl);
+      setLinkPreview(preview);
+    } catch (err: unknown) {
+      setPreviewError(err instanceof Error ? err.message : 'Failed to generate link preview.');
+    } finally {
+      setIsFetchingPreview(false);
+    }
+  };
 
   // Group targeted posting selector state
   const [targetGroupId, setTargetGroupId] = useState<string>(groupId || '');
@@ -424,6 +507,7 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       type: postType,
       groupId: effectiveGroupId,
       media: validMedia,
+      linkPreview: linkPreview || undefined,
     });
 
     if (!validation.success) {
@@ -447,6 +531,11 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
       setYoutubeUrlInput('');
       setYoutubeInputOpen(false);
       setYoutubeInputError(null);
+      setLinkPreview(null);
+      setPreviewError(null);
+      setDetectedUrls([]);
+      setSelectedUrlForPreview(null);
+      dismissedUrlsRef.current.clear();
       setTargetGroupId(groupId || '');
       onPostCreated(created);
     } catch (err: unknown) {
@@ -464,7 +553,8 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
     content.trim().length > 0 ||
     mediaList.length > 0 ||
     !!attachedYoutubeVideo ||
-    !!attachedVideo;
+    !!attachedVideo ||
+    Boolean(linkPreview);
   const canSubmit =
     isTitleValid &&
     hasTextOrMedia &&
@@ -574,8 +664,100 @@ export const CreatePostComposer: React.FC<CreatePostComposerProps> = ({ groupId,
           value={content}
           onChange={(e) => setContent(e.target.value)}
           disabled={isSubmitting}
-          sx={{ mb: 2 }}
+          sx={{ mb: linkPreview || isFetchingPreview || previewError || detectedUrls.length > 1 ? 1 : 2 }}
         />
+
+        {/* Multiple Detected URLs Selector */}
+        {detectedUrls.length > 1 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={500}>
+              Detected links:
+            </Typography>
+            {detectedUrls.map((u) => {
+              let host = u;
+              try { host = new URL(u).hostname.replace(/^www\./, ''); } catch {}
+              const isSelected = (selectedUrlForPreview || detectedUrls[0]) === u;
+              return (
+                <Chip
+                  key={u}
+                  label={host}
+                  size="small"
+                  variant={isSelected ? 'filled' : 'outlined'}
+                  color={isSelected ? 'primary' : 'default'}
+                  onClick={() => {
+                    dismissedUrlsRef.current.delete(u);
+                    setSelectedUrlForPreview(u);
+                  }}
+                  sx={{ cursor: 'pointer', height: 24, fontSize: '0.75rem' }}
+                />
+              );
+            })}
+          </Box>
+        )}
+
+        {/* Link Preview Loading State */}
+        {isFetchingPreview && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              p: 1.5,
+              mb: 2,
+              borderRadius: 2,
+              bgcolor: 'action.hover',
+              border: '1px dashed',
+              borderColor: 'divider',
+            }}
+          >
+            <CircularProgress size={18} />
+            <Typography variant="caption" color="text.secondary">
+              Generating rich link preview...
+            </Typography>
+          </Box>
+        )}
+
+        {/* Link Preview Card */}
+        {linkPreview && !isFetchingPreview && (
+          <Box sx={{ mb: 2 }}>
+            <LinkPreviewCard
+              preview={linkPreview}
+              showRemoveButton
+              onRemove={handleRemoveLinkPreview}
+            />
+          </Box>
+        )}
+
+        {/* Link Preview Error & Retry */}
+        {previewError && !isFetchingPreview && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              p: 1,
+              px: 1.5,
+              mb: 2,
+              borderRadius: 2,
+              bgcolor: 'action.hover',
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              ⚠️ {previewError}
+            </Typography>
+            <Button
+              size="small"
+              variant="text"
+              onClick={handleRetryPreview}
+              disabled={isSubmitting}
+              sx={{ minWidth: 60, py: 0.25 }}
+            >
+              Retry
+            </Button>
+          </Box>
+        )}
 
         {/* YouTube Video URL Input Box */}
         {youtubeInputOpen && !attachedYoutubeVideo && (

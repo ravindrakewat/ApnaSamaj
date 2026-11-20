@@ -12,6 +12,7 @@ import {
   CommentItem,
   CreatePostRequest,
   UploadMediaResponseData,
+  LinkPreviewMetadata,
 } from '@apnasamaj/shared-types';
 
 /**
@@ -242,6 +243,19 @@ export const postsApi = {
     );
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Failed to upload video file.');
+    }
+    return response.data;
+  },
+
+  /**
+   * Fetches rich metadata preview for a URL (YouTube, Amazon, or general websites).
+   */
+  async fetchLinkPreview(url: string): Promise<LinkPreviewMetadata> {
+    const response = await apiClient.post<ApiResponse<LinkPreviewMetadata>>('/link-preview', {
+      url,
+    });
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch link preview.');
     }
     return response.data;
   },

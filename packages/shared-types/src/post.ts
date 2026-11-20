@@ -42,6 +42,22 @@ export interface PostMediaInput {
   mediaType?: PostMediaType;
 }
 
+export type LinkPreviewProvider = 'youtube' | 'amazon' | 'general';
+
+export interface LinkPreviewMetadata {
+  url: string;
+  normalizedUrl: string;
+  provider: LinkPreviewProvider;
+  title: string;
+  description?: string | null;
+  thumbnailUrl?: string | null;
+  siteName?: string | null;
+  authorName?: string | null;
+  productId?: string | null;
+  mediaType?: 'video' | 'product' | 'article' | 'website' | null;
+  favIcon?: string | null;
+}
+
 export interface PostItem {
   id: string;
   authorId: string | null;
@@ -53,6 +69,7 @@ export interface PostItem {
   content: string;
   isPinned: boolean;
   media: PostMediaItem[];
+  linkPreview?: LinkPreviewMetadata | null;
   likesCount: number;
   commentsCount: number;
   viewsCount?: number;
@@ -67,6 +84,7 @@ export interface CreatePostRequest {
   content: string;
   type?: PostType;
   media?: PostMediaInput[];
+  linkPreview?: LinkPreviewMetadata | null;
 }
 
 export interface UpdatePostRequest {
@@ -74,6 +92,7 @@ export interface UpdatePostRequest {
   content?: string;
   type?: PostType;
   media?: PostMediaInput[];
+  linkPreview?: LinkPreviewMetadata | null;
 }
 
 export interface UploadMediaResponseData {

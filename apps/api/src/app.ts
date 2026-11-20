@@ -12,6 +12,7 @@ import { notificationsRouter } from './modules/notifications';
 import { matrimonialRouter } from './modules/matrimonial';
 import { appealsRouter } from './modules/appeals';
 import { chatRouter } from './modules/chat';
+import { linkPreviewRouter } from './modules/link-preview';
 
 import { isCorsOriginAllowed } from './config/cors';
 import { resolveTenantContext } from './middleware/tenant.middleware';
@@ -96,5 +97,6 @@ export function createApp(): Express {
   app.use('/api/v1/matrimonial', matrimonialRouter);
   app.use('/api/v1/appeals', appealsRouter);
   app.use('/api/v1/chat', chatRouter);
+  app.use('/api/v1/link-preview', linkPreviewRouter);
   return app;
 }
